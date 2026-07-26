@@ -1,61 +1,46 @@
 # ArchiDE
 
-A modern, web-native visual IDE for building machine learning model architectures by dragging, dropping, and connecting blocks — automatically generating clean, idiomatic PyTorch (`nn.Module`) code. Think SimulIDE, but for deep learning.
+A modern, web-native visual IDE for building machine learning model architectures by dragging, dropping, and connecting blocks — automatically generating clean, idiomatic PyTorch (`nn.Module`) code.
 
-## Vision
+## 🚀 Running the Project
 
-ArchiDE provides a visual canvas where neural network layers (Linear, Conv2D, Flatten, Attention, Residual Add, Concat) can be connected into arbitrary Directed Acyclic Graphs (DAGs). The visual model is validated and shape-inferred in real-time, instantly emitting standard PyTorch code.
+ArchiDE requires both the Next.js frontend and the FastAPI backend to run simultaneously.
 
-## Status
-
-🚧 **PoC Architecture & Design Phase** — Specifications and documentation ready for implementation.
-
-## Project Structure
-
+### 1. Start the Python Backend
+```bash
+cd backend
+# Optionally activate a virtual environment
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
-archide/
-├── docs/                          # Ready-context documentation for developers & AI agents
-│   ├── implementation_plan.md     # Full project architecture, tech stack & implementation roadmap
-│   ├── ml_forge_comparison.md     # In-depth architectural analysis of MLForge & ArchiDE adaptations
-│   ├── block_registry_spec.md     # Block definitions, parameters, ports & shape inference rules
-│   └── graph_ir_spec.md           # Graph IR JSON schema & PyTorch code generator pipeline
-├── ml_forge-main/                 # Reference open-source desktop codebase
-└── README.md
-```
+*Runs on `http://localhost:8000`*
 
-## Contributing & Agent Guidelines
+### 2. Start the Frontend
+```bash
+npm install
+npm run dev
+```
+*Runs on `http://localhost:3000`*
+
+## 📖 Documentation & Agent Guidelines
+
+We maintain comprehensive documentation for human developers and AI coding agents.
 
 > ⚠️ **IMPORTANT**: Before writing any code or prompting an AI coding agent, read through the documentation in [`docs/`](docs/) thoroughly.
 
-### Key Documentation Links
+*   **[Documentation Index](docs/index.md)**: Your starting point for understanding the architecture, Block Registry, PyTorch Compiler, and project roadmap.
+*   **[Agent Guardrails](.agents/project_context.md)**: AI agents MUST read this file for specific constraints (like React Flow uncontrolled mode logic) before making any modifications.
 
-1. **Architecture & Tech Stack Plan** — Read [`docs/implementation_plan.md`](docs/implementation_plan.md) for the high-level architecture, Next.js + React Flow framework decision, and phase roadmap.
-2. **MLForge Adaptation Analysis** — Read [`docs/ml_forge_comparison.md`](docs/ml_forge_comparison.md) for what was adapted from the desktop MLForge app and what was stripped out.
-3. **Block Registry Specification** — Read [`docs/block_registry_spec.md`](docs/block_registry_spec.md) for block metadata, parameters, input/output ports, and shape propagation rules.
-4. **Graph IR & Codegen Spec** — Read [`docs/graph_ir_spec.md`](docs/graph_ir_spec.md) for the Graph IR JSON schema and code generation engine rules.
-
-### Prompting AI Agents
-
-When tasking AI coding agents with working on this project, provide the relevant docs as context:
-
-```
-Refer to docs/implementation_plan.md for overall architecture and roadmap.
-Refer to docs/ml_forge_comparison.md for MLForge adaptations.
-Refer to docs/block_registry_spec.md for block definitions and shape formulas.
-Refer to docs/graph_ir_spec.md for the Graph IR schema and code generation pipeline.
-```
-
-## Tech Stack
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **Framework** | Next.js (App Router) |
-| **Canvas** | React Flow (`@xyflow/react`) |
+| **Frontend Framework** | Next.js (App Router), TailwindCSS |
+| **Visual Canvas** | React Flow (`@xyflow/react`) |
 | **State Management** | Zustand |
-| **Graph IR** | JSON Schema |
-| **Code Generation** | Client-side Topological Compiler |
+| **Backend API** | Python (FastAPI), Pydantic |
+| **Code Generation** | Python AST Generator via Kahn's Topological Sort |
 | **Target Output** | PyTorch (`nn.Module`) |
 
 ## License
-
 MIT

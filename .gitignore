@@ -234,3 +234,7 @@ __marimo__/
 
 
 ml_forge-main
+
+# Ignored user specific docs and projects
+ParentProject/
+division_of_labor.md

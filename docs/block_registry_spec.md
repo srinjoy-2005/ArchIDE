@@ -4,42 +4,44 @@ This document provides the formal specification for all blocks available in Arch
 
 ---
 
-## 1. Block Schema Specification
+## 1. Block Schema & Architecture Specification
 
-Each block in the registry follows this JSON schema:
+The Block Registry defines every draggable node's identity, parameters, and input/output ports. 
+In the current architecture, the registry is defined natively in Python.
 
-```json
-{
-  "id": "conv2d",
-  "name": "Conv2D",
-  "category": "Layers",
-  "description": "2D Convolutional layer for spatial feature extraction.",
-  "color": "#3b82f6",
-  "ports": {
-    "inputs": [
-      { "id": "x", "name": "Input", "dtype": "tensor", "shape_requirement": "[B, C_in, H, W]" }
-    ],
-    "outputs": [
-      { "id": "out", "name": "Output", "dtype": "tensor", "shape_ref": "[B, C_out, H_out, W_out]" }
-    ]
-  },
-  "params": [
-    { "name": "in_channels", "type": "int", "required": true, "default": 3, "auto_fill": "prev_out_channels" },
-    { "name": "out_channels", "type": "int", "required": true, "default": 64 },
-    { "name": "kernel_size", "type": "int", "required": true, "default": 3 },
-    { "name": "stride", "type": "int", "required": false, "default": 1 },
-    { "name": "padding", "type": "int", "required": false, "default": 1 },
-    { "name": "bias", "type": "bool", "required": false, "default": true }
-  ],
-  "pytorch": {
-    "is_module": true,
-    "module_class": "nn.Conv2d",
-    "init_template": "nn.Conv2d({in_channels}, {out_channels}, kernel_size={kernel_size}, stride={stride}, padding={padding}, bias={bias})",
-    "forward_template": "{output_var} = self.{attr_name}({input_var})"
-  }
-}
+### Backend Implementation
+- **Data Models**: Defined in `backend/models.py` using Pydantic (e.g., `BlockDef`, `PortDef`, `ParamDef`).
+- **Registry**: The actual blocks are instantiated and stored in `backend/registry.py` within the `REGISTRY` list.
+
+### Frontend Integration
+The frontend (Next.js) dynamically fetches the block palette from the FastAPI backend.
+1. `src/app/page.tsx` makes a `GET` request to `/api/blocks`.
+2. The UI groups the blocks by their `category` and populates the sidebar.
+3. Upon clicking "Export PyTorch", the frontend packages the nodes and edges into a `CompileRequest` payload and sends it via `POST` to `/api/compile`.
+
+### Pydantic Schema Reference (`backend/models.py`)
+```python
+class PortDef(BaseModel):
+    id: str
+    name: str # User-facing name
+    type: str = "tensor"
+    is_list: bool = False  
+    
+class ParamDef(BaseModel):
+    name: str
+    type: str
+    default: Any
+
+class BlockDef(BaseModel):
+    id: str
+    name: str
+    category: str
+    color: str
+    is_functional: bool
+    inputs: List[PortDef]
+    outputs: List[PortDef]
+    params: List[ParamDef]
 ```
-
 ---
 
 ## 2. Block Catalog & Categories

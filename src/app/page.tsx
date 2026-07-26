@@ -14,6 +14,8 @@ import {
   Node,
   ReactFlowProvider,
   useReactFlow,
+  useOnSelectionChange,
+  useNodes
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import CustomNode from "../components/CustomNode";
@@ -22,27 +24,99 @@ import { useEditorStore } from "../lib/store";
 
 const nodeTypes = { custom: CustomNode };
 
-const initialNodes: Node[] = [
-  { id: "1", type: "custom", position: { x: 50, y: 50 }, data: { label: "Input", description: "Entry point of the model" } },
-];
+const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 
 let id = 2;
 const getId = () => `node_${id++}`;
 
+function PropertiesPanel() {
+  const { setNodes } = useReactFlow();
+  const nodes = useNodes();
+  
+  // Directly find the selected node from the store
+  const selectedNode = nodes.find(n => n.selected) || null;
+
+  const handleParamChange = (paramName: string, value: any) => {
+    if (!selectedNode) return;
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === selectedNode.id) {
+          const newData: any = {
+            ...n.data,
+            paramValues: {
+              ...(n.data.paramValues as any || {}),
+              [paramName]: value
+            }
+          };
+
+          // If the param is num_inputs or chunks, dynamically generate input/output ports!
+          if (paramName === 'num_inputs') {
+            const num = parseInt(value) || 2;
+            newData.inputs = Array.from({ length: num }, (_, i) => ({
+              id: `in_${i}`, name: `Input ${i + 1}`
+            }));
+          } else if (paramName === 'chunks') {
+            const num = parseInt(value) || 2;
+            newData.outputs = Array.from({ length: num }, (_, i) => ({
+              id: `out_${i}`, name: `Chunk ${i + 1}`
+            }));
+          }
+
+          return {
+            ...n,
+            data: newData
+          };
+        }
+        return n;
+      })
+    );
+  };
+
+  if (!selectedNode) {
+    return <div className="text-slate-500 text-sm">Select a block to edit its properties.</div>;
+  }
+
+  const params = (selectedNode.data.params as any[]) || [];
+  const paramValues = (selectedNode.data.paramValues as any) || {};
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1 mb-2 border-b border-slate-700 pb-4">
+        <label className="text-xs text-slate-400 capitalize">Node Name (Label)</label>
+        <input
+          type="text"
+          className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+          value={selectedNode.data.label as string}
+          onChange={(e) => {
+            setNodes(nds => nds.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, label: e.target.value } } : n));
+          }}
+        />
+      </div>
+
+      <div className="font-semibold text-slate-200">Block Parameters</div>
+      {params.length === 0 ? (
+        <div className="text-sm text-slate-500">No parameters to configure.</div>
+      ) : (
+        params.map(param => (
+          <div key={param.name} className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400 capitalize">{param.name.replace(/_/g, ' ')}</label>
+            <input
+              type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
+              className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
+              value={paramValues[param.name] ?? param.default}
+              onChange={(e) => handleParamChange(param.name, param.type === 'int' ? parseInt(e.target.value) : e.target.value)}
+            />
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function DnDCanvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
-
-  // Expose nodes/edges to the store or handle globally if needed, 
-  // but for now, Header will read them via useReactFlow().getNodes()
-
-  // Make Backspace deletion explicitly work
-  const onKeyDown = useCallback((event: React.KeyboardEvent) => {
-    // Handled by React Flow default
-  }, []);
+  const { screenToFlowPosition, setNodes, setEdges } = useReactFlow();
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds: Edge[]) => addEdge(params, eds)),
@@ -60,9 +134,20 @@ function DnDCanvas() {
 
       const type = event.dataTransfer.getData("application/reactflow");
       const label = event.dataTransfer.getData("application/label");
+      const blockDefStr = event.dataTransfer.getData("application/blockDef");
 
       if (typeof type === "undefined" || !type) {
         return;
+      }
+      
+      const blockDef = blockDefStr ? JSON.parse(blockDefStr) : {};
+
+      // Initialize paramValues with default values
+      const initialParamValues: any = {};
+      if (blockDef.params) {
+        blockDef.params.forEach((p: any) => {
+          initialParamValues[p.name] = p.default;
+        });
       }
 
       const position = screenToFlowPosition({
@@ -74,7 +159,16 @@ function DnDCanvas() {
         id: getId(),
         type,
         position,
-        data: { label, description: `A ${label} layer` },
+        data: { 
+          block_id: blockDef.id,
+          label, 
+          description: `A ${label} layer`,
+          params: blockDef.params || [],
+          paramValues: initialParamValues,
+          inputs: blockDef.inputs || [],
+          outputs: blockDef.outputs || [],
+          is_functional: blockDef.is_functional || false
+        },
       };
 
       setNodes((nds: Node[]) => nds.concat(newNode as unknown as Node));
@@ -85,11 +179,9 @@ function DnDCanvas() {
   return (
     <div className="flex-1 bg-slate-950 relative" ref={reactFlowWrapper}>
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        defaultNodes={initialNodes}
+        defaultEdges={initialEdges}
         nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}
@@ -99,9 +191,7 @@ function DnDCanvas() {
       >
         <Controls />
         <MiniMap
-          nodeColor={(n: Node) => {
-            return "#3b82f6";
-          }}
+          nodeColor={(n: Node) => "#3b82f6"}
           maskColor="rgba(15, 23, 42, 0.7)"
         />
         <Background color="#334155" gap={16} />
@@ -110,10 +200,11 @@ function DnDCanvas() {
   );
 }
 
-const BlockItem = ({ label }: { label: string }) => {
+const BlockItem = ({ blockDef }: { blockDef: any }) => {
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow", nodeType);
-    event.dataTransfer.setData("application/label", label);
+    event.dataTransfer.setData("application/label", blockDef.name);
+    event.dataTransfer.setData("application/blockDef", JSON.stringify(blockDef));
     event.dataTransfer.effectAllowed = "move";
   };
 
@@ -121,9 +212,10 @@ const BlockItem = ({ label }: { label: string }) => {
     <div
       onDragStart={(event) => onDragStart(event, "custom")}
       draggable
-      className="bg-slate-800 p-3 rounded-md border border-slate-700 cursor-grab hover:border-blue-500 hover:bg-slate-700 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all font-semibold text-slate-200"
+      className="p-3 rounded-md border border-slate-700 cursor-grab hover:border-blue-500 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all font-semibold text-slate-200"
+      style={{ backgroundColor: blockDef.color || '#1e293b' }}
     >
-      {label}
+      {blockDef.name}
     </div>
   );
 };
@@ -132,11 +224,47 @@ const Header = () => {
   const { getNodes, getEdges } = useReactFlow();
   const setGeneratedCode = useEditorStore((state) => state.setGeneratedCode);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const nodes = getNodes();
     const edges = getEdges();
-    const code = generatePyTorchCode(nodes, edges);
-    setGeneratedCode(code);
+    
+    // Prepare the payload for FastAPI
+    const payload = {
+      nodes: nodes.map(n => ({
+        id: n.id,
+        data: {
+          block_id: n.data.block_id || "",
+          label: n.data.label,
+          is_functional: n.data.is_functional || false,
+          paramValues: n.data.paramValues || {}
+        }
+      })),
+      edges: edges.map(e => ({
+        source: e.source,
+        sourceHandle: e.sourceHandle || "",
+        target: e.target,
+        targetHandle: e.targetHandle || ""
+      }))
+    };
+
+    setGeneratedCode("# Compiling via Python Backend Engine...");
+
+    try {
+      const response = await fetch("http://localhost:8000/api/compile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        setGeneratedCode(data.code);
+      } else {
+        setGeneratedCode(`# COMPILER ERROR\n${data.detail}`);
+      }
+    } catch (err: any) {
+      setGeneratedCode(`# NETWORK ERROR\nFailed to reach compiler backend: ${err.message}`);
+    }
   };
 
   return (
@@ -154,6 +282,23 @@ const Header = () => {
 
 export default function Home() {
   const generatedCode = useEditorStore((state) => state.generatedCode);
+  const [registry, setRegistry] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("http://localhost:8000/api/blocks")
+      .then(res => res.json())
+      .then(data => setRegistry(data))
+      .catch(err => console.error("Failed to fetch blocks", err));
+  }, []);
+
+  // Group blocks by category
+  const categories: Record<string, any[]> = {};
+  registry.forEach(block => {
+    if (!categories[block.category]) {
+      categories[block.category] = [];
+    }
+    categories[block.category].push(block);
+  });
 
   return (
     <ReactFlowProvider>
@@ -163,54 +308,45 @@ export default function Home() {
         <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-6 overflow-y-auto z-10 shadow-2xl shadow-black/50">
-          <div>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Core Layers</h2>
-            <div className="flex flex-col gap-2">
-              <BlockItem label="Input" />
-              <BlockItem label="Linear" />
-              <BlockItem label="Conv2D" />
-            </div>
-          </div>
-          
-          <div>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Activations</h2>
-            <div className="flex flex-col gap-2">
-              <BlockItem label="ReLU" />
-              <BlockItem label="Sigmoid" />
-              <BlockItem label="Tanh" />
-              <BlockItem label="Softmax" />
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Regularization</h2>
-            <div className="flex flex-col gap-2">
-              <BlockItem label="Dropout" />
-              <BlockItem label="BatchNorm2d" />
-            </div>
-          </div>
-          
-          <div>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Pooling</h2>
-            <div className="flex flex-col gap-2">
-              <BlockItem label="MaxPool2d" />
-              <BlockItem label="AvgPool2d" />
-            </div>
-          </div>
+          {Object.keys(categories).length === 0 ? (
+             <div className="text-sm text-slate-400 animate-pulse">Loading blocks...</div>
+          ) : (
+            Object.keys(categories).map(category => (
+              <div key={category}>
+                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">{category}</h2>
+                <div className="flex flex-col gap-2">
+                  {categories[category].map((block: any) => (
+                    <BlockItem key={block.id} blockDef={block} />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </aside>
 
         {/* Canvas */}
         <DnDCanvas />
 
-        {/* Code Preview */}
-        <aside className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col z-10 shadow-2xl">
-          <div className="p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
-            <h2 className="text-sm font-semibold text-slate-300">Generated Code</h2>
+        {/* Right Sidebar (Split between Properties and Code) */}
+        <aside className="w-96 bg-slate-900 border-l border-slate-800 flex flex-col z-10 shadow-2xl h-full overflow-hidden">
+          {/* Properties Panel (Top Half) */}
+          <div className="flex-1 border-b border-slate-800 flex flex-col min-h-0">
+             <div className="p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
+                <h2 className="text-sm font-semibold text-slate-300">Properties</h2>
+             </div>
+             <div className="flex-1 p-4 overflow-y-auto">
+                <PropertiesPanel />
+             </div>
           </div>
-          <div className="flex-1 p-4 overflow-auto text-sm font-mono text-indigo-300 bg-[#0c1017]">
-            <pre>
-{generatedCode}
-            </pre>
+          
+          {/* Code Preview (Bottom Half) */}
+          <div className="flex-1 flex flex-col min-h-0">
+             <div className="p-4 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md">
+                <h2 className="text-sm font-semibold text-slate-300">Generated Code</h2>
+             </div>
+             <div className="flex-1 p-4 overflow-auto text-sm font-mono text-indigo-300 bg-[#0c1017]">
+               <pre>{generatedCode}</pre>
+             </div>
           </div>
         </aside>
       </div>
