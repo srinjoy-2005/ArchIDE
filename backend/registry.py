@@ -14,6 +14,18 @@ REGISTRY = [
         ]
     ),
     BlockDef(
+        id="gourav",
+        name="Gourav",
+        category="Core Layers",
+        color="#10b981",
+        is_functional=True,
+        inputs=[],
+        outputs=[PortDef(id="out", name="Output")],
+        params=[
+            ParamDef(name="shape", type="string", default="(1, 3, 224, 224)")
+        ]
+    ),
+    BlockDef(
         id="output",
         name="Output",
         category="Core Layers",
