@@ -1,5 +1,6 @@
 from models import CompileRequest, Node, Edge
-from typing import List, Dict
+from typing import List, Dict, Tuple, Any
+from blocks import get_block_by_id
 
 def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
     # 1. Build adjacency list and in-degree map
@@ -32,7 +33,44 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
         
     return sorted_nodes
 
+def shape_inference_pass(sorted_nodes: List[Node], edges: List[Edge]) -> Dict[str, Tuple]:
+    # Maps edge keys like `nodeId_portId` to tensor shape tuple
+    tensor_shapes: Dict[str, Tuple] = {}
+    
+    for node in sorted_nodes:
+        block_id = getattr(node.data, 'block_id', '').lower()
+        if not block_id:
+            block_id = node.data.label.split()[0].lower() # fallback
+            
+        block = get_block_by_id(block_id)
+        if not block:
+            continue
+            
+        # Gather incoming shapes
+        incoming_shapes = {}
+        for port in block.definition.inputs:
+            # Find edge targeting this node and port
+            incoming_edge = next((e for e in edges if e.target == node.id and e.targetHandle == port.id), None)
+            if incoming_edge:
+                source_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
+                incoming_shapes[port.id] = tensor_shapes.get(source_key, ("ANY",))
+            else:
+                incoming_shapes[port.id] = ("ANY",)
+                
+        # Perform shape inference
+        out_shapes = block.infer_shapes(incoming_shapes, node.data.paramValues)
+        
+        # Assign to outgoing keys
+        for port_id, shape in out_shapes.items():
+            tensor_shapes[f"{node.id}_{port_id}"] = shape
+            
+    return tensor_shapes
+
+
 def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
+    # Optional: run shape pass
+    # shape_inference_pass(sorted_nodes, edges)
+
     # 1. Boilerplate
     code = [
         "import torch",
@@ -62,84 +100,50 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     for node in sorted_nodes:
         node_id = node.id
         label = node.data.label
-        block_id = getattr(node.data, 'block_id', '')
+        block_id = getattr(node.data, 'block_id', '').lower()
+        if not block_id:
+            if "Split" in label: block_id = "split"
+            else: block_id = label.lower()
+            
+        block = get_block_by_id(block_id)
+        if not block:
+            continue
+            
         params = node.data.paramValues
         
-        # Generate variable name for this node's output
-        out_var = f"x_{node_id.replace('-', '_')}"
-        
-        def get_in_var(port_name: str) -> str:
-            src_key = input_to_source.get(f"{node_id}_{port_name}")
-            return var_map.get(src_key, "None") if src_key else "None"
-
-        # --- Handle Special Nodes ---
-        if block_id == "input" or (not block_id and label == "Input"):
-            # Map this input's output handle to its function argument name
+        # Prepare inputs for code generation
+        input_vars = {}
+        for port in block.definition.inputs:
+            src_key = input_to_source.get(f"{node_id}_{port.id}")
+            input_vars[port.id] = var_map.get(src_key, "None")
+            
+        # Prepare outputs for code generation
+        output_vars = {}
+        for port in block.definition.outputs:
+            out_var = f"x_{node_id.replace('-', '_')}"
+            if len(block.definition.outputs) > 1:
+                # Handle cases like split with multiple outputs
+                # E.g., out_1, out_2. We can just use the port id as suffix
+                out_var = f"{out_var}_{port.id}"
+            output_vars[port.id] = out_var
+            var_map[f"{node_id}_{port.id}"] = out_var
+            
+        # Special case for input variables mapped to function args
+        if block_id == "input" or block_id == "gourav":
             arg_name = f"x_{label.replace(' ', '_').lower()}"
             var_map[f"{node_id}_out"] = arg_name
             continue
             
-        if block_id == "output" or (not block_id and label == "Output"):
-            forward_lines.append(f"        return {get_in_var('in')}")
-            continue
-
-        # --- Handle Stateful Layers (in __init__) ---
-        if not node.data.is_functional:
-            layer_name = f"self.layer_{node_id.replace('-', '_')}"
-            
-            if block_id == "linear" or (not block_id and label == "Linear"):
-                in_feat = params.get("in_features", 128)
-                out_feat = params.get("out_features", 64)
-                init_lines.append(f"        {layer_name} = nn.Linear({in_feat}, {out_feat})")
-            elif block_id == "conv2d" or (not block_id and label == "Conv2D"):
-                in_ch = params.get("in_channels", 3)
-                out_ch = params.get("out_channels", 16)
-                k_size = params.get("kernel_size", 3)
-                init_lines.append(f"        {layer_name} = nn.Conv2d({in_ch}, {out_ch}, {k_size})")
-            elif block_id == "relu" or (not block_id and label == "ReLU"):
-                init_lines.append(f"        {layer_name} = nn.ReLU()")
-            elif block_id == "softmax" or (not block_id and label == "Softmax"):
-                dim = params.get("dim", 1)
-                init_lines.append(f"        {layer_name} = nn.Softmax(dim={dim})")
+        # Delegate initialization to block
+        if not block.definition.is_functional:
+            init_code = block.emit_init(node_id, params)
+            if init_code:
+                init_lines.append(f"        {init_code}")
                 
-            # Forward pass string
-            forward_lines.append(f"        {out_var} = {layer_name}({get_in_var('in')})")
-            var_map[f"{node_id}_out"] = out_var
-            
-        # --- Handle Functional Math Ops (only in forward) ---
-        else:
-            if block_id == "add" or (not block_id and label == "Add"):
-                # Find all edges pointing to this node
-                node_incoming = [e for e in edges if e.target == node_id]
-                src_vars = [var_map.get(f"{e.source}_{e.sourceHandle}", "None") for e in node_incoming]
-                
-                if src_vars:
-                    add_expr = " + ".join(src_vars)
-                    forward_lines.append(f"        {out_var} = {add_expr}")
-                else:
-                    forward_lines.append(f"        {out_var} = 0")
-                var_map[f"{node_id}_out"] = out_var
-                
-            elif block_id == "sub" or (not block_id and label == "Subtract"):
-                a = get_in_var("in_a")
-                b = get_in_var("in_b")
-                forward_lines.append(f"        {out_var} = {a} - {b}")
-                var_map[f"{node_id}_out"] = out_var
-                
-            elif block_id == "split" or (not block_id and label == "Split (Chunk)"):
-                chunks = params.get("chunks", 2)
-                dim = params.get("dim", -1)
-                
-                # Split returns multiple outputs: x_out_1, x_out_2
-                out_vars = [f"{out_var}_{i}" for i in range(1, chunks + 1)]
-                out_vars_str = ", ".join(out_vars)
-                forward_lines.append(f"        {out_vars_str} = torch.chunk({get_in_var('in')}, chunks={chunks}, dim={dim})")
-                
-                # Map each output handle individually (out_1, out_2, etc.)
-                for i in range(1, chunks + 1):
-                    var_map[f"{node_id}_out_{i}"] = out_vars[i-1]
-            
-            # TODO: Other functional ops (mul, div, sin, cos)
+        # Delegate forward execution to block
+        forward_code = block.emit_forward(node_id, input_vars, output_vars, params)
+        if forward_code:
+            forward_lines.append(f"        {forward_code}")
             
     if not init_lines:
         init_lines.append("        pass")
