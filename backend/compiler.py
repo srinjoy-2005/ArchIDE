@@ -76,7 +76,7 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
 def shape_inference_pass(
     sorted_nodes: List[Node],
     edges: List[Edge],
-) -> Dict[str, Dict[str, Tuple]]:
+) -> Tuple[Dict[str, Dict[str, Tuple]], Dict[str, Dict[str, Any]]]:
     """
     Traverse the graph in topological order, propagate concrete tensor shapes,
     and raise ShapeError immediately on the first mismatch detected.
@@ -89,6 +89,8 @@ def shape_inference_pass(
     tensor_shapes: Dict[str, Tuple] = {}
     # Per-node output shapes for rich reporting
     node_out_shapes: Dict[str, Dict[str, Tuple]] = {}
+    # Track any parameters the blocks auto-inferred and mutated
+    updated_node_params: Dict[str, Dict[str, Any]] = {}
 
     for node in sorted_nodes:
         block_id = _resolve_block_id(node)
@@ -109,6 +111,9 @@ def shape_inference_pass(
             else:
                 incoming[port.id] = ("ANY",)
 
+        # Keep track of original params to detect auto-inference mutations
+        original_params = dict(node.data.paramValues)
+
         # Delegate shape inference to the block class and catch any mismatch
         try:
             out_shapes = block.infer_shapes(incoming, node.data.paramValues)
@@ -123,9 +128,16 @@ def shape_inference_pass(
         for port_id, shape in out_shapes.items():
             tensor_shapes[f"{node.id}_{port_id}"] = shape
 
+        # Check if the block mutated any parameters (e.g. auto-inferred in_features)
+        for k, v in node.data.paramValues.items():
+            if k not in original_params or original_params[k] != v:
+                if node.id not in updated_node_params:
+                    updated_node_params[node.id] = {}
+                updated_node_params[node.id][k] = v
+
         node_out_shapes[node.id] = out_shapes
 
-    return node_out_shapes
+    return node_out_shapes, updated_node_params
 
 
 # ---------------------------------------------------------------------------

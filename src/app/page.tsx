@@ -316,23 +316,36 @@ const Header = () => {
       if (response.ok) {
         setCheckStatus('ok');
         setCheckMsg('All tensor shapes are compatible ✓');
-        // Update inferred shape params on each node
+        // Update inferred shape params and auto-resolved parameters on each node
         setNodes(nds => nds.map(n => {
           const shapes = data.node_shapes?.[n.id];
-          if (!shapes) return n;
+          const newParams = data.node_params?.[n.id];
+          if (!shapes && !newParams) return n;
+          
           const params = (n.data.params as any[]) || [];
           const updatedValues = { ...(n.data.paramValues as any) };
-          params.forEach((p: any) => {
-            if (p.section === 'shape') {
-              if (p.name === 'output_shape' && shapes['out']) updatedValues['output_shape'] = JSON.stringify(shapes['out']);
-              if (p.name === 'input_shape'  && shapes['in'])  updatedValues['input_shape']  = JSON.stringify(shapes['in']);
-            }
-          });
+          
+          // Apply shapes
+          if (shapes) {
+            params.forEach((p: any) => {
+              if (p.section === 'shape') {
+                if (p.name === 'output_shape' && shapes['out']) updatedValues['output_shape'] = JSON.stringify(shapes['out']);
+                if (p.name === 'input_shape'  && shapes['in'])  updatedValues['input_shape']  = JSON.stringify(shapes['in']);
+              }
+            });
+          }
+          
+          // Apply auto-inferred parameters (e.g. in_features = 64)
+          if (newParams) {
+            Object.assign(updatedValues, newParams);
+          }
+          
           return { ...n, data: { ...n.data, paramValues: updatedValues } };
         }));
       } else {
         setCheckStatus('error');
-        setCheckMsg(data.detail || 'Shape mismatch detected.');
+        const errMsg = typeof data.detail === 'string' ? data.detail : data.detail?.message;
+        setCheckMsg(errMsg || 'Shape mismatch detected.');
       }
     } catch (err: any) {
       setCheckStatus('error');

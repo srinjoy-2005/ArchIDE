@@ -43,17 +43,17 @@ def compile_graph(request: CompileRequest):
 def check_shapes(request: CheckRequest):
     """
     Runs the static shape inference pass without generating code.
-    Returns per-node output shapes, or a structured error on the first mismatch.
+    Returns per-node output shapes and auto-inferred parameters, or a structured error on the first mismatch.
     """
     try:
         sorted_nodes = topological_sort(request.nodes, request.edges)
-        node_shapes = shape_inference_pass(sorted_nodes, request.edges)
+        node_shapes, node_params = shape_inference_pass(sorted_nodes, request.edges)
         # Convert tuples to lists for JSON serialisation
         serialisable = {
             node_id: {port: list(shape) for port, shape in ports.items()}
             for node_id, ports in node_shapes.items()
         }
-        return {"ok": True, "node_shapes": serialisable}
+        return {"ok": True, "node_shapes": serialisable, "node_params": node_params}
     except ShapeError as e:
         raise HTTPException(
             status_code=422,

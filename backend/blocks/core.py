@@ -22,23 +22,17 @@ class InputBlock(BaseBlock):
                     default="(1, 3, 224, 224)",
                     section="basic",
                     description="The shape of the input tensor, e.g. (batch, channels, H, W)"
-                ),
-                ParamDef(
-                    name="output_shape",
-                    type="string",
-                    default="?",
-                    read_only=True,
-                    section="shape",
-                    description="Inferred output shape"
-                ),
+                )
             ]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         shape_str = params.get("shape", "(1, 3, 224, 224)")
         try:
-            shape = tuple(int(s.strip()) for s in shape_str.strip("()").split(",") if s.strip())
-            return {"out": shape}
+            # Very robust parsing: strip everything that's not a digit or comma
+            clean = "".join(c for c in str(shape_str) if c.isdigit() or c == ',')
+            shape = tuple(int(s) for s in clean.split(",") if s)
+            return {"out": shape if shape else (1, 3, 224, 224)}
         except Exception:
             return {"out": (1, 3, 224, 224)}
 
@@ -112,6 +106,12 @@ class LinearBlock(BaseBlock):
             return {"out": ("ANY",)}
 
         in_features = params.get("in_features", 128)
+        
+        # Auto-infer in_features if set to -1
+        if in_features == -1 and in_shape[-1] != "ANY":
+            in_features = in_shape[-1]
+            params["in_features"] = in_features
+
         out_features = params.get("out_features", 64)
 
         if in_shape[-1] != "ANY" and in_shape[-1] != in_features:
