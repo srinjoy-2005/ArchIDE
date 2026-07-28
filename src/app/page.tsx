@@ -19,7 +19,6 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import CustomNode from "../components/CustomNode";
-import { generatePyTorchCode } from "../lib/codegen";
 import { useEditorStore } from "../lib/store";
 
 const nodeTypes = { custom: CustomNode };

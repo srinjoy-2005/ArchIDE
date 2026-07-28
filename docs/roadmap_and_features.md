@@ -14,6 +14,7 @@ This document outlines the short-term and long-term goals for the ArchiDE visual
   - Implement a shape propagation engine (potentially running in the Python backend) to calculate tensor dimensions as they flow through the network.
   - Display visual warnings on the React Flow canvas if incompatible blocks are connected (e.g., dimension mismatch).
 
+
 ### 3. Complex Architectures (Non-Sequential)
 - **Current State**: The backend compiler supports basic mathematical ops (`Add`, `Subtract`) and some stateful layers.
 - **To Do**: Update the parsing logic in `backend/compiler.py` to fully support complex branching architectures, advanced skip connections (ResNets), and multi-input/output blocks (like `torch.cat`).
