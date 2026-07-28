@@ -12,7 +12,7 @@ class ReLUBlock(BaseBlock):
             color="#f59e0b",
             is_functional=False,
             inputs=[PortDef(id="in", name="Input")],
-            outputs=[PortDef(id="out", name="Output")],
+            outputs=[PortDef(id="out", name="Output", var_hint="activated")],
             params=[]
         )
 
@@ -41,7 +41,7 @@ class SoftmaxBlock(BaseBlock):
             color="#f59e0b",
             is_functional=False,
             inputs=[PortDef(id="in", name="Input")],
-            outputs=[PortDef(id="out", name="Output")],
+            outputs=[PortDef(id="out", name="Output", var_hint="probs")],
             params=[
                 ParamDef(name="dim", type="int", default=1)
             ]

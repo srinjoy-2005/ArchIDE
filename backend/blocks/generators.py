@@ -12,7 +12,7 @@ class ArangeBlock(BaseBlock):
             color="#14b8a6",
             is_functional=True,
             inputs=[],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="indices")],
             params=[
                 ParamDef(name="start", type="int", default=0),
                 ParamDef(name="end", type="int", default=10),

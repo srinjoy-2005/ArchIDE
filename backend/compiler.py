@@ -1,4 +1,4 @@
-from models import CompileRequest, Node, Edge
+from models import CompileRequest, Node, Edge, PortDef
 from typing import List, Dict, Tuple, Any, Optional
 from blocks import get_block_by_id
 import re
@@ -143,6 +143,38 @@ def _build_input_var_map(
     return var_map
 
 
+def _build_output_var(
+    port: PortDef,
+    node_id: str,
+    params: Dict[str, Any],
+    hint_counts: Dict[str, int],
+) -> str:
+    """
+    Choose a unique, readable variable name for an output port.
+
+    Priority order:
+      1. User alias from paramValues["_output_aliases"][port.id]
+      2. port.var_hint (block-defined semantic name, e.g. "sum", "conv_feat")
+      3. Fallback: x_{short_node_id}
+
+    Disambiguates duplicates by appending a counter:
+      conv_feat, conv_feat_2, conv_feat_3, …
+    """
+    aliases = params.get("_output_aliases", {})
+    user_alias = aliases.get(port.id, "") if isinstance(aliases, dict) else ""
+
+    if user_alias:
+        base = _sanitize(user_alias)
+    elif port.var_hint:
+        base = port.var_hint
+    else:
+        base = f"x_{node_id.replace('-', '_')[:8]}"
+
+    count = hint_counts.get(base, 0) + 1
+    hint_counts[base] = count
+    return base if count == 1 else f"{base}_{count}"
+
+
 def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     # ── Step 1: Static shape check (raises ShapeError on mismatch) ──────────
     shape_inference_pass(sorted_nodes, edges)
@@ -179,6 +211,9 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
         input_to_source[target_key] = source_key
 
     # ── Step 5: Walk the sorted graph and emit code ───────────────────────────
+    # hint_counts tracks how many times each var_hint base has been used,
+    # enabling automatic disambiguation: sum, sum_2, sum_3, …
+    hint_counts: Dict[str, int] = {}
     for node in sorted_nodes:
         node_id = node.id
         block_id = _resolve_block_id(node)
@@ -198,15 +233,10 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
             src_key = input_to_source.get(f"{node_id}_{port.id}")
             input_vars[port.id] = var_map.get(src_key, "None") if src_key else "None"
 
-        # Build output variable names for this node
+        # Build output variable names using var_hint / user aliases
         output_vars: Dict[str, str] = {}
-        base_out = f"x_{node_id.replace('-', '_')}"
         for port in block.definition.outputs:
-            out_var = (
-                f"{base_out}_{port.id}"
-                if len(block.definition.outputs) > 1
-                else base_out
-            )
+            out_var = _build_output_var(port, node_id, params, hint_counts)
             output_vars[port.id] = out_var
             var_map[f"{node_id}_{port.id}"] = out_var
 

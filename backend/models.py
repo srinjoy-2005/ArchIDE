@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Any
+from typing import List, Any, Optional
 
 class Edge(BaseModel):
     source: str
@@ -27,7 +27,10 @@ class PortDef(BaseModel):
     type: str = "tensor"
     # if true, the frontend lets the user connect multiple edges
     # to this single port 
-    is_list: bool = False  
+    is_list: bool = False
+    # Suggested Python variable name for this port's output tensor
+    var_hint: Optional[str] = None
+
     
 class ParamDef(BaseModel):
     name: str

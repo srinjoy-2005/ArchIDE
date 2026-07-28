@@ -15,7 +15,7 @@ class AddBlock(BaseBlock):
                 PortDef(id="in_0", name="Input 1"),
                 PortDef(id="in_1", name="Input 2")
             ],
-            outputs=[PortDef(id="out", name="Out")],
+            outputs=[PortDef(id="out", name="Out", var_hint="sum")],
             params=[
                 ParamDef(name="num_inputs", type="int", default=2)
             ]
@@ -51,7 +51,7 @@ class SubBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="diff")],
             params=[]
         )
 
@@ -78,7 +78,7 @@ class MulBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="product")],
             params=[]
         )
 
@@ -105,7 +105,7 @@ class DivBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="quotient")],
             params=[]
         )
 
@@ -132,7 +132,7 @@ class PowBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[PortDef(id="in_a",name="Base")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="powered")],
             params=[ParamDef(name="exponent", type="float", default=2.0)]
         )
 
@@ -159,7 +159,7 @@ class MatMulBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="matmul_out")],
             params=[]
         )
 
@@ -199,7 +199,7 @@ class UnsqueezeBlock(BaseBlock):
             color="#ef4444",
             is_functional=True,
             inputs=[PortDef(id="in",name="Input")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="unsqueezed")],
             params=[ParamDef(name="dim", type="int", default=0)]
         )
 
@@ -239,7 +239,7 @@ class CatBlock(BaseBlock):
                 PortDef(id="in_b",name="B"),
                 PortDef(id="in_c",name="C")
             ],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="concat")],
             params=[ParamDef(name="dim", type="int", default=-1)]
         )
 
@@ -274,8 +274,8 @@ class SplitBlock(BaseBlock):
                 PortDef(id="in", name="Input Tensor")
             ],
             outputs=[
-                PortDef(id="out_1", name="Chunk 1"),
-                PortDef(id="out_2", name="Chunk 2")
+                PortDef(id="out_1", name="Chunk 1", var_hint="chunk_1"),
+                PortDef(id="out_2", name="Chunk 2", var_hint="chunk_2")
             ],
             params=[
                 ParamDef(name="chunks", type="int", default=2),

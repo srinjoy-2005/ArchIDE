@@ -101,7 +101,7 @@ class LinearBlock(BaseBlock):
             color="#3b82f6",
             is_functional=False,
             inputs=[PortDef(id="in", name="Input")],
-            outputs=[PortDef(id="out", name="Output")],
+            outputs=[PortDef(id="out", name="Output", var_hint="fc_out")],
             params=[
                 ParamDef(name="in_features", type="int", default=128),
                 ParamDef(name="out_features", type="int", default=64)
@@ -146,7 +146,7 @@ class Conv2DBlock(BaseBlock):
             color="#3b82f6",
             is_functional=False,
             inputs=[PortDef(id="in", name="Input")],
-            outputs=[PortDef(id="out", name="Output")],
+            outputs=[PortDef(id="out", name="Output", var_hint="conv_feat")],
             params=[
                 ParamDef(name="in_channels", type="int", default=3),
                 ParamDef(name="out_channels", type="int", default=16),
