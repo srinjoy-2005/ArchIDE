@@ -5,6 +5,42 @@ from blocks import get_block_by_id
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _sanitize(label: str) -> str:
+    """Turn a block label into a valid Python identifier fragment."""
+    s = label.strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = s.strip("_")
+    return s or "var"
+
+def _resolve_block_id(node: Node) -> str:
+    """Get the canonical block_id from a node, falling back gracefully."""
+    block_id = getattr(node.data, "block_id", "").lower().strip()
+    return block_id or "unknown"
+
+def _label_to_identifier(label: str) -> str:
+    """Turn a user-provided node name into a clean Python snake_case identifier."""
+    s = _sanitize(label)
+    if not s or s[0].isdigit():
+        s = "x_" + s
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Shape Error
+# ---------------------------------------------------------------------------
+
+class ShapeError(Exception):
+    """Raised when a shape mismatch is detected during static analysis."""
+    def __init__(self, message: str, node_id: str, node_label: str):
+        super().__init__(message)
+        self.node_id = node_id
+        self.node_label = node_label
+
+
+# ---------------------------------------------------------------------------
 # Topological Sort (Kahn's Algorithm)
 # ---------------------------------------------------------------------------
 
@@ -35,19 +71,6 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
 
 
 # ---------------------------------------------------------------------------
-# Helper: sanitize a user label into a valid Python identifier
-# ---------------------------------------------------------------------------
-
-def _label_to_identifier(label: str) -> str:
-    """Turn a user-provided node name into a clean Python snake_case identifier."""
-    s = label.strip().lower().replace(" ", "_")
-    s = re.sub(r"[^a-z0-9_]", "", s)
-    if not s or s[0].isdigit():
-        s = "x_" + s
-    return s
-
-
-# ---------------------------------------------------------------------------
 # Shape Inference Pass
 # ---------------------------------------------------------------------------
 
@@ -56,35 +79,46 @@ def shape_inference_pass(
     edges: List[Edge],
 ) -> Dict[str, Dict[str, Tuple]]:
     """
-    Returns a dict mapping  node_id -> {port_id -> shape_tuple}.
-    Raises ValueError on the first shape mismatch found.
+    Traverse the graph in topological order, propagate concrete tensor shapes,
+    and raise ShapeError immediately on the first mismatch detected.
+
+    Returns a dict: node_id -> {port_id -> shape_tuple}
+    A dimension value of the string "ANY" means the dimension is dynamically
+    determined at runtime.
     """
-    # Maps f"{node_id}_{port_id}" -> shape tuple
+    # Maps f"{node_id}_{port_id}" -> shape tuple, e.g. (1, 64, 112, 112)
     tensor_shapes: Dict[str, Tuple] = {}
     # Per-node output shapes for rich reporting
     node_out_shapes: Dict[str, Dict[str, Tuple]] = {}
 
     for node in sorted_nodes:
-        block_id = node.data.block_id.strip().lower()
+        block_id = _resolve_block_id(node)
         block = get_block_by_id(block_id)
         if not block:
             continue
 
-        # Gather incoming shapes from the propagated tensor_shapes map
+        # Gather incoming shapes from already-resolved upstream ports
         incoming: Dict[str, Tuple] = {}
         for port in block.definition.inputs:
-            edge = next(
+            incoming_edge = next(
                 (e for e in edges if e.target == node.id and e.targetHandle == port.id),
-                None
+                None,
             )
-            if edge:
-                src_key = f"{edge.source}_{edge.sourceHandle}"
+            if incoming_edge:
+                src_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
                 incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
             else:
                 incoming[port.id] = ("ANY",)
 
-        # Block performs its own shape validation and returns output shapes
-        out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+        # Delegate shape inference to the block class and catch any mismatch
+        try:
+            out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+        except ValueError as exc:
+            raise ShapeError(
+                message=str(exc),
+                node_id=node.id,
+                node_label=node.data.label,
+            ) from exc
 
         # Store for downstream propagation
         for port_id, shape in out_shapes.items():
@@ -98,6 +132,8 @@ def shape_inference_pass(
 # ---------------------------------------------------------------------------
 # Code Generation Pass
 # ---------------------------------------------------------------------------
+
+INPUT_IDS = {"input"}
 
 def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     # -----------------------------------------------------------------------
@@ -115,12 +151,12 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     var_map: Dict[str, str] = {}
 
     # -----------------------------------------------------------------------
-    # 3. Build forward() signature from Input nodes
+    # 3. Build forward() signature from Input nodes.
     #    Use deduplicated, sanitized labels. Sequential counter as tiebreaker.
     # -----------------------------------------------------------------------
-    input_nodes = [n for n in sorted_nodes if n.data.block_id == "input"]
-    
-    seen_bases: Dict[str, int] = {}   # base_name -> count of occurrences
+    input_nodes = [n for n in sorted_nodes if _resolve_block_id(n) in INPUT_IDS]
+
+    seen_bases: Dict[str, int] = {}
     forward_arg_names: List[str] = []
 
     for node in input_nodes:
@@ -132,7 +168,6 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
             seen_bases[base] = 0
             arg_name = base
         forward_arg_names.append(arg_name)
-        # Register this input's output port in the var_map
         var_map[f"{node.id}_out"] = arg_name
 
     # -----------------------------------------------------------------------
@@ -141,27 +176,24 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     # -----------------------------------------------------------------------
     seq_counter = 0
     for node in sorted_nodes:
-        block_id = node.data.block_id.strip().lower()
-        if block_id in ("input", "output"):
+        block_id = _resolve_block_id(node)
+        if block_id in INPUT_IDS or block_id == "output":
             continue
         block = get_block_by_id(block_id)
         if not block:
             continue
-
-        # For each output port, assign a sequential name
         for port in block.definition.outputs:
-            if len(block.definition.outputs) == 1:
-                var_name = f"x_{seq_counter}"
-            else:
-                var_name = f"x_{seq_counter}_{port.id}"
+            var_name = (
+                f"x_{seq_counter}" if len(block.definition.outputs) == 1
+                else f"x_{seq_counter}_{port.id}"
+            )
             var_map[f"{node.id}_{port.id}"] = var_name
-
         seq_counter += 1
 
     # -----------------------------------------------------------------------
     # 5. Collect Output nodes' return values (for single return statement)
     # -----------------------------------------------------------------------
-    output_nodes = [n for n in sorted_nodes if n.data.block_id == "output"]
+    output_nodes = [n for n in sorted_nodes if _resolve_block_id(n) == "output"]
     return_vars: List[str] = []
     for node in output_nodes:
         src_key = input_to_source.get(f"{node.id}_in")
@@ -169,9 +201,9 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
         return_vars.append(ret_var)
 
     # -----------------------------------------------------------------------
-    # 6. Code emission
+    # 6. Boilerplate
     # -----------------------------------------------------------------------
-    code        = [
+    code: List[str] = [
         "import torch",
         "import torch.nn as nn",
         "",
@@ -182,10 +214,13 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     init_lines:    List[str] = []
     forward_lines: List[str] = [f"    def forward(self, {', '.join(forward_arg_names)}):"]
 
+    # -----------------------------------------------------------------------
+    # 7. Emit code for each node
+    # -----------------------------------------------------------------------
     for node in sorted_nodes:
-        block_id = node.data.block_id.strip().lower()
-        if block_id in ("input", "output"):
-            continue  # Input vars already registered; Output return handled separately
+        block_id = _resolve_block_id(node)
+        if block_id in INPUT_IDS or block_id == "output":
+            continue
 
         block = get_block_by_id(block_id)
         if not block:
@@ -219,7 +254,7 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
             forward_lines.append(f"        {forward_code}")
 
     # -----------------------------------------------------------------------
-    # 7. Emit single return statement
+    # 8. Emit single return statement
     # -----------------------------------------------------------------------
     if return_vars:
         forward_lines.append(f"        return {', '.join(return_vars)}")

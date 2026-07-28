@@ -291,7 +291,7 @@ const Header = () => {
   const handleExport = async () => {
     setGeneratedCode("# Compiling via Python Backend Engine...");
     try {
-      const response = await fetch("http://localhost:8000/api/compile", {
+      const response = await fetch("http://localhost:8001/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload())
@@ -307,7 +307,7 @@ const Header = () => {
     setCheckStatus('checking');
     setCheckMsg('');
     try {
-      const response = await fetch("http://localhost:8000/api/check", {
+      const response = await fetch("http://localhost:8001/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload())
@@ -379,10 +379,10 @@ export default function Home() {
   const [registry, setRegistry] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/blocks")
+    fetch("http://localhost:8001/api/blocks")
       .then(res => res.json())
       .then(data => setRegistry(data))
-      .catch(err => console.error("Failed to fetch blocks", err));
+      .catch(err => console.error("Failed to load blocks:", err));
   }, []);
 
   // Group blocks by category
