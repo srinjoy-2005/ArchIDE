@@ -16,5 +16,6 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[July 28, 2026 - Srinjoy](changelog/2026_07_28_srinjoy.md)**: Refactored compiler architecture to use object-oriented block definitions for decoupling functionalities and enabling static shape inference.
 *   **[July 26, 2026 - Gourav Roy](changelog/2026_07_26_gourav.md)**: Major architecture shift to Python (FastAPI) backend, Kahn's algorithm PyTorch compiler, and critical UI state synchronization fixes in React Flow.
 *   **[July 25, 2026 - Srinjoy Mukherjee](changelog/2026_07_25_srinjoy.md)**: Initial project scaffolding, UI creation, dark mode glassmorphism layout, and base React Flow drag-and-drop canvas setup.
