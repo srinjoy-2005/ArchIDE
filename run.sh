@@ -1,24 +1,52 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+# Store child PIDs so we can kill them precisely
+PIDS=()
 
-# Setup cleanup on exit to kill all background processes
 cleanup() {
+    echo ""
     echo "Stopping servers..."
-    kill 0
+
+    for pid in "${PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null
+        fi
+    done
+
+    # Give processes a moment to shut down gracefully
+    sleep 1
+
+    # Force-kill anything still running
+    for pid in "${PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    done
+
+    echo "All servers stopped."
+    exit 0
 }
-trap cleanup SIGINT SIGTERM EXIT
+
+trap cleanup SIGINT SIGTERM
 
 echo "Starting Next.js frontend..."
 npm run dev &
+PIDS+=($!)
 
 echo "Starting FastAPI backend..."
-cd backend
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
-fi
-python main.py &
+(
+    cd backend
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
+    fi
+    python main.py
+) &
+PIDS+=($!)
+
+echo "Both servers running. Press Ctrl+C to stop."
+echo "  Frontend: http://localhost:3000"
+echo "  Backend:  http://localhost:8001"
+echo ""
 
 # Wait for all background jobs to finish
 wait

@@ -6,7 +6,7 @@ from typing import List
 
 from models import BlockDef, CompileRequest
 from registry import REGISTRY
-from compiler import topological_sort, generate_pytorch_code
+from compiler import topological_sort, generate_pytorch_code, ShapeError
 
 app = FastAPI()
 
@@ -25,12 +25,23 @@ def get_blocks():
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
-        sorted_nodes = topological_sort(request.nodes,request.edges)
-        code = generate_pytorch_code(sorted_nodes,request.edges)
-        return {"code":code}
+        sorted_nodes = topological_sort(request.nodes, request.edges)
+        code = generate_pytorch_code(sorted_nodes, request.edges)
+        return {"code": code}
+    except ShapeError as e:
+        # Structured error so the frontend can highlight the offending node
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "ShapeMismatch",
+                "message": str(e),
+                "node_id": e.node_id,
+                "node_label": e.node_label,
+            },
+        )
     except ValueError as e:
-        raise HTTPException(status_code = 400,detail = str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
