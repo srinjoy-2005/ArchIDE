@@ -1,5 +1,5 @@
 from .base import BaseBlock
-from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock, GouravBlock
+from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock
 from .activations import ReLUBlock, SoftmaxBlock
 from .tensor_ops import (
     AddBlock, SubBlock, MulBlock, DivBlock, PowBlock, 
@@ -13,7 +13,6 @@ from models import BlockDef
 # Instantiate all available blocks
 _BLOCK_INSTANCES = [
     InputBlock(),
-    GouravBlock(),
     OutputBlock(),
     LinearBlock(),
     Conv2DBlock(),

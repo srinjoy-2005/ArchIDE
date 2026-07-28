@@ -30,11 +30,39 @@ const initialEdges: Edge[] = [];
 let id = 2;
 const getId = () => `node_${id++}`;
 
+function ParamInput({ param, value, onChange }: { param: any; value: any; onChange: (name: string, value: any) => void }) {
+  const inputClass = param.read_only
+    ? "bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-500 cursor-not-allowed w-full"
+    : "bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors w-full";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-slate-400 capitalize flex items-center gap-1.5">
+        {param.name.replace(/_/g, ' ')}
+        {param.read_only && (
+          <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">inferred</span>
+        )}
+      </label>
+      <input
+        type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
+        className={inputClass}
+        value={value ?? param.default}
+        readOnly={param.read_only}
+        disabled={param.read_only}
+        title={param.description || ''}
+        onChange={(e) => {
+          if (!param.read_only) {
+            onChange(param.name, param.type === 'int' ? parseInt(e.target.value) : param.type === 'float' ? parseFloat(e.target.value) : e.target.value);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function PropertiesPanel() {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
-  
-  // Directly find the selected node from the store
   const selectedNode = nodes.find(n => n.selected) || null;
 
   const handleParamChange = (paramName: string, value: any) => {
@@ -44,29 +72,16 @@ function PropertiesPanel() {
         if (n.id === selectedNode.id) {
           const newData: any = {
             ...n.data,
-            paramValues: {
-              ...(n.data.paramValues as any || {}),
-              [paramName]: value
-            }
+            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: value }
           };
-
-          // If the param is num_inputs or chunks, dynamically generate input/output ports!
           if (paramName === 'num_inputs') {
             const num = parseInt(value) || 2;
-            newData.inputs = Array.from({ length: num }, (_, i) => ({
-              id: `in_${i}`, name: `Input ${i + 1}`
-            }));
+            newData.inputs = Array.from({ length: num }, (_, i) => ({ id: `in_${i}`, name: `Input ${i + 1}` }));
           } else if (paramName === 'chunks') {
             const num = parseInt(value) || 2;
-            newData.outputs = Array.from({ length: num }, (_, i) => ({
-              id: `out_${i}`, name: `Chunk ${i + 1}`
-            }));
+            newData.outputs = Array.from({ length: num }, (_, i) => ({ id: `out_${i + 1}`, name: `Chunk ${i + 1}` }));
           }
-
-          return {
-            ...n,
-            data: newData
-          };
+          return { ...n, data: newData };
         }
         return n;
       })
@@ -80,35 +95,60 @@ function PropertiesPanel() {
   const params = (selectedNode.data.params as any[]) || [];
   const paramValues = (selectedNode.data.paramValues as any) || {};
 
+  const shapeParams   = params.filter((p: any) => p.section === 'shape');
+  const basicParams   = params.filter((p: any) => !p.section || p.section === 'basic');
+  const advancedParams = params.filter((p: any) => p.section === 'advanced');
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1 mb-2 border-b border-slate-700 pb-4">
-        <label className="text-xs text-slate-400 capitalize">Node Name (Label)</label>
+      {/* Node label editor */}
+      <div className="flex flex-col gap-1 pb-3 border-b border-slate-700/60">
+        <label className="text-xs text-slate-400">Node Name</label>
         <input
           type="text"
           className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
           value={selectedNode.data.label as string}
-          onChange={(e) => {
-            setNodes(nds => nds.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, label: e.target.value } } : n));
-          }}
+          onChange={(e) => setNodes(nds => nds.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, label: e.target.value } } : n))}
         />
       </div>
 
-      <div className="font-semibold text-slate-200">Block Parameters</div>
-      {params.length === 0 ? (
+      {/* Shape section — always visible, greyed out */}
+      {shapeParams.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Tensor Shapes</div>
+          {shapeParams.map((p: any) => (
+            <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+          ))}
+        </div>
+      )}
+
+      {/* Basic parameters */}
+      {basicParams.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Parameters</div>
+          {basicParams.map((p: any) => (
+            <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+          ))}
+        </div>
+      )}
+
+      {basicParams.length === 0 && shapeParams.length === 0 && (
         <div className="text-sm text-slate-500">No parameters to configure.</div>
-      ) : (
-        params.map(param => (
-          <div key={param.name} className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400 capitalize">{param.name.replace(/_/g, ' ')}</label>
-            <input
-              type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
-              className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-blue-500 transition-colors"
-              value={paramValues[param.name] ?? param.default}
-              onChange={(e) => handleParamChange(param.name, param.type === 'int' ? parseInt(e.target.value) : e.target.value)}
-            />
+      )}
+
+      {/* Advanced parameters — collapsible */}
+      {advancedParams.length > 0 && (
+        <details className="group">
+          <summary className="text-xs font-semibold text-slate-500 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors list-none flex items-center gap-1.5">
+            <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+            Advanced Properties
+          </summary>
+          <div className="flex flex-col gap-2 mt-2 pl-1">
+            {advancedParams.map((p: any) => (
+              <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+            ))}
           </div>
-        ))
+        </details>
       )}
     </div>
   );
@@ -221,15 +261,15 @@ const BlockItem = ({ blockDef }: { blockDef: any }) => {
 };
 
 const Header = () => {
-  const { getNodes, getEdges } = useReactFlow();
+  const { getNodes, getEdges, setNodes } = useReactFlow();
   const setGeneratedCode = useEditorStore((state) => state.setGeneratedCode);
+  const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [checkMsg, setCheckMsg] = useState('');
 
-  const handleExport = async () => {
+  const buildPayload = () => {
     const nodes = getNodes();
     const edges = getEdges();
-    
-    // Prepare the payload for FastAPI
-    const payload = {
+    return {
       nodes: nodes.map(n => ({
         id: n.id,
         data: {
@@ -246,36 +286,90 @@ const Header = () => {
         targetHandle: e.targetHandle || ""
       }))
     };
+  };
 
+  const handleExport = async () => {
     setGeneratedCode("# Compiling via Python Backend Engine...");
-
     try {
       const response = await fetch("http://localhost:8000/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(buildPayload())
       });
       const data = await response.json();
-      
-      if (response.ok) {
-        setGeneratedCode(data.code);
-      } else {
-        setGeneratedCode(`# COMPILER ERROR\n${data.detail}`);
-      }
+      setGeneratedCode(response.ok ? data.code : `# COMPILER ERROR\n${data.detail}`);
     } catch (err: any) {
-      setGeneratedCode(`# NETWORK ERROR\nFailed to reach compiler backend: ${err.message}`);
+      setGeneratedCode(`# NETWORK ERROR\n${err.message}`);
     }
   };
+
+  const handleCheck = async () => {
+    setCheckStatus('checking');
+    setCheckMsg('');
+    try {
+      const response = await fetch("http://localhost:8000/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload())
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setCheckStatus('ok');
+        setCheckMsg('All tensor shapes are compatible ✓');
+        // Update inferred shape params on each node
+        setNodes(nds => nds.map(n => {
+          const shapes = data.node_shapes?.[n.id];
+          if (!shapes) return n;
+          const params = (n.data.params as any[]) || [];
+          const updatedValues = { ...(n.data.paramValues as any) };
+          params.forEach((p: any) => {
+            if (p.section === 'shape') {
+              if (p.name === 'output_shape' && shapes['out']) updatedValues['output_shape'] = JSON.stringify(shapes['out']);
+              if (p.name === 'input_shape'  && shapes['in'])  updatedValues['input_shape']  = JSON.stringify(shapes['in']);
+            }
+          });
+          return { ...n, data: { ...n.data, paramValues: updatedValues } };
+        }));
+      } else {
+        setCheckStatus('error');
+        setCheckMsg(data.detail || 'Shape mismatch detected.');
+      }
+    } catch (err: any) {
+      setCheckStatus('error');
+      setCheckMsg(`Cannot reach backend: ${err.message}`);
+    }
+  };
+
+  const checkBtnClass = {
+    idle:     'border border-slate-600 text-slate-300 hover:border-purple-500 hover:text-purple-300',
+    checking: 'border border-slate-600 text-slate-500 cursor-not-allowed',
+    ok:       'border border-emerald-500 text-emerald-400',
+    error:    'border border-rose-500 text-rose-400',
+  }[checkStatus];
 
   return (
     <header className="flex items-center justify-between bg-slate-900 border-b border-slate-800 p-4 shadow-xl z-10">
       <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 text-transparent bg-clip-text">ArchiDE</h1>
-      <button 
-        onClick={handleExport}
-        className="rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
-      >
-        Export PyTorch
-      </button>
+      <div className="flex items-center gap-3">
+        {checkMsg && (
+          <span className={`text-xs transition-all ${ checkStatus === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {checkMsg}
+          </span>
+        )}
+        <button
+          onClick={handleCheck}
+          disabled={checkStatus === 'checking'}
+          className={`rounded-md px-4 py-2 text-sm font-semibold transition-all ${checkBtnClass}`}
+        >
+          {checkStatus === 'checking' ? 'Checking...' : 'Run Static Tensor Check'}
+        </button>
+        <button
+          onClick={handleExport}
+          className="rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+        >
+          Export PyTorch
+        </button>
+      </div>
     </header>
   );
 };

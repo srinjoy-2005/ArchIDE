@@ -1,12 +1,10 @@
-from fastapi import HTTPException
-from fastapi import requests
-from fastapi import FastAPI
+from fastapi import HTTPException, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 
-from models import BlockDef, CompileRequest
-from registry import REGISTRY
-from compiler import topological_sort, generate_pytorch_code
+from models import BlockDef, CompileRequest, CheckRequest
+from blocks import get_all_block_defs
+from compiler import topological_sort, generate_pytorch_code, shape_inference_pass
 
 app = FastAPI()
 
@@ -20,16 +18,34 @@ app.add_middleware(
 
 @app.get("/api/blocks", response_model=List[BlockDef])
 def get_blocks():
-    return REGISTRY
+    return get_all_block_defs()
 
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
-        sorted_nodes = topological_sort(request.nodes,request.edges)
-        code = generate_pytorch_code(sorted_nodes,request.edges)
-        return {"code":code}
+        sorted_nodes = topological_sort(request.nodes, request.edges)
+        code = generate_pytorch_code(sorted_nodes, request.edges)
+        return {"code": code}
     except ValueError as e:
-        raise HTTPException(status_code = 400,detail = str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/check")
+def check_shapes(request: CheckRequest):
+    """
+    Runs the static shape inference pass without generating code.
+    Returns per-node output shapes, or a descriptive error on the first mismatch.
+    """
+    try:
+        sorted_nodes = topological_sort(request.nodes, request.edges)
+        node_shapes = shape_inference_pass(sorted_nodes, request.edges)
+        # Convert tuples to lists for JSON serialisation
+        serialisable = {
+            node_id: {port: list(shape) for port, shape in ports.items()}
+            for node_id, ports in node_shapes.items()
+        }
+        return {"ok": True, "node_shapes": serialisable}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

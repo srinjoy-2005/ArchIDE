@@ -21,29 +21,30 @@ class CompileRequest(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
 
+class CheckRequest(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
+
 class PortDef(BaseModel):
     id: str
-    name: str # User-facing name
+    name: str
     type: str = "tensor"
-    # if true, the frontend lets the user connect multiple edges
-    # to this single port 
-    is_list: bool = False  
-    
+    is_list: bool = False
+
 class ParamDef(BaseModel):
     name: str
-    type: str
+    type: str                   # "int", "float", "string", "bool"
     default: Any
+    read_only: bool = False     # If True, shown greyed-out in UI (e.g. inferred shapes)
+    section: str = "basic"      # "shape" | "basic" | "advanced"
+    description: str = ""       # Tooltip text shown in the UI
 
 class BlockDef(BaseModel):
     id: str
     name: str
     category: str
     color: str
-
-    # Tells the backend: if True, put in forward()
-    # If False, instantiate in __init__()
     is_functional: bool
     inputs: List[PortDef]
     outputs: List[PortDef]
-
     params: List[ParamDef]
