@@ -30,3 +30,9 @@ This document outlines the short-term and long-term goals for the ArchiDE visual
 
 ### 3. JSON Schema Reference Design
 - **Note**: Early on, a TypeScript-based JSON schema logic was proposed (detailed in `graph_ir_spec.md` and old IR preview files). While the actual implementation of the backend logic has been refactored entirely into Python (FastAPI/Pydantic), that original design remains a highly compelling reference. Future iterations involving complex graph serialization or frontend-backend synchronization should look to that design for inspiration.
+
+
+# TODO
+- Fundamental blocks when connected there should bestatic check for shape compatibility.
+- decoupling of block functionalities, like input shapes output shapes and block core function : DESIGN
+- Compiler design: going to use established CD principles to make this scalable to custom blocks, need to think about where the code wrtten for a block is placed and where parametrs that will be verified are placed
