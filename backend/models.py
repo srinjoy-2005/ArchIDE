@@ -13,6 +13,7 @@ class NodeData(BaseModel):
     label: str
     is_functional: bool = False
     paramValues: dict = {}
+    varName: str = ""  # optional user-defined output variable name
 
 class Node(BaseModel):
     id: str

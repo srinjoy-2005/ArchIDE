@@ -154,17 +154,28 @@ def shape_inference_pass(
 def _build_input_var_map(sorted_nodes: List[Node]) -> Dict[str, str]:
     """
     Build a disambiguated map of input-node output keys -> Python variable names.
-    Two input nodes that share the same label (e.g. both called "Input") get
-    unique names: x_input, x_input_2, x_input_3, ...
+    If the user has set a varName on an input node it is sanitized and used
+    directly (with a numeric suffix to avoid collisions).  Otherwise the
+    label-based fallback of x_<label> is applied.
+
+    Two input nodes that share the same effective name get unique names:
+    x_input, x_input_2, x_input_3, …
     """
-    INPUT_IDS = {"input"}
-    input_nodes = [n for n in sorted_nodes if _resolve_block_id(n) in INPUT_IDS]
+    INPUT_IDS = {"input", "gourav"}
+
+    input_nodes = [
+        n for n in sorted_nodes if _resolve_block_id(n) in INPUT_IDS
+    ]
 
     label_counts: Dict[str, int] = {}
     var_map: Dict[str, str] = {}  # "{node_id}_out" -> variable name
 
     for node in input_nodes:
-        base = _label_to_identifier(node.data.label)
+        # Prefer user-defined varName when present and non-empty
+        raw = (node.data.varName or "").strip()
+        base = _label_to_identifier(raw) if raw else _label_to_identifier(node.data.label)
+        base = base or "x"
+
         count = label_counts.get(base, 0) + 1
         label_counts[base] = count
 
@@ -173,6 +184,7 @@ def _build_input_var_map(sorted_nodes: List[Node]) -> Dict[str, str]:
         else:
             base_clean = base[2:] if base.startswith("x_") else base
             var_name = f"x_{base_clean}_{count}"
+
 
         var_map[f"{node.id}_out"] = var_name
 
@@ -272,9 +284,20 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
             continue
 
         # Build output variable names for this node
+        # Prefer user-defined varName; fall back to auto-generated x_{node_id}
         output_vars: Dict[str, str] = {}
+        raw_user_var = (node.data.varName or "").strip()
+        user_var = _sanitize(raw_user_var) if raw_user_var else ""
+        if user_var and (not user_var[0].isalpha() and user_var[0] != "_"):
+            user_var = "x_" + user_var
+        
+        # Override port.var_hint if a custom node varName is given
         for port in block.definition.outputs:
-            out_var = _build_output_var(port, node.id, params, hint_counts)
+            if user_var:
+                out_var = user_var if len(block.definition.outputs) == 1 else f"{user_var}_{port.id}"
+            else:
+                out_var = _build_output_var(port, node.id, params, hint_counts)
+
             output_vars[port.id] = out_var
             var_map[f"{node.id}_{port.id}"] = out_var
 
