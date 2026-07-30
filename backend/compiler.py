@@ -135,7 +135,9 @@ def shape_inference_pass(
                     updated_node_params[node.id] = {}
                 updated_node_params[node.id][k] = v
 
-        node_out_shapes[node.id] = out_shapes
+        # Combine incoming and out_shapes so both are returned to the frontend for display
+        combined_shapes = {**incoming, **out_shapes}
+        node_out_shapes[node.id] = combined_shapes
 
     return node_out_shapes, updated_node_params
 

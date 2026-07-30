@@ -112,9 +112,31 @@ function PropertiesPanel() {
         />
       </div>
 
-      {/* Shape section — always visible, greyed out */}
-      {shapeParams.length > 0 && (
-        <div className="flex flex-col gap-2">
+      {/* Inferred Shapes section — always visible if available */}
+      {selectedNode.data.inferredShapes && Object.keys(selectedNode.data.inferredShapes).length > 0 && (
+        <div className="flex flex-col gap-2 border-b border-slate-700/60 pb-3">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Tensor Shapes</div>
+          {Object.entries(selectedNode.data.inferredShapes as Record<string, any>).map(([port, shape]) => (
+            <div key={port} className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400 capitalize flex items-center gap-1.5">
+                Port: {port.replace(/_/g, ' ')}
+                <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">inferred</span>
+              </label>
+              <input
+                type="text"
+                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-500 cursor-not-allowed w-full font-mono"
+                value={JSON.stringify(shape)}
+                readOnly
+                disabled
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Fallback for legacy shape params (if any remain) */}
+      {shapeParams.length > 0 && (!selectedNode.data.inferredShapes || Object.keys(selectedNode.data.inferredShapes).length === 0) && (
+        <div className="flex flex-col gap-2 border-b border-slate-700/60 pb-3">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Tensor Shapes</div>
           {shapeParams.map((p: any) => (
             <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
@@ -340,7 +362,7 @@ const Header = () => {
             Object.assign(updatedValues, newParams);
           }
           
-          return { ...n, data: { ...n.data, paramValues: updatedValues } };
+          return { ...n, data: { ...n.data, paramValues: updatedValues, inferredShapes: shapes } };
         }));
       } else {
         setCheckStatus('error');
