@@ -114,3 +114,69 @@ In the `onNodesChange` / `onEdgesChange` React Flow callbacks, call `setShapeErr
 // TODO: frontend/clear-error-on-change
 onNodesChange={(changes) => { setShapeErrorNodeId(null); applyNodeChanges(changes, nodes); }}
 ```
+
+---
+
+## 🖥️ Frontend TODO — User-Overridable Output Variable Names
+
+The backend assigns readable default names to each block's output (`conv_feat`, `sum`, `probs`, etc.) via `var_hint` on `PortDef`. The user should be able to override these names from the Properties Panel to give outputs more project-specific names (e.g. `rgb_features`, `attention_scores`).
+
+### Backend contract
+The backend reads `node.data.paramValues["_output_aliases"]` (a dict) when choosing output variable names. A key present in this dict overrides the `var_hint` default:
+```python
+# In compiler.py — _build_output_var()
+aliases = params.get("_output_aliases", {})
+if port.id in aliases and aliases[port.id]:
+    base = aliases[port.id]   # user-supplied name wins
+elif port.var_hint:
+    base = port.var_hint      # block default
+else:
+    base = f"x_{node_id[:8]}"
+```
+
+### TODO 6 — Add output alias inputs to the Properties Panel
+For each output port of the selected node, render a text input in the Properties Panel:
+```tsx
+// TODO: frontend/output-alias-input
+{selectedBlock?.outputs.map(port => (
+  <div key={port.id} className="flex flex-col gap-1">
+    <label className="text-xs text-slate-400 font-mono">
+      Output: <span className="text-slate-200">{port.name}</span>
+    </label>
+    <input
+      type="text"
+      placeholder={port.var_hint ?? "variable name"}
+      value={node.data.paramValues?._output_aliases?.[port.id] ?? ""}
+      onChange={(e) => updateNodeParam(node.id, `_output_aliases.${port.id}`, e.target.value)}
+      className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono
+                 focus:outline-none focus:border-indigo-500"
+    />
+  </div>
+))}
+```
+
+### TODO 7 — Update `updateNodeParam` to support nested `_output_aliases` key
+```ts
+// TODO: frontend/nested-param-update
+if (key.startsWith("_output_aliases.")) {
+  const portId = key.split(".")[1];
+  updateNode(nodeId, (data) => ({
+    ...data,
+    paramValues: {
+      ...data.paramValues,
+      _output_aliases: {
+        ...(data.paramValues._output_aliases ?? {}),
+        [portId]: value,
+      }
+    }
+  }));
+}
+```
+
+### TODO 8 — Validate alias as a valid Python identifier
+Show an inline red border + tooltip if the alias isn't a valid Python identifier:
+```ts
+// TODO: frontend/alias-validation
+const PYTHON_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const isValid = !alias || (PYTHON_IDENTIFIER.test(alias) && !PYTHON_KEYWORDS.has(alias));
+```

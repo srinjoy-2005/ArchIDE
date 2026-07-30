@@ -1,38 +1,59 @@
-from models import CompileRequest, Node, Edge
+from models import CompileRequest, Node, Edge, PortDef
 from typing import List, Dict, Tuple, Any, Optional
 from blocks import get_block_by_id
 import re
 
-# ─── Helpers ────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _sanitize(label: str) -> str:
     """Turn a block label into a valid Python identifier fragment."""
     s = label.strip().lower()
-    s = re.sub(r"[^a-z0-9]+", "_", s)   # replace non-alphanumeric runs with _
+    s = re.sub(r"[^a-z0-9]+", "_", s)
     s = s.strip("_")
     return s or "var"
 
 def _resolve_block_id(node: Node) -> str:
-    block_id = getattr(node.data, "block_id", "").lower()
-    if not block_id:
-        label = node.data.label
-        block_id = "split" if "Split" in label else label.split()[0].lower()
-    return block_id
+    """Get the canonical block_id from a node, falling back gracefully."""
+    block_id = getattr(node.data, "block_id", "").lower().strip()
+    return block_id or "unknown"
+
+def _label_to_identifier(label: str) -> str:
+    """Turn a user-provided node name into a clean Python snake_case identifier."""
+    s = _sanitize(label)
+    if not s or s[0].isdigit():
+        s = "x_" + s
+    return s
 
 
-# ─── Topological Sort ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Shape Error
+# ---------------------------------------------------------------------------
+
+class ShapeError(Exception):
+    """Raised when a shape mismatch is detected during static analysis."""
+    def __init__(self, message: str, node_id: str, node_label: str):
+        super().__init__(message)
+        self.node_id = node_id
+        self.node_label = node_label
+
+
+# ---------------------------------------------------------------------------
+# Topological Sort (Kahn's Algorithm)
+# ---------------------------------------------------------------------------
 
 def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
-    adj = {node.id: [] for node in nodes}
-    in_degree = {node.id: 0 for node in nodes}
-    node_map = {node.id: node for node in nodes}
+    adj       = {node.id: [] for node in nodes}
+    in_degree = {node.id: 0  for node in nodes}
+    node_map  = {node.id: node for node in nodes}
 
     for edge in edges:
         adj[edge.source].append(edge.target)
         in_degree[edge.target] += 1
 
-    queue = [node_id for node_id in in_degree if in_degree[node_id] == 0]
-    sorted_nodes = []
+    queue = [nid for nid, deg in in_degree.items() if deg == 0]
+    sorted_nodes: List[Node] = []
 
     while queue:
         curr_id = queue.pop(0)
@@ -48,29 +69,28 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
     return sorted_nodes
 
 
-# ─── Shape Inference Pass ─────────────────────────────────────────────────────
-
-class ShapeError(Exception):
-    """Raised when a shape mismatch is detected during static analysis."""
-    def __init__(self, message: str, node_id: str, node_label: str):
-        super().__init__(message)
-        self.node_id = node_id
-        self.node_label = node_label
-
+# ---------------------------------------------------------------------------
+# Shape Inference Pass
+# ---------------------------------------------------------------------------
 
 def shape_inference_pass(
-    sorted_nodes: List[Node], edges: List[Edge]
-) -> Dict[str, Tuple]:
+    sorted_nodes: List[Node],
+    edges: List[Edge],
+) -> Tuple[Dict[str, Dict[str, Tuple]], Dict[str, Dict[str, Any]]]:
     """
     Traverse the graph in topological order, propagate concrete tensor shapes,
-    and raise ShapeError immediately if a mismatch is detected.
+    and raise ShapeError immediately on the first mismatch detected.
 
+    Returns a dict: node_id -> {port_id -> shape_tuple}
     A dimension value of the string "ANY" means the dimension is dynamically
-    determined at runtime. Nodes that encounter an ANY upstream dimension
-    skip strict validation and propagate ANY further downstream.
+    determined at runtime.
     """
-    # Maps "{node_id}_{port_id}" -> shape tuple, e.g. (1, 64, 112, 112)
+    # Maps f"{node_id}_{port_id}" -> shape tuple, e.g. (1, 64, 112, 112)
     tensor_shapes: Dict[str, Tuple] = {}
+    # Per-node output shapes for rich reporting
+    node_out_shapes: Dict[str, Dict[str, Tuple]] = {}
+    # Track any parameters the blocks auto-inferred and mutated
+    updated_node_params: Dict[str, Dict[str, Any]] = {}
 
     for node in sorted_nodes:
         block_id = _resolve_block_id(node)
@@ -79,21 +99,24 @@ def shape_inference_pass(
             continue
 
         # Gather incoming shapes from already-resolved upstream ports
-        incoming_shapes: Dict[str, Tuple] = {}
+        incoming: Dict[str, Tuple] = {}
         for port in block.definition.inputs:
             incoming_edge = next(
                 (e for e in edges if e.target == node.id and e.targetHandle == port.id),
                 None,
             )
             if incoming_edge:
-                source_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
-                incoming_shapes[port.id] = tensor_shapes.get(source_key, ("ANY",))
+                src_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
+                incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
             else:
-                incoming_shapes[port.id] = ("ANY",)
+                incoming[port.id] = ("ANY",)
+
+        # Keep track of original params to detect auto-inference mutations
+        original_params = dict(node.data.paramValues)
 
         # Delegate shape inference to the block class and catch any mismatch
         try:
-            out_shapes = block.infer_shapes(incoming_shapes, node.data.paramValues)
+            out_shapes = block.infer_shapes(incoming, node.data.paramValues)
         except ValueError as exc:
             raise ShapeError(
                 message=str(exc),
@@ -101,20 +124,29 @@ def shape_inference_pass(
                 node_label=node.data.label,
             ) from exc
 
+        # Store for downstream propagation
         for port_id, shape in out_shapes.items():
             tensor_shapes[f"{node.id}_{port_id}"] = shape
 
-    return tensor_shapes
+        # Check if the block mutated any parameters (e.g. auto-inferred in_features)
+        for k, v in node.data.paramValues.items():
+            if k not in original_params or original_params[k] != v:
+                if node.id not in updated_node_params:
+                    updated_node_params[node.id] = {}
+                updated_node_params[node.id][k] = v
+
+        node_out_shapes[node.id] = out_shapes
+
+    return node_out_shapes, updated_node_params
 
 
-# ─── Code Generation ──────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Code Generation Pass
+# ---------------------------------------------------------------------------
 
-def _build_input_var_map(
-    sorted_nodes: List[Node],
-) -> Dict[str, str]:
+def _build_input_var_map(sorted_nodes: List[Node]) -> Dict[str, str]:
     """
     Build a disambiguated map of input-node output keys -> Python variable names.
-
     If the user has set a varName on an input node it is sanitized and used
     directly (with a numeric suffix to avoid collisions).  Otherwise the
     label-based fallback of x_<label> is applied.
@@ -134,21 +166,50 @@ def _build_input_var_map(
     for node in input_nodes:
         # Prefer user-defined varName when present and non-empty
         raw = (node.data.varName or "").strip()
-        base = _sanitize(raw) if raw else _sanitize(node.data.label)
+        base = _label_to_identifier(raw) if raw else _label_to_identifier(node.data.label)
         base = base or "x"
 
         count = label_counts.get(base, 0) + 1
         label_counts[base] = count
 
-        var_name = base if count == 1 else f"{base}_{count}"
+        if count == 1:
+            var_name = base if base.startswith("x_") else f"x_{base}"
+        else:
+            base_clean = base[2:] if base.startswith("x_") else base
+            var_name = f"x_{base_clean}_{count}"
 
-        # Ensure a leading letter (Python identifiers can't start with a digit)
-        if not var_name[0].isalpha() and var_name[0] != "_":
-            var_name = "x_" + var_name
 
         var_map[f"{node.id}_out"] = var_name
 
     return var_map
+
+
+def _build_output_var(
+    port: PortDef,
+    node_id: str,
+    params: Dict[str, Any],
+    hint_counts: Dict[str, int],
+) -> str:
+    """
+    Choose a unique, readable variable name for an output port.
+    Priority order:
+      1. User alias from paramValues["_output_aliases"][port.id]
+      2. port.var_hint
+      3. Fallback: x_{short_node_id}
+    """
+    aliases = params.get("_output_aliases", {})
+    user_alias = aliases.get(port.id, "") if isinstance(aliases, dict) else ""
+
+    if user_alias:
+        base = _sanitize(user_alias)
+    elif port.var_hint:
+        base = port.var_hint
+    else:
+        base = f"x_{node_id.replace('-', '_')[:8]}"
+
+    count = hint_counts.get(base, 0) + 1
+    hint_counts[base] = count
+    return base if count == 1 else f"{base}_{count}"
 
 
 def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
@@ -169,17 +230,15 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     # ── Step 3: Build unique variable map for all input nodes ────────────────
     var_map = _build_input_var_map(sorted_nodes)
 
-    # Build forward() signature from the same unique variable map
-    INPUT_IDS = {"input", "gourav"}
-    forward_arg_vars = [
+    INPUT_IDS = {"input"}
+    forward_arg_names = [
         var_map[f"{n.id}_out"]
         for n in sorted_nodes
         if _resolve_block_id(n) in INPUT_IDS
     ]
-    forward_lines = [f"    def forward(self, {', '.join(forward_arg_vars)}):"]
+    forward_lines: List[str] = [f"    def forward(self, {', '.join(forward_arg_names)}):"]
 
     # ── Step 4: Edge lookup table ─────────────────────────────────────────────
-    # target_node_id + target_handle -> source_node_id + source_handle
     input_to_source: Dict[str, str] = {}
     for edge in edges:
         target_key = f"{edge.target}_{edge.targetHandle}"
@@ -187,63 +246,80 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
         input_to_source[target_key] = source_key
 
     # ── Step 5: Walk the sorted graph and emit code ───────────────────────────
+    hint_counts: Dict[str, int] = {}
+    return_vars: List[str] = []
+
     for node in sorted_nodes:
-        node_id = node.id
         block_id = _resolve_block_id(node)
+        
+        # Skip input nodes as they are already handled in the signature
+        if block_id in INPUT_IDS:
+            continue
+
         block = get_block_by_id(block_id)
         if not block:
+            forward_lines.append(f"        # WARNING: unknown block '{block_id}' — skipped")
             continue
 
         params = node.data.paramValues
 
-        # Skip input nodes – their variable names were already seeded into var_map
-        if block_id in INPUT_IDS:
-            continue
-
-        # Resolve input variable names from var_map
+        # Resolve input variable names
         input_vars: Dict[str, str] = {}
         for port in block.definition.inputs:
-            src_key = input_to_source.get(f"{node_id}_{port.id}")
+            src_key = input_to_source.get(f"{node.id}_{port.id}")
             input_vars[port.id] = var_map.get(src_key, "None") if src_key else "None"
+
+        # Handle Output nodes explicitly
+        if block_id == "output":
+            in_var = input_vars.get("in", "None")
+            if in_var != "None":
+                return_vars.append(in_var)
+            continue
 
         # Build output variable names for this node
         # Prefer user-defined varName; fall back to auto-generated x_{node_id}
         output_vars: Dict[str, str] = {}
         raw_user_var = (node.data.varName or "").strip()
         user_var = _sanitize(raw_user_var) if raw_user_var else ""
-        # Guard: ensure the sanitized name is a valid, non-empty identifier
         if user_var and (not user_var[0].isalpha() and user_var[0] != "_"):
             user_var = "x_" + user_var
-
-        base_out = user_var if user_var else f"x_{node_id.replace('-', '_')}"
+        
+        # Override port.var_hint if a custom node varName is given
         for port in block.definition.outputs:
-            out_var = (
-                f"{base_out}_{port.id}"
-                if len(block.definition.outputs) > 1
-                else base_out
-            )
+            if user_var:
+                out_var = user_var if len(block.definition.outputs) == 1 else f"{user_var}_{port.id}"
+            else:
+                out_var = _build_output_var(port, node.id, params, hint_counts)
+
             output_vars[port.id] = out_var
-            var_map[f"{node_id}_{port.id}"] = out_var
+            var_map[f"{node.id}_{port.id}"] = out_var
 
         # Emit __init__ line (stateful layers only)
         if not block.definition.is_functional:
-            init_code = block.emit_init(node_id, params)
+            init_code = block.emit_init(node.id, params)
             if init_code:
                 init_lines.append(f"        {init_code}")
 
-        # Emit forward() line
-        forward_code = block.emit_forward(node_id, input_vars, output_vars, params)
+        # Emit forward line
+        forward_code = block.emit_forward(node.id, input_vars, output_vars, params)
         if forward_code:
             forward_lines.append(f"        {forward_code}")
 
-    # ── Step 6: Handle empty bodies ───────────────────────────────────────────
+    # -----------------------------------------------------------------------
+    # 8. Emit single return statement
+    # -----------------------------------------------------------------------
+    if return_vars:
+        forward_lines.append(f"        return {', '.join(return_vars)}")
+    else:
+        # If there are no explicit output blocks, we could just pass or return None.
+        if len(forward_lines) == 1:
+            forward_lines.append("        pass")
+
+    # Fallback stubs for empty bodies
     if not init_lines:
         init_lines.append("        pass")
-    if len(forward_lines) == 1:
-        forward_lines.append("        pass")
 
     code.extend(init_lines)
     code.append("")
     code.extend(forward_lines)
-
     return "\n".join(code)

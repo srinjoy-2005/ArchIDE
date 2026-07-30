@@ -159,6 +159,39 @@ function ModelSummaryDashboard() {
 
 // ─── Properties / Inspector panel ────────────────────────────────────────────────
 
+function ParamInput({ param, value, onChange }: { param: any; value: any; onChange: (name: string, value: any) => void }) {
+    const inputClass = param.read_only
+    ? "w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed"
+    : "w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
+          {param.name.replace(/_/g, ' ')}
+          {param.read_only && (
+            <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">inferred</span>
+          )}
+        </label>
+        <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
+      </div>
+      <input
+        type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
+        className={inputClass}
+        value={value ?? param.default}
+        readOnly={param.read_only}
+        disabled={param.read_only}
+        title={param.description || ''}
+        onChange={(e) => {
+          if (!param.read_only) {
+            onChange(param.name, param.type === 'int' ? parseInt(e.target.value) : param.type === 'float' ? parseFloat(e.target.value) : e.target.value);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function PropertiesPanel() {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
@@ -168,19 +201,21 @@ function PropertiesPanel() {
     if (!selectedNode) return;
     setNodes((nds) =>
       nds.map((n) => {
-        if (n.id !== selectedNode.id) return n;
-        const newData: any = {
-          ...n.data,
-          paramValues: { ...((n.data.paramValues as any) || {}), [paramName]: value },
-        };
-        if (paramName === "num_inputs") {
-          const num = parseInt(value) || 2;
-          newData.inputs = Array.from({ length: num }, (_, i) => ({ id: `in_${i}`, name: `Input ${i + 1}` }));
-        } else if (paramName === "chunks") {
-          const num = parseInt(value) || 2;
-          newData.outputs = Array.from({ length: num }, (_, i) => ({ id: `out_${i}`, name: `Chunk ${i + 1}` }));
+        if (n.id === selectedNode.id) {
+          const newData: any = {
+            ...n.data,
+            paramValues: { ...((n.data.paramValues as any) || {}), [paramName]: value },
+          };
+          if (paramName === "num_inputs") {
+            const num = parseInt(value) || 2;
+            newData.inputs = Array.from({ length: num }, (_, i) => ({ id: `in_${i}`, name: `Input ${i + 1}` }));
+          } else if (paramName === "chunks") {
+            const num = parseInt(value) || 2;
+            newData.outputs = Array.from({ length: num }, (_, i) => ({ id: `out_${i + 1}`, name: `Chunk ${i + 1}` }));
+          }
+          return { ...n, data: newData };
         }
-        return { ...n, data: newData };
+        return n;
       })
     );
   };
@@ -189,6 +224,10 @@ function PropertiesPanel() {
 
   const params = (selectedNode.data.params as any[]) || [];
   const paramValues = (selectedNode.data.paramValues as any) || {};
+
+  const shapeParams   = params.filter((p: any) => p.section === 'shape');
+  const basicParams   = params.filter((p: any) => !p.section || p.section === 'basic');
+  const advancedParams = params.filter((p: any) => p.section === 'advanced');
 
   return (
     <div className="flex flex-col gap-4">
@@ -238,35 +277,46 @@ function PropertiesPanel() {
         </div>
       </div>
 
-      {/* Parameters */}
-      <div className="flex flex-col gap-3">
-        <div className="text-[10px] uppercase tracking-wider text-[#555]">Hyperparameters</div>
-        {params.length === 0 ? (
-          <div className="text-[11px] text-[#555] italic bg-[#1e1e1e] border border-[#363636] rounded-[3px] px-3 py-2">
-            No configurable parameters.
+      {/* Shape section — always visible */}
+      {shapeParams.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
+          {shapeParams.map((p: any) => (
+            <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+          ))}
+        </div>
+      )}
+
+      {/* Basic parameters */}
+      {basicParams.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="text-[10px] uppercase tracking-wider text-[#555]">Hyperparameters</div>
+          {basicParams.map((p: any) => (
+            <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+          ))}
+        </div>
+      )}
+
+      {basicParams.length === 0 && shapeParams.length === 0 && (
+        <div className="text-[11px] text-[#555] italic bg-[#1e1e1e] border border-[#363636] rounded-[3px] px-3 py-2">
+          No parameters to configure.
+        </div>
+      )}
+
+      {/* Advanced parameters — collapsible */}
+      {advancedParams.length > 0 && (
+        <details className="group">
+          <summary className="text-[10px] font-semibold text-[#555] uppercase tracking-wider cursor-pointer hover:text-[#d4d4d4] transition-colors list-none flex items-center gap-1.5">
+            <span className="group-open:rotate-90 transition-transform inline-block text-[8px]">▶</span>
+            Advanced Properties
+          </summary>
+          <div className="flex flex-col gap-3 mt-3 pl-2 border-l-2 border-[#363636]">
+            {advancedParams.map((p: any) => (
+              <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
+            ))}
           </div>
-        ) : (
-          params.map((param: any) => (
-            <div key={param.name} className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] text-[#aaa] capitalize">{param.name.replace(/_/g, " ")}</label>
-                <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
-              </div>
-              <input
-                type={param.type === "int" || param.type === "float" ? "number" : "text"}
-                className="w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors"
-                value={paramValues[param.name] ?? param.default}
-                onChange={(e) =>
-                  handleParamChange(
-                    param.name,
-                    param.type === "int" ? (parseInt(e.target.value) || 0) : e.target.value
-                  )
-                }
-              />
-            </div>
-          ))
-        )}
-      </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -438,23 +488,23 @@ function BlockItem({ blockDef }: { blockDef: any }) {
   );
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────────
-
 function Header() {
-  const { setNodes, setEdges } = useReactFlow();
+  const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const setGeneratedCode = useEditorStore((s) => s.setGeneratedCode);
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const nodes = useNodes();
   const edges = useEdges();
+  
   const [compiling, setCompiling] = useState(false);
+  const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [checkMsg, setCheckMsg] = useState('');
 
-  // TODO 1 — parse 422 ShapeError in compile handler
-  const handleExport = async () => {
-    setCompiling(true);
-    setShapeErrorNodeId(null);
-
-    const payload = {
-      nodes: nodes.map((n) => ({
+  const buildPayload = () => {
+    // We use getNodes/getEdges to get the latest state safely inside handlers
+    const currentNodes = getNodes();
+    const currentEdges = getEdges();
+    return {
+      nodes: currentNodes.map((n) => ({
         id: n.id,
         data: {
           block_id: n.data.block_id || "",
@@ -464,21 +514,25 @@ function Header() {
           varName: (n.data.varName as string) || "",
         },
       })),
-      edges: edges.map((e) => ({
+      edges: currentEdges.map((e) => ({
         source: e.source,
         sourceHandle: e.sourceHandle || "",
         target: e.target,
         targetHandle: e.targetHandle || "",
       })),
     };
+  };
 
+  const handleExport = async () => {
+    setCompiling(true);
+    setShapeErrorNodeId(null);
     setGeneratedCode("# Compiling...");
 
     try {
       const response = await fetch("http://localhost:8000/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildPayload()),
       });
       const data = await response.json();
 
@@ -486,7 +540,7 @@ function Header() {
         setGeneratedCode(data.code);
         setShapeErrorNodeId(null);
       } else {
-        // TODO 1 — check for ShapeMismatch error from 422
+        // Check for ShapeMismatch error from 422
         if (data.detail?.error === "ShapeMismatch") {
           setShapeErrorNodeId(data.detail.node_id);
           setGeneratedCode(
@@ -511,6 +565,63 @@ function Header() {
     }
   };
 
+  const handleCheck = async () => {
+    setCheckStatus('checking');
+    setCheckMsg('');
+    try {
+      const response = await fetch("http://localhost:8001/api/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPayload())
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setCheckStatus('ok');
+        setCheckMsg('Compatible ✓');
+        // Update inferred shape params and auto-resolved parameters on each node
+        setNodes(nds => nds.map(n => {
+          const shapes = data.node_shapes?.[n.id];
+          const newParams = data.node_params?.[n.id];
+          if (!shapes && !newParams) return n;
+          
+          const params = (n.data.params as any[]) || [];
+          const updatedValues = { ...(n.data.paramValues as any) };
+          
+          // Apply shapes
+          if (shapes) {
+            params.forEach((p: any) => {
+              if (p.section === 'shape') {
+                if (p.name === 'output_shape' && shapes['out']) updatedValues['output_shape'] = JSON.stringify(shapes['out']);
+                if (p.name === 'input_shape'  && shapes['in'])  updatedValues['input_shape']  = JSON.stringify(shapes['in']);
+              }
+            });
+          }
+          
+          // Apply auto-inferred parameters (e.g. in_features = 64)
+          if (newParams) {
+            Object.assign(updatedValues, newParams);
+          }
+          
+          return { ...n, data: { ...n.data, paramValues: updatedValues } };
+        }));
+      } else {
+        setCheckStatus('error');
+        const errMsg = typeof data.detail === 'string' ? data.detail : data.detail?.message;
+        setCheckMsg(errMsg || 'Shape mismatch detected.');
+      }
+    } catch (err: any) {
+      setCheckStatus('error');
+      setCheckMsg(`Cannot reach backend: ${err.message}`);
+    }
+  };
+
+  const checkBtnClass = {
+    idle:     'text-[#888] hover:text-[#d4d4d4] border-[#363636] hover:border-[#505050] bg-[#252525]',
+    checking: 'text-[#555] border-[#363636] bg-[#1e1e1e] cursor-not-allowed',
+    ok:       'text-[#4ade80] border-[#4ade80]/50 bg-[#4ade80]/10',
+    error:    'text-[#e54545] border-[#e54545]/50 bg-[#e54545]/10',
+  }[checkStatus];
+
   return (
     <header
       className="flex items-center justify-between px-4 py-0 z-20 flex-shrink-0"
@@ -532,10 +643,24 @@ function Header() {
         </span>
 
         <div className="w-px h-4 bg-[#363636]" />
+        
+        {checkMsg && (
+          <span className={`text-[10px] pr-2 ${checkStatus === 'ok' ? 'text-[#4ade80]' : 'text-[#e54545]'}`}>
+            {checkMsg}
+          </span>
+        )}
+        
+        <button
+          onClick={handleCheck}
+          disabled={checkStatus === 'checking'}
+          className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2 py-1 rounded-sm border ${checkBtnClass}`}
+        >
+          {checkStatus === 'checking' ? 'Checking...' : 'Check Shapes'}
+        </button>
 
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a]"
+          className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a] ml-2"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Reset
@@ -548,6 +673,7 @@ function Header() {
         >
           <Play className="w-3 h-3 fill-white" />
           {compiling ? "Compiling…" : "Export PyTorch"}
+
         </button>
       </div>
     </header>

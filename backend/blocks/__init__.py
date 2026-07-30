@@ -1,10 +1,13 @@
 from .base import BaseBlock
-from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock, GouravBlock
-from .activations import ReLUBlock, SoftmaxBlock
+from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock
+from .activations import ReLUBlock, SoftmaxBlock, SigmoidBlock, TanhBlock
 from .tensor_ops import (
     AddBlock, SubBlock, MulBlock, DivBlock, PowBlock, 
     MatMulBlock, UnsqueezeBlock, CatBlock, SplitBlock
 )
+from .pooling import MaxPool2DBlock, AvgPool2DBlock, AdaptiveAvgPool2DBlock
+from .normalization import BatchNorm2DBlock, LayerNormBlock, DropoutBlock
+from .shape import FlattenBlock, ReshapeBlock
 from .trig import SinBlock, CosBlock
 from .generators import ArangeBlock
 from typing import Dict, List
@@ -13,12 +16,21 @@ from models import BlockDef
 # Instantiate all available blocks
 _BLOCK_INSTANCES = [
     InputBlock(),
-    GouravBlock(),
     OutputBlock(),
     LinearBlock(),
     Conv2DBlock(),
     ReLUBlock(),
     SoftmaxBlock(),
+    SigmoidBlock(),
+    TanhBlock(),
+    MaxPool2DBlock(),
+    AvgPool2DBlock(),
+    AdaptiveAvgPool2DBlock(),
+    BatchNorm2DBlock(),
+    LayerNormBlock(),
+    DropoutBlock(),
+    FlattenBlock(),
+    ReshapeBlock(),
     AddBlock(),
     SplitBlock(),
     SubBlock(),

@@ -12,7 +12,7 @@ class SinBlock(BaseBlock):
             color="#ec4899",
             is_functional=True,
             inputs=[PortDef(id="in",name="Input")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="sin_out")],
             params=[]
         )
 
@@ -38,7 +38,7 @@ class CosBlock(BaseBlock):
             color="#ec4899",
             is_functional=True,
             inputs=[PortDef(id="in",name="Input")],
-            outputs=[PortDef(id="out",name="Out")],
+            outputs=[PortDef(id="out",name="Out", var_hint="cos_out")],
             params=[]
         )
 
