@@ -274,9 +274,33 @@ function PropertiesPanel() {
         </div>
       </div>
 
-      {/* Tensor Shapes section (srinjoy) — our theme */}
-      {shapeParams.length > 0 && (
-        <div className="flex flex-col gap-3">
+      {/* Inferred Shapes section (srinjoy) — our theme */}
+      {selectedNode.data.inferredShapes && Object.keys(selectedNode.data.inferredShapes).length > 0 && (
+        <div className="flex flex-col gap-3 border-b border-[#363636] pb-3">
+          <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
+          {Object.entries(selectedNode.data.inferredShapes as Record<string, any>).map(([port, shape]) => (
+            <div key={port} className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
+                  Port: {port.replace(/_/g, ' ')}
+                  <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">inferred</span>
+                </label>
+              </div>
+              <input
+                type="text"
+                className="w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed"
+                value={JSON.stringify(shape)}
+                readOnly
+                disabled
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Fallback for legacy shape params (if any remain) */}
+      {shapeParams.length > 0 && (!selectedNode.data.inferredShapes || Object.keys(selectedNode.data.inferredShapes).length === 0) && (
+        <div className="flex flex-col gap-3 border-b border-[#363636] pb-3">
           <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
           {shapeParams.map((p: any) => (
             <ParamInput key={p.name} param={p} value={paramValues[p.name]} onChange={handleParamChange} />
@@ -572,8 +596,7 @@ function Header() {
           if (newParams) {
             Object.assign(updatedValues, newParams);
           }
-
-          return { ...n, data: { ...n.data, paramValues: updatedValues } };
+          return { ...n, data: { ...n.data, paramValues: updatedValues, inferredShapes: shapes } };
         }));
       } else {
         setCheckStatus('error');
