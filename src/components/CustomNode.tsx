@@ -1,19 +1,28 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Trash2, Copy, AlertTriangle } from 'lucide-react';
 import { useEditorStore } from '../lib/store';
 
-// ─── Category accent colors (subtle left-strip only) ─────────────────────────
+// ─── Category accent colors ───────────────────────────────────────────────────
 const CATEGORY_COLORS: Record<string, string> = {
-  input:   '#4ade80', // green
-  output:  '#f87171', // red
-  conv:    '#60a5fa', // blue
-  linear:  '#818cf8', // indigo
-  relu:    '#a78bfa', // violet
-  softmax: '#c084fc', // purple
-  add:     '#fb923c', // orange
-  split:   '#34d399', // emerald
-  default: '#6b7280', // gray
+  input:   '#4ade80',
+  output:  '#f87171',
+  conv:    '#60a5fa',
+  linear:  '#818cf8',
+  relu:    '#a78bfa',
+  softmax: '#c084fc',
+  gelu:    '#c084fc',
+  tanh:    '#c084fc',
+  sigmoid: '#c084fc',
+  add:     '#fb923c',
+  split:   '#34d399',
+  pool:    '#2dd4bf',
+  norm:    '#facc15',
+  batch:   '#facc15',
+  layer:   '#facc15',
+  dropout: '#94a3b8',
+  reshape: '#f472b6',
+  default: '#6b7280',
 };
 
 function getAccentColor(label: string = ''): string {
@@ -39,9 +48,17 @@ function getParamSummary(paramValues: Record<string, any> = {}): string {
   return parts.join('  ');
 }
 
+// Format a shape array like [1, 64, 28, 28] → "1×64×28×28"
+function fmtShape(shape: number[] | undefined): string {
+  if (!shape || shape.length === 0) return '';
+  return shape.join('×');
+}
+
 const CustomNode = ({ id, data, isConnectable }: any) => {
   const { setNodes } = useReactFlow();
   const shapeErrorNodeId = useEditorStore((s) => s.shapeErrorNodeId);
+  const nodeShapes = useEditorStore((s) => s.nodeShapes);
+  const [hovered, setHovered] = useState(false);
 
   const inputs = data.inputs || [{ id: 'in', name: 'Input' }];
   const outputs = data.outputs || [{ id: 'out', name: 'Output' }];
@@ -49,6 +66,27 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
   const paramSummary = getParamSummary(paramValues);
   const accent = getAccentColor(data.label);
   const isError = shapeErrorNodeId === id;
+
+  // Shape data for this node (from last /api/check)
+  const myShapes = nodeShapes[id]; // { portId: number[] }
+
+  // Build the hover tooltip lines: one per output port
+  const outputShapeLines: { portName: string; shape: string }[] = outputs
+    .map((out: any) => ({
+      portName: out.name,
+      shape: fmtShape(myShapes?.[out.id]),
+    }))
+    .filter((o: { portName: string; shape: string }) => o.shape !== '');
+
+  // Also collect input shapes for display (useful for multi-input nodes like Add)
+  const inputShapeLines: { portName: string; shape: string }[] = inputs
+    .map((inp: any) => ({
+      portName: inp.name,
+      shape: fmtShape(myShapes?.[inp.id]),
+    }))
+    .filter((o: { portName: string; shape: string }) => o.shape !== '');
+
+  const hasShapeInfo = outputShapeLines.length > 0 || inputShapeLines.length > 0;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,9 +120,13 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
     <div
       style={{
         borderColor: isError ? '#e54545' : '#3a3a3a',
-        boxShadow: isError ? '0 0 0 1px rgba(229,69,69,0.4), 0 4px 12px rgba(0,0,0,0.5)' : '0 4px 12px rgba(0,0,0,0.5)',
+        boxShadow: isError
+          ? '0 0 0 1px rgba(229,69,69,0.4), 0 4px 12px rgba(0,0,0,0.5)'
+          : '0 4px 12px rgba(0,0,0,0.5)',
       }}
       className="group relative bg-[#252525] border rounded-[3px] min-w-[164px] flex transition-all duration-150 hover:border-[#505050]"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Left category accent strip */}
       <div
@@ -120,20 +162,23 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
 
       {/* Left input handles */}
       <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-evenly -ml-[5px] z-10">
-        {inputs.map((inp: any) => (
-          <div key={inp.id} className="relative group/h flex items-center">
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={inp.id}
-              isConnectable={isConnectable}
-              className="!w-2.5 !h-2.5 !bg-[#505050] !border-[1.5px] !border-[#1e1e1e] !relative !transform-none hover:!bg-[#2d8cf0] transition-colors"
-            />
-            <span className="absolute left-4 pointer-events-none text-[10px] text-[#aaa] bg-[#1e1e1e] border border-[#3a3a3a] px-1.5 py-px rounded-sm whitespace-nowrap opacity-0 group-hover/h:opacity-100 transition-opacity z-30">
-              {inp.name}
-            </span>
-          </div>
-        ))}
+        {inputs.map((inp: any) => {
+          const inShape = fmtShape(myShapes?.[inp.id]);
+          return (
+            <div key={inp.id} className="relative group/h flex items-center">
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={inp.id}
+                isConnectable={isConnectable}
+                className="!w-2.5 !h-2.5 !bg-[#505050] !border-[1.5px] !border-[#1e1e1e] !relative !transform-none hover:!bg-[#2d8cf0] transition-colors"
+              />
+              <span className="absolute left-4 pointer-events-none text-[10px] text-[#aaa] bg-[#1e1e1e] border border-[#3a3a3a] px-1.5 py-px rounded-sm whitespace-nowrap opacity-0 group-hover/h:opacity-100 transition-opacity z-30">
+                {inp.name}{inShape ? ` · ${inShape}` : ''}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Main content */}
@@ -161,21 +206,67 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
 
       {/* Right output handles */}
       <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-evenly -mr-[5px] z-10">
-        {outputs.map((out: any) => (
-          <div key={out.id} className="relative group/h flex items-center">
-            <span className="absolute right-4 pointer-events-none text-[10px] text-[#aaa] bg-[#1e1e1e] border border-[#3a3a3a] px-1.5 py-px rounded-sm whitespace-nowrap opacity-0 group-hover/h:opacity-100 transition-opacity z-30">
-              {out.name}
-            </span>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={out.id}
-              isConnectable={isConnectable}
-              className="!w-2.5 !h-2.5 !bg-[#505050] !border-[1.5px] !border-[#1e1e1e] !relative !transform-none hover:!bg-[#2d8cf0] transition-colors"
+        {outputs.map((out: any) => {
+          const outShape = fmtShape(myShapes?.[out.id]);
+          return (
+            <div key={out.id} className="relative group/h flex items-center">
+              <span className="absolute right-4 pointer-events-none text-[10px] text-[#aaa] bg-[#1e1e1e] border border-[#3a3a3a] px-1.5 py-px rounded-sm whitespace-nowrap opacity-0 group-hover/h:opacity-100 transition-opacity z-30">
+                {out.name}{outShape ? ` · ${outShape}` : ''}
+              </span>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={out.id}
+                isConnectable={isConnectable}
+                className="!w-2.5 !h-2.5 !bg-[#505050] !border-[1.5px] !border-[#1e1e1e] !relative !transform-none hover:!bg-[#2d8cf0] transition-colors"
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Shape tooltip — appears below the node on hover ────────────────── */}
+      {hovered && hasShapeInfo && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-40"
+          style={{ top: 'calc(100% + 8px)' }}
+        >
+          <div className="bg-[#1a1a1a] border border-[#3a3a3a] rounded-[3px] shadow-xl px-3 py-2 min-w-[140px]">
+            {/* Output shapes */}
+            {outputShapeLines.length > 0 && (
+              <div className="mb-1">
+                <div className="text-[8px] uppercase tracking-wider text-[#555] mb-1">Output shape</div>
+                {outputShapeLines.map(({ portName, shape }) => (
+                  <div key={portName} className="flex items-center justify-between gap-3">
+                    {outputShapeLines.length > 1 && (
+                      <span className="text-[9px] text-[#666]">{portName}</span>
+                    )}
+                    <span className="text-[11px] font-mono text-[#4ade80] ml-auto">[{shape}]</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input shapes (for multi-input nodes like Add) */}
+            {inputShapeLines.length > 0 && (
+              <div className={outputShapeLines.length > 0 ? 'border-t border-[#2a2a2a] pt-1 mt-1' : ''}>
+                <div className="text-[8px] uppercase tracking-wider text-[#555] mb-1">Input shapes</div>
+                {inputShapeLines.map(({ portName, shape }) => (
+                  <div key={portName} className="flex items-center justify-between gap-3">
+                    <span className="text-[9px] text-[#666]">{portName}</span>
+                    <span className="text-[11px] font-mono text-[#60a5fa]">[{shape}]</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Small arrow pointing up */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 -top-[5px] w-2.5 h-2.5 bg-[#1a1a1a] border-t border-l border-[#3a3a3a] rotate-45"
             />
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -22,6 +22,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import CustomNode from "../components/CustomNode";
+import TensorEdge from "../components/TensorEdge";
 import { useEditorStore } from "../lib/store";
 import {
   Search,
@@ -48,6 +49,7 @@ import {
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const nodeTypes = { custom: CustomNode };
+const edgeTypes = { tensor: TensorEdge };
 const initialNodes: Node[] = [];
 const initialEdges: Edge[] = [];
 let nodeCounter = 100;
@@ -97,10 +99,10 @@ function ModelSummaryDashboard() {
       { id: "s5", type: "custom", position: { x: 880, y: 160 }, data: { block_id: "output", label: "Output", is_functional: true,  params: [], paramValues: {}, inputs: [{ id: "in", name: "Return Value" }], outputs: [] } },
     ];
     const e: Edge[] = [
-      { id: "e12", source: "s1", sourceHandle: "out", target: "s2", targetHandle: "in", animated: true, style: { stroke: "#4a4a4a" } },
-      { id: "e23", source: "s2", sourceHandle: "out", target: "s3", targetHandle: "in", animated: true, style: { stroke: "#4a4a4a" } },
-      { id: "e34", source: "s3", sourceHandle: "out", target: "s4", targetHandle: "in", animated: true, style: { stroke: "#4a4a4a" } },
-      { id: "e45", source: "s4", sourceHandle: "out", target: "s5", targetHandle: "in", animated: true, style: { stroke: "#4a4a4a" } },
+      { id: "e12", source: "s1", sourceHandle: "out", target: "s2", targetHandle: "in", type: "tensor" },
+      { id: "e23", source: "s2", sourceHandle: "out", target: "s3", targetHandle: "in", type: "tensor" },
+      { id: "e34", source: "s3", sourceHandle: "out", target: "s4", targetHandle: "in", type: "tensor" },
+      { id: "e45", source: "s4", sourceHandle: "out", target: "s5", targetHandle: "in", type: "tensor" },
     ];
     setNodes(n);
     setEdges(e);
@@ -325,7 +327,7 @@ function DnDCanvas() {
 
   const onConnect = useCallback(
     (params: Connection | Edge) =>
-      setEdges((eds: Edge[]) => addEdge({ ...params, animated: true, style: { stroke: "#4a4a4a" } } as Edge, eds)),
+      setEdges((eds: Edge[]) => addEdge({ ...params, animated: false, type: 'tensor' } as Edge, eds)),
     [setEdges]
   );
 
@@ -405,6 +407,7 @@ function DnDCanvas() {
         defaultNodes={initialNodes}
         defaultEdges={initialEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onConnect={onConnect}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -469,6 +472,7 @@ function Header() {
   const edges = useEdges();
   const setGeneratedCode = useEditorStore((s) => s.setGeneratedCode);
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+  const setNodeShapes = useEditorStore((s) => s.setNodeShapes);
 
   const [compiling, setCompiling] = useState(false);
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
@@ -545,6 +549,8 @@ function Header() {
       if (response.ok) {
         setCheckStatus('ok');
         setCheckMsg('Compatible ✓');
+        // Store raw shapes for hover tooltips on nodes and edges
+        setNodeShapes(data.node_shapes ?? {});
         // Back-fill inferred shape params and auto-resolved parameters on each node (srinjoy)
         setNodes((nds) => nds.map((n) => {
           const shapes = data.node_shapes?.[n.id];
@@ -585,6 +591,7 @@ function Header() {
       setNodes([]);
       setEdges([]);
       setShapeErrorNodeId(null);
+      setNodeShapes({});
       setGeneratedCode("");
     }
   };
