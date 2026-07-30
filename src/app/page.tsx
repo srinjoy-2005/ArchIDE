@@ -225,6 +225,7 @@ function PropertiesPanel() {
   const shapeParams    = params.filter((p: any) => p.section === 'shape');
   const basicParams    = params.filter((p: any) => !p.section || p.section === 'basic');
   const advancedParams = params.filter((p: any) => p.section === 'advanced');
+  const inferredShapes = (selectedNode.data.inferredShapes as Record<string, any>) || {};
 
   return (
     <div className="flex flex-col gap-4">
@@ -275,10 +276,10 @@ function PropertiesPanel() {
       </div>
 
       {/* Inferred Shapes section (srinjoy) — our theme */}
-      {selectedNode.data.inferredShapes && Object.keys(selectedNode.data.inferredShapes).length > 0 && (
+      {Object.keys(inferredShapes).length > 0 && (
         <div className="flex flex-col gap-3 border-b border-[#363636] pb-3">
           <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
-          {Object.entries(selectedNode.data.inferredShapes as Record<string, any>).map(([port, shape]) => (
+          {Object.entries(inferredShapes).map(([port, shape]) => (
             <div key={port} className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
@@ -299,7 +300,7 @@ function PropertiesPanel() {
       )}
 
       {/* Fallback for legacy shape params (if any remain) */}
-      {shapeParams.length > 0 && (!selectedNode.data.inferredShapes || Object.keys(selectedNode.data.inferredShapes).length === 0) && (
+      {shapeParams.length > 0 && Object.keys(inferredShapes).length === 0 && (
         <div className="flex flex-col gap-3 border-b border-[#363636] pb-3">
           <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
           {shapeParams.map((p: any) => (
