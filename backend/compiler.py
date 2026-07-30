@@ -33,10 +33,11 @@ def _label_to_identifier(label: str) -> str:
 
 class ShapeError(Exception):
     """Raised when a shape mismatch is detected during static analysis."""
-    def __init__(self, message: str, node_id: str, node_label: str):
+    def __init__(self, message: str, node_id: str, node_label: str, edge_ids: List[str] = None):
         super().__init__(message)
         self.node_id = node_id
         self.node_label = node_label
+        self.edge_ids = edge_ids or []
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,7 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
     sorted_nodes: List[Node] = []
 
     while queue:
+        queue.sort() # Ensure deterministic resolution
         curr_id = queue.pop(0)
         sorted_nodes.append(node_map[curr_id])
         for neighbor in adj[curr_id]:
@@ -100,6 +102,7 @@ def shape_inference_pass(
 
         # Gather incoming shapes from already-resolved upstream ports
         incoming: Dict[str, Tuple] = {}
+        incoming_edge_ids: List[str] = []
         for port in block.definition.inputs:
             incoming_edge = next(
                 (e for e in edges if e.target == node.id and e.targetHandle == port.id),
@@ -108,6 +111,7 @@ def shape_inference_pass(
             if incoming_edge:
                 src_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
                 incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
+                incoming_edge_ids.append(incoming_edge.id)
             else:
                 incoming[port.id] = ("ANY",)
 
@@ -122,6 +126,7 @@ def shape_inference_pass(
                 message=str(exc),
                 node_id=node.id,
                 node_label=node.data.label,
+                edge_ids=incoming_edge_ids,
             ) from exc
 
         # Store for downstream propagation

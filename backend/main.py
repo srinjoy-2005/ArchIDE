@@ -62,6 +62,7 @@ def check_shapes(request: CheckRequest):
                 "message": str(e),
                 "node_id": e.node_id,
                 "node_label": e.node_label,
+                "edge_ids": e.edge_ids,
             },
         )
     except ValueError as e:

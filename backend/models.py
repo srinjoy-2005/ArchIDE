@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Any, Optional
 
 class Edge(BaseModel):
+    id: str
     source: str
     sourceHandle: str
     target: str

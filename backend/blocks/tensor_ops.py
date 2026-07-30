@@ -1,6 +1,25 @@
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 from .base import BaseBlock
 from models import BlockDef, PortDef, ParamDef
+
+def broadcast_shapes(shape_a: Tuple, shape_b: Tuple) -> Tuple:
+    if shape_a == ("ANY",): return shape_b
+    if shape_b == ("ANY",): return shape_a
+    
+    max_len = max(len(shape_a), len(shape_b))
+    pad_a = (1,) * (max_len - len(shape_a)) + shape_a
+    pad_b = (1,) * (max_len - len(shape_b)) + shape_b
+    
+    out_shape = []
+    for a, b in zip(pad_a, pad_b):
+        if a == "ANY": out_shape.append(b)
+        elif b == "ANY": out_shape.append(a)
+        elif a == b: out_shape.append(a)
+        elif a == 1: out_shape.append(b)
+        elif b == 1: out_shape.append(a)
+        else:
+            raise ValueError(f"Shapes {shape_a} and {shape_b} are not broadcastable")
+    return tuple(out_shape)
 
 class AddBlock(BaseBlock):
     @property
@@ -22,12 +41,15 @@ class AddBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        # Basic shape broadcasting could be added here.
-        # For now, just return the first found shape or ANY.
-        for val in input_shapes.values():
-            if val != ("ANY",):
-                return {"out": val}
-        return {"out": ("ANY",)}
+        shapes = [v for v in input_shapes.values() if v != ("ANY",)]
+        if not shapes:
+            return {"out": ("ANY",)}
+            
+        current_shape = shapes[0]
+        for shape in shapes[1:]:
+            current_shape = broadcast_shapes(current_shape, shape)
+            
+        return {"out": current_shape}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
@@ -56,7 +78,9 @@ class SubBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        return {"out": input_shapes.get("in_a", ("ANY",))}
+        a = input_shapes.get("in_a", ("ANY",))
+        b = input_shapes.get("in_b", ("ANY",))
+        return {"out": broadcast_shapes(a, b)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
@@ -83,7 +107,9 @@ class MulBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        return {"out": input_shapes.get("in_a", ("ANY",))}
+        a = input_shapes.get("in_a", ("ANY",))
+        b = input_shapes.get("in_b", ("ANY",))
+        return {"out": broadcast_shapes(a, b)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
@@ -110,7 +136,9 @@ class DivBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        return {"out": input_shapes.get("in_a", ("ANY",))}
+        a = input_shapes.get("in_a", ("ANY",))
+        b = input_shapes.get("in_b", ("ANY",))
+        return {"out": broadcast_shapes(a, b)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""

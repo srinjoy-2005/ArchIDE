@@ -54,16 +54,7 @@ class OutputBlock(BaseBlock):
             is_functional=True,
             inputs=[PortDef(id="in", name="Return Value")],
             outputs=[],
-            params=[
-                ParamDef(
-                    name="input_shape",
-                    type="string",
-                    default="?",
-                    read_only=True,
-                    section="shape",
-                    description="Inferred input tensor shape"
-                ),
-            ]
+            params=[]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
@@ -89,9 +80,6 @@ class LinearBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="fc_out")],
             params=[
-                # Shape section
-                ParamDef(name="input_shape",  type="string", default="?", read_only=True, section="shape", description="Inferred input tensor shape"),
-                ParamDef(name="output_shape", type="string", default="?", read_only=True, section="shape", description="Inferred output tensor shape"),
                 # Basic section
                 ParamDef(name="in_features",  type="int", default=128, section="basic", description="Size of each input sample"),
                 ParamDef(name="out_features", type="int", default=64,  section="basic", description="Size of each output sample"),
@@ -108,20 +96,23 @@ class LinearBlock(BaseBlock):
         in_features = params.get("in_features", 128)
         
         # Auto-infer in_features if set to -1
-        if in_features == -1 and in_shape[-1] != "ANY":
+        if in_features == -1 and len(in_shape) > 0 and in_shape[-1] != "ANY":
             in_features = in_shape[-1]
             params["in_features"] = in_features
 
         out_features = params.get("out_features", 64)
 
-        if in_shape[-1] != "ANY" and in_shape[-1] != in_features:
+        if len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
             raise ValueError(
                 f"Linear: expected in_features={in_features}, "
                 f"but input last dim is {in_shape[-1]}."
             )
 
         out_shape = list(in_shape)
-        out_shape[-1] = out_features
+        if len(out_shape) > 0:
+            out_shape[-1] = out_features
+        else:
+            out_shape = [out_features]
         return {"out": tuple(out_shape)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
@@ -150,9 +141,6 @@ class Conv2DBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="conv_feat")],
             params=[
-                # Shape section
-                ParamDef(name="input_shape",  type="string", default="?", read_only=True, section="shape", description="Inferred input tensor shape (B, C, H, W)"),
-                ParamDef(name="output_shape", type="string", default="?", read_only=True, section="shape", description="Inferred output tensor shape"),
                 # Basic section
                 ParamDef(name="in_channels",  type="int", default=3,  section="basic", description="Number of channels in the input image"),
                 ParamDef(name="out_channels", type="int", default=16, section="basic", description="Number of channels produced by the convolution"),
@@ -173,6 +161,12 @@ class Conv2DBlock(BaseBlock):
 
         B, C, H, W = in_shape
         in_channels = params.get("in_channels", 3)
+        
+        # Auto-infer in_channels if set to -1
+        if in_channels == -1 and C != "ANY":
+            in_channels = C
+            params["in_channels"] = in_channels
+
         if C != "ANY" and C != in_channels:
             raise ValueError(
                 f"Conv2D: expected in_channels={in_channels}, "

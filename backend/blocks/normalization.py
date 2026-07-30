@@ -26,11 +26,11 @@ class BatchNorm2DBlock(BaseBlock):
             return {"out": ("ANY",)}
 
         num_features = params.get("num_features", -1)
-        if num_features == -1 and in_shape[1] != "ANY":
+        if num_features == -1 and len(in_shape) > 1 and in_shape[1] != "ANY":
             num_features = in_shape[1]
             params["num_features"] = num_features
 
-        if in_shape[1] != "ANY" and in_shape[1] != num_features:
+        if len(in_shape) > 1 and in_shape[1] != "ANY" and in_shape[1] != num_features:
             raise ValueError(f"BatchNorm2D expected {num_features} channels, but got {in_shape[1]}")
 
         return {"out": in_shape}
@@ -75,7 +75,7 @@ class LayerNormBlock(BaseBlock):
 
         # Auto-infer normalized_shape as the last dimension by default if not set
         norm_shape_str = params.get("normalized_shape", "?")
-        if norm_shape_str == "?" and in_shape[-1] != "ANY":
+        if norm_shape_str == "?" and len(in_shape) > 0 and in_shape[-1] != "ANY":
             params["normalized_shape"] = str(in_shape[-1:])
 
         return {"out": in_shape}
