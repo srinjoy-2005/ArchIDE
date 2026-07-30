@@ -180,3 +180,12 @@ Show an inline red border + tooltip if the alias isn't a valid Python identifier
 const PYTHON_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const isValid = !alias || (PYTHON_IDENTIFIER.test(alias) && !PYTHON_KEYWORDS.has(alias));
 ```
+
+---
+
+## 🐛 Known Bugs
+
+- Check shapes cant be disabled once enabled
+- Also, after enabling, and adding new blocks hovering doest work for new blocks.
+- Also output node doesnt display anything when hovered upon.
+- Separate testing modules and scripts are need to check these features for every block and all situations.
