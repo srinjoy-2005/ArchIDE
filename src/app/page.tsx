@@ -53,6 +53,9 @@ const initialEdges: Edge[] = [];
 let nodeCounter = 100;
 const getId = () => `node_${nodeCounter++}`;
 
+// Backend base URL — srinjoy_branch runs the API on port 8001
+const API_BASE = "http://localhost:8001";
+
 // ─── Fallback blocks (used when backend is unreachable) ────────────────────────
 
 const FALLBACK_BLOCKS: any[] = [
@@ -66,20 +69,6 @@ const FALLBACK_BLOCKS: any[] = [
   { id: "split",   name: "Split",   category: "Tensor Ops",  is_functional: true,  color: "#34d399", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out_0", name: "Chunk 1" }, { id: "out_1", name: "Chunk 2" }], params: [{ name: "chunks", type: "int", default: 2 }, { name: "dim", type: "int", default: 0 }] },
 ];
 
-// ─── Shape hint map ─────────────────────────────────────────────────────────────
-
-function getShapeHint(name: string): string {
-  const n = name.toLowerCase();
-  if (n.includes("conv2d"))  return "(B,C,H,W) → (B,C',H',W')";
-  if (n.includes("linear"))  return "(B,In) → (B,Out)";
-  if (n.includes("relu") || n.includes("softmax")) return "elementwise activation";
-  if (n.includes("input"))   return "model input tensor";
-  if (n.includes("output"))  return "model output";
-  if (n.includes("add"))     return "tensor addition";
-  if (n.includes("split"))   return "split along dim";
-  return "pytorch block";
-}
-
 // ─── Category icon helper ────────────────────────────────────────────────────────
 
 function CategoryIcon({ category }: { category: string }) {
@@ -88,10 +77,11 @@ function CategoryIcon({ category }: { category: string }) {
   if (c.includes("core"))       return <Box className={cls} style={{ color: "#60a5fa" }} />;
   if (c.includes("activation")) return <Sparkles className={cls} style={{ color: "#a78bfa" }} />;
   if (c.includes("tensor"))     return <ArrowRightLeft className={cls} style={{ color: "#fb923c" }} />;
+  if (c.includes("pool"))       return <Activity className={cls} style={{ color: "#34d399" }} />;
   return <Brain className={cls} style={{ color: "#6b7280" }} />;
 }
 
-// ─── Model Summary Dashboard ─────────────────────────────────────────────────────
+// ─── Model Summary Dashboard (shown in inspector when no node is selected) ───────
 
 function ModelSummaryDashboard() {
   const { setNodes, setEdges } = useReactFlow();
@@ -159,8 +149,9 @@ function ModelSummaryDashboard() {
 
 // ─── Properties / Inspector panel ────────────────────────────────────────────────
 
+// ParamInput: Adobe-themed wrapper around srinjoy's ParamInput logic
 function ParamInput({ param, value, onChange }: { param: any; value: any; onChange: (name: string, value: any) => void }) {
-    const inputClass = param.read_only
+  const inputClass = param.read_only
     ? "w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed"
     : "w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors";
 
@@ -192,11 +183,14 @@ function ParamInput({ param, value, onChange }: { param: any; value: any; onChan
   );
 }
 
+// PropertiesPanel: srinjoy's logic (section-based params, num_inputs/chunks dynamic handles)
+// with our Adobe-style UI skin and the extra varName field
 function PropertiesPanel() {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
   const selectedNode = nodes.find((n) => n.selected) || null;
 
+  // srinjoy's exact handleParamChange logic (incl. dynamic input/output resizing)
   const handleParamChange = (paramName: string, value: any) => {
     if (!selectedNode) return;
     setNodes((nds) =>
@@ -204,12 +198,12 @@ function PropertiesPanel() {
         if (n.id === selectedNode.id) {
           const newData: any = {
             ...n.data,
-            paramValues: { ...((n.data.paramValues as any) || {}), [paramName]: value },
+            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: value },
           };
-          if (paramName === "num_inputs") {
+          if (paramName === 'num_inputs') {
             const num = parseInt(value) || 2;
             newData.inputs = Array.from({ length: num }, (_, i) => ({ id: `in_${i}`, name: `Input ${i + 1}` }));
-          } else if (paramName === "chunks") {
+          } else if (paramName === 'chunks') {
             const num = parseInt(value) || 2;
             newData.outputs = Array.from({ length: num }, (_, i) => ({ id: `out_${i + 1}`, name: `Chunk ${i + 1}` }));
           }
@@ -225,13 +219,14 @@ function PropertiesPanel() {
   const params = (selectedNode.data.params as any[]) || [];
   const paramValues = (selectedNode.data.paramValues as any) || {};
 
-  const shapeParams   = params.filter((p: any) => p.section === 'shape');
-  const basicParams   = params.filter((p: any) => !p.section || p.section === 'basic');
+  // srinjoy's section categorisation
+  const shapeParams    = params.filter((p: any) => p.section === 'shape');
+  const basicParams    = params.filter((p: any) => !p.section || p.section === 'basic');
   const advancedParams = params.filter((p: any) => p.section === 'advanced');
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Node header */}
+      {/* Node header — our UI */}
       <div className="pb-3 border-b border-[#363636]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[9px] uppercase tracking-wider text-[#555]">Selected Layer</span>
@@ -252,7 +247,7 @@ function PropertiesPanel() {
               }
             />
           </div>
-          {/* Variable name */}
+          {/* Variable name — our feature */}
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <label className="text-[10px] text-[#888]">Output variable name</label>
@@ -271,13 +266,13 @@ function PropertiesPanel() {
               }
             />
             <span className="text-[9px] text-[#555]">
-              Leave blank to auto-generate. Used as the tensor variable in the compiled PyTorch code.
+              Leave blank to auto-generate. Used as the tensor variable in compiled PyTorch code.
             </span>
           </div>
         </div>
       </div>
 
-      {/* Shape section — always visible */}
+      {/* Tensor Shapes section (srinjoy) — our theme */}
       {shapeParams.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="text-[10px] uppercase tracking-wider text-[#555]">Tensor Shapes</div>
@@ -287,7 +282,7 @@ function PropertiesPanel() {
         </div>
       )}
 
-      {/* Basic parameters */}
+      {/* Basic parameters (srinjoy) — our theme */}
       {basicParams.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="text-[10px] uppercase tracking-wider text-[#555]">Hyperparameters</div>
@@ -299,11 +294,11 @@ function PropertiesPanel() {
 
       {basicParams.length === 0 && shapeParams.length === 0 && (
         <div className="text-[11px] text-[#555] italic bg-[#1e1e1e] border border-[#363636] rounded-[3px] px-3 py-2">
-          No parameters to configure.
+          No configurable parameters.
         </div>
       )}
 
-      {/* Advanced parameters — collapsible */}
+      {/* Advanced parameters — collapsible (srinjoy) — our theme */}
       {advancedParams.length > 0 && (
         <details className="group">
           <summary className="text-[10px] font-semibold text-[#555] uppercase tracking-wider cursor-pointer hover:text-[#d4d4d4] transition-colors list-none flex items-center gap-1.5">
@@ -334,7 +329,7 @@ function DnDCanvas() {
     [setEdges]
   );
 
-  // TODO 5 — clear shape error state when user edits graph
+  // Clear shape error state when user edits graph
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setShapeErrorNodeId(null);
@@ -356,40 +351,56 @@ function DnDCanvas() {
     event.dataTransfer.dropEffect = "move";
   }, []);
 
+  // srinjoy's exact onDrop logic — initialises paramValues from blockDef defaults
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+
       const type = event.dataTransfer.getData("application/reactflow");
+      const label = event.dataTransfer.getData("application/label");
       const blockDefStr = event.dataTransfer.getData("application/blockDef");
+
       if (!type) return;
 
       const blockDef = blockDefStr ? JSON.parse(blockDefStr) : {};
-      const initialParamValues: any = {};
-      (blockDef.params || []).forEach((p: any) => { initialParamValues[p.name] = p.default; });
 
-      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      setNodes((nds: Node[]) =>
-        nds.concat({
-          id: getId(),
-          type,
-          position,
-          data: {
-            block_id: blockDef.id,
-            label: blockDef.name,
-            params: blockDef.params || [],
-            paramValues: initialParamValues,
-            inputs: blockDef.inputs || [],
-            outputs: blockDef.outputs || [],
-            is_functional: blockDef.is_functional || false,
-          },
-        } as unknown as Node)
-      );
+      // Initialise paramValues with default values (srinjoy)
+      const initialParamValues: any = {};
+      if (blockDef.params) {
+        blockDef.params.forEach((p: any) => {
+          initialParamValues[p.name] = p.default;
+        });
+      }
+
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      const newNode = {
+        id: getId(),
+        type,
+        position,
+        data: {
+          block_id: blockDef.id,
+          label,
+          description: `A ${label} layer`,
+          params: blockDef.params || [],
+          paramValues: initialParamValues,
+          inputs: blockDef.inputs || [],
+          outputs: blockDef.outputs || [],
+          is_functional: blockDef.is_functional || false,
+          varName: "",
+        },
+      };
+
+      setNodes((nds: Node[]) => nds.concat(newNode as unknown as Node));
     },
     [screenToFlowPosition, setNodes]
   );
 
   return (
-    <div className="flex-1 relative overflow-hidden" ref={canvasRef} style={{ background: "#1a1a1a" }}>
+    <div className="flex-1 relative" ref={canvasRef}>
       <ReactFlow
         defaultNodes={initialNodes}
         defaultEdges={initialEdges}
@@ -400,107 +411,71 @@ function DnDCanvas() {
         onDrop={onDrop}
         onDragOver={onDragOver}
         deleteKeyCode={["Backspace", "Delete"]}
-        defaultEdgeOptions={{ animated: true, style: { stroke: "#4a4a4a", strokeWidth: 1.5 } }}
         fitView
-        proOptions={{ hideAttribution: true }}
       >
-        <Controls position="bottom-right" className="!m-3" />
-        <MiniMap
-          nodeColor={() => "#404040"}
-          maskColor="rgba(26, 26, 26, 0.8)"
-          className="!m-3 !rounded-[3px]"
+        <Controls
+          className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]"
+          style={{ bottom: 16, left: 16 }}
         />
-        <Background variant={BackgroundVariant.Dots} color="#2e2e2e" gap={20} size={1} />
+        <MiniMap
+          nodeColor={() => "#2d8cf0"}
+          maskColor="rgba(18,18,18,0.8)"
+          className="!bg-[#1e1e1e] !border !border-[#3a3a3a] !rounded-[3px]"
+          style={{ bottom: 16, right: 16 }}
+        />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="#333"
+        />
       </ReactFlow>
     </div>
   );
 }
 
-// ─── Left sidebar — block item ────────────────────────────────────────────────────
+// ─── Block list item ───────────────────────────────────────────────────────────────
 
-function BlockItem({ blockDef }: { blockDef: any }) {
-  const { setNodes } = useReactFlow();
-
+const BlockItem = ({ blockDef }: { blockDef: any }) => {
   const onDragStart = (event: React.DragEvent) => {
     event.dataTransfer.setData("application/reactflow", "custom");
+    event.dataTransfer.setData("application/label", blockDef.name);
     event.dataTransfer.setData("application/blockDef", JSON.stringify(blockDef));
     event.dataTransfer.effectAllowed = "move";
   };
 
-  const handleAdd = () => {
-    const initialParamValues: any = {};
-    (blockDef.params || []).forEach((p: any) => { initialParamValues[p.name] = p.default; });
-    setNodes((nds: Node[]) =>
-      nds.concat({
-        id: getId(),
-        type: "custom",
-        position: { x: 220 + Math.random() * 60, y: 120 + Math.random() * 60 },
-        data: {
-          block_id: blockDef.id,
-          label: blockDef.name,
-          params: blockDef.params || [],
-          paramValues: initialParamValues,
-          inputs: blockDef.inputs || [],
-          outputs: blockDef.outputs || [],
-          is_functional: blockDef.is_functional || false,
-        },
-      } as unknown as Node)
-    );
-  };
-
-  const shapeHint = getShapeHint(blockDef.name);
-  const firstTwoParams = (blockDef.params || []).slice(0, 2);
-
   return (
     <div
-      draggable
       onDragStart={onDragStart}
-      className="group flex flex-col gap-1 bg-[#1e1e1e] hover:bg-[#2a2a2a] border border-[#363636] hover:border-[#505050] rounded-[3px] px-3 py-2 cursor-grab active:cursor-grabbing transition-colors"
+      draggable
+      className="flex items-center gap-2.5 bg-[#1e1e1e] hover:bg-[#2a2a2a] border border-[#3a3a3a] hover:border-[#505050] rounded-[3px] px-3 py-2 cursor-grab active:cursor-grabbing transition-colors group"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CategoryIcon category={blockDef.category} />
-          <span className="text-[12px] font-medium text-[#d4d4d4] group-hover:text-[#e2e2e2] transition-colors">
-            {blockDef.name}
-          </span>
-        </div>
-        <button
-          onClick={handleAdd}
-          title="Add to canvas"
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-[#888] hover:text-[#2d8cf0]"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      <span className="text-[9px] text-[#555] font-mono">{shapeHint}</span>
-
-      {firstTwoParams.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-0.5">
-          {firstTwoParams.map((p: any) => (
-            <span key={p.name} className="text-[9px] font-mono text-[#666] bg-[#252525] border border-[#363636] px-1.5 py-px rounded-sm">
-              {p.name.replace("_channels","").replace("_features","") || p.name}={p.default}
-            </span>
-          ))}
-        </div>
-      )}
+      <div
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+        style={{ background: blockDef.color || "#4a4a4a" }}
+      />
+      <span className="text-[12px] text-[#c8c8c8] group-hover:text-[#e2e2e2] transition-colors truncate">
+        {blockDef.name}
+      </span>
     </div>
   );
-}
+};
+
+// ─── Header ───────────────────────────────────────────────────────────────────────
 
 function Header() {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
-  const setGeneratedCode = useEditorStore((s) => s.setGeneratedCode);
-  const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const nodes = useNodes();
   const edges = useEdges();
-  
+  const setGeneratedCode = useEditorStore((s) => s.setGeneratedCode);
+  const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+
   const [compiling, setCompiling] = useState(false);
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [checkMsg, setCheckMsg] = useState('');
 
+  // srinjoy's buildPayload — reads live nodes/edges; includes our varName field
   const buildPayload = () => {
-    // We use getNodes/getEdges to get the latest state safely inside handlers
     const currentNodes = getNodes();
     const currentEdges = getEdges();
     return {
@@ -523,31 +498,30 @@ function Header() {
     };
   };
 
+  // srinjoy's handleExport — uses port 8001, returns code or compiler error
   const handleExport = async () => {
     setCompiling(true);
     setShapeErrorNodeId(null);
-    setGeneratedCode("# Compiling...");
-
+    setGeneratedCode("# Compiling via Python Backend Engine...");
     try {
-      const response = await fetch("http://localhost:8000/api/compile", {
+      const response = await fetch(`${API_BASE}/api/compile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPayload()),
       });
       const data = await response.json();
-
       if (response.ok) {
         setGeneratedCode(data.code);
         setShapeErrorNodeId(null);
       } else {
-        // Check for ShapeMismatch error from 422
+        // Distinguish ShapeMismatch (422) from other compiler errors
         if (data.detail?.error === "ShapeMismatch") {
           setShapeErrorNodeId(data.detail.node_id);
           setGeneratedCode(
             `# ❌ Shape Mismatch at "${data.detail.node_label}":\n# ${data.detail.message}`
           );
         } else {
-          setGeneratedCode(`# ❌ Compiler Error:\n# ${data.detail}`);
+          setGeneratedCode(`# ❌ Compiler Error:\n# ${JSON.stringify(data.detail)}`);
         }
       }
     } catch (err: any) {
@@ -557,37 +531,29 @@ function Header() {
     }
   };
 
-  const handleReset = () => {
-    if (confirm("Clear the canvas?")) {
-      setNodes([]);
-      setEdges([]);
-      setShapeErrorNodeId(null);
-    }
-  };
-
+  // srinjoy's handleCheck — runs shape check on port 8001 and back-fills inferred params
   const handleCheck = async () => {
     setCheckStatus('checking');
     setCheckMsg('');
     try {
-      const response = await fetch("http://localhost:8001/api/check", {
+      const response = await fetch(`${API_BASE}/api/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload())
+        body: JSON.stringify(buildPayload()),
       });
       const data = await response.json();
       if (response.ok) {
         setCheckStatus('ok');
         setCheckMsg('Compatible ✓');
-        // Update inferred shape params and auto-resolved parameters on each node
-        setNodes(nds => nds.map(n => {
+        // Back-fill inferred shape params and auto-resolved parameters on each node (srinjoy)
+        setNodes((nds) => nds.map((n) => {
           const shapes = data.node_shapes?.[n.id];
           const newParams = data.node_params?.[n.id];
           if (!shapes && !newParams) return n;
-          
+
           const params = (n.data.params as any[]) || [];
           const updatedValues = { ...(n.data.paramValues as any) };
-          
-          // Apply shapes
+
           if (shapes) {
             params.forEach((p: any) => {
               if (p.section === 'shape') {
@@ -596,12 +562,11 @@ function Header() {
               }
             });
           }
-          
-          // Apply auto-inferred parameters (e.g. in_features = 64)
+
           if (newParams) {
             Object.assign(updatedValues, newParams);
           }
-          
+
           return { ...n, data: { ...n.data, paramValues: updatedValues } };
         }));
       } else {
@@ -612,6 +577,15 @@ function Header() {
     } catch (err: any) {
       setCheckStatus('error');
       setCheckMsg(`Cannot reach backend: ${err.message}`);
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("Clear the canvas?")) {
+      setNodes([]);
+      setEdges([]);
+      setShapeErrorNodeId(null);
+      setGeneratedCode("");
     }
   };
 
@@ -643,13 +617,13 @@ function Header() {
         </span>
 
         <div className="w-px h-4 bg-[#363636]" />
-        
+
         {checkMsg && (
           <span className={`text-[10px] pr-2 ${checkStatus === 'ok' ? 'text-[#4ade80]' : 'text-[#e54545]'}`}>
             {checkMsg}
           </span>
         )}
-        
+
         <button
           onClick={handleCheck}
           disabled={checkStatus === 'checking'}
@@ -660,7 +634,7 @@ function Header() {
 
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a] ml-2"
+          className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a] ml-1"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           Reset
@@ -673,7 +647,6 @@ function Header() {
         >
           <Play className="w-3 h-3 fill-white" />
           {compiling ? "Compiling…" : "Export PyTorch"}
-
         </button>
       </div>
     </header>
@@ -686,17 +659,26 @@ export default function Home() {
   const generatedCode = useEditorStore((s) => s.generatedCode);
   const [registry, setRegistry] = useState<any[]>(FALLBACK_BLOCKS);
   const [search, setSearch] = useState("");
-  const [catFilter, setCatFilter] = useState("All");
   const [rightTab, setRightTab] = useState<"inspector" | "code">("inspector");
   const [rightOpen, setRightOpen] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  // srinjoy's registry fetch — port 8001, groups by category
   useEffect(() => {
-    fetch("http://localhost:8000/api/blocks")
+    fetch(`${API_BASE}/api/blocks`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data) && data.length) setRegistry(data); })
-      .catch(() => {});
+      .catch(() => {}); // fall back to FALLBACK_BLOCKS
   }, []);
+
+  // Group by category (srinjoy pattern)
+  const categories: Record<string, any[]> = {};
+  registry
+    .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
+    .forEach((block) => {
+      if (!categories[block.category]) categories[block.category] = [];
+      categories[block.category].push(block);
+    });
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedCode);
@@ -705,117 +687,93 @@ export default function Home() {
   };
 
   const handleDownload = () => {
+    const blob = new Blob([generatedCode], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([generatedCode], { type: "text/plain" }));
-    a.download = "archide_model.py";
+    a.href = url;
+    a.download = "model.py";
     a.click();
+    URL.revokeObjectURL(url);
   };
-
-  // Build filtered, grouped registry
-  const allCategories = Array.from(new Set(registry.map((b) => b.category)));
-  const filtered = registry.filter((b) => {
-    const matchSearch = b.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat = catFilter === "All" || b.category === catFilter;
-    return matchSearch && matchCat;
-  });
-  const grouped: Record<string, any[]> = {};
-  filtered.forEach((b) => {
-    if (!grouped[b.category]) grouped[b.category] = [];
-    grouped[b.category].push(b);
-  });
 
   return (
     <ReactFlowProvider>
-      <div className="flex h-screen w-full flex-col overflow-hidden" style={{ background: "#1a1a1a", fontFamily: "var(--font-inter), sans-serif" }}>
+      <div className="flex h-screen w-full flex-col" style={{ background: "#181818", color: "#d4d4d4" }}>
         <Header />
 
-        <div className="flex flex-1 overflow-hidden relative">
-          {/* ── Left Sidebar ─────────────────────────────────────────────── */}
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* ── Left sidebar: block library ─────────────────────────── */}
           <aside
-            className="flex flex-col overflow-hidden z-10 flex-shrink-0"
-            style={{ width: 240, background: "#252525", borderRight: "1px solid #363636" }}
+            className="flex flex-col flex-shrink-0 overflow-hidden"
+            style={{ width: 220, background: "#1e1e1e", borderRight: "1px solid #363636" }}
           >
+            {/* Sidebar header */}
+            <div
+              className="flex items-center justify-between px-3 flex-shrink-0"
+              style={{ height: 32, borderBottom: "1px solid #363636" }}
+            >
+              <span className="text-[9px] uppercase tracking-wider text-[#555]">Layer Library</span>
+            </div>
+
             {/* Search */}
-            <div className="px-3 py-2" style={{ borderBottom: "1px solid #363636" }}>
-              <div className="relative">
-                <Search className="w-3 h-3 absolute left-2 top-2.5 text-[#555]" />
+            <div className="px-2 pt-2 pb-1 flex-shrink-0">
+              <div className="flex items-center gap-1.5 bg-[#252525] border border-[#3a3a3a] rounded-[3px] px-2 py-1">
+                <Search className="w-3 h-3 text-[#555]" />
                 <input
+                  type="text"
+                  placeholder="Search layers..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search layers…"
-                  className="w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] pl-7 pr-2 py-1.5 text-[11px] text-[#d4d4d4] placeholder-[#555] outline-none transition-colors"
+                  className="bg-transparent text-[11px] text-[#c8c8c8] placeholder-[#444] outline-none flex-1 min-w-0"
                 />
               </div>
             </div>
 
-            {/* Category pills */}
-            <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto" style={{ borderBottom: "1px solid #363636" }}>
-              {["All", ...allCategories].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCatFilter(cat)}
-                  className={`text-[10px] px-2 py-0.5 rounded-sm whitespace-nowrap transition-colors border ${
-                    catFilter === cat
-                      ? "bg-[#2d8cf0] border-[#2d8cf0] text-white"
-                      : "bg-[#1e1e1e] border-[#363636] text-[#888] hover:text-[#d4d4d4] hover:border-[#505050]"
-                  }`}
-                >
-                  {cat === "Core Layers" ? "Core" : cat === "Tensor Ops" ? "Tensor" : cat}
-                </button>
-              ))}
-            </div>
-
-            {/* Block list */}
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-5">
-              {Object.keys(grouped).length === 0 ? (
-                <div className="text-[11px] text-[#555] text-center pt-8">No layers match</div>
+            {/* Block list — grouped by category */}
+            <div className="flex-1 overflow-y-auto px-2 py-1 space-y-3">
+              {Object.keys(categories).length === 0 ? (
+                <div className="text-[11px] text-[#555] italic px-1 pt-2">
+                  {search ? "No matching layers." : "Loading layers…"}
+                </div>
               ) : (
-                Object.entries(grouped).map(([cat, blocks]) => (
-                  <div key={cat} className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <CategoryIcon category={cat} />
-                        <span className="text-[9px] uppercase tracking-wider text-[#555] font-semibold">{cat}</span>
-                      </div>
-                      <span className="text-[9px] font-mono text-[#444]">{blocks.length}</span>
+                Object.entries(categories).map(([category, blocks]) => (
+                  <div key={category}>
+                    <div className="flex items-center gap-1.5 px-1 py-1">
+                      <CategoryIcon category={category} />
+                      <span className="text-[9px] uppercase tracking-wider text-[#555]">{category}</span>
                     </div>
-                    {blocks.map((b) => <BlockItem key={b.id} blockDef={b} />)}
+                    <div className="flex flex-col gap-1">
+                      {blocks.map((block: any) => (
+                        <BlockItem key={block.id} blockDef={block} />
+                      ))}
+                    </div>
                   </div>
                 ))
               )}
             </div>
           </aside>
 
-          {/* ── Canvas ───────────────────────────────────────────────────── */}
+          {/* ── Canvas ──────────────────────────────────────────────── */}
           <DnDCanvas />
 
-          {/* ── Right panel collapse toggle (when closed) ─────────────── */}
-          {!rightOpen && (
-            <button
-              onClick={() => setRightOpen(true)}
-              className="absolute right-3 top-3 z-30 p-1.5 bg-[#252525] border border-[#363636] hover:border-[#505050] rounded-[3px] text-[#888] hover:text-[#d4d4d4] transition-colors shadow-lg"
-            >
-              <PanelRightOpen className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* ── Right Sidebar ─────────────────────────────────────────── */}
+          {/* ── Right panel: inspector + code ───────────────────────── */}
           {rightOpen && (
             <aside
-              className="flex flex-col flex-shrink-0 z-10 overflow-hidden"
-              style={{ width: 280, background: "#252525", borderLeft: "1px solid #363636" }}
+              className="flex flex-col flex-shrink-0 overflow-hidden"
+              style={{ width: 280, background: "#1e1e1e", borderLeft: "1px solid #363636" }}
             >
               {/* Tab bar */}
               <div
-                className="flex items-center px-1 py-1 gap-0.5 flex-shrink-0"
-                style={{ borderBottom: "1px solid #363636", background: "#1e1e1e" }}
+                className="flex items-center flex-shrink-0"
+                style={{ height: 32, borderBottom: "1px solid #363636" }}
               >
                 <button
                   onClick={() => setRightTab("inspector")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium rounded-sm transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 h-full text-[11px] border-b-2 transition-colors ${
                     rightTab === "inspector"
-                      ? "bg-[#252525] text-[#d4d4d4]"
-                      : "text-[#666] hover:text-[#aaa]"
+                      ? "text-[#d4d4d4] border-[#2d8cf0]"
+                      : "text-[#666] border-transparent hover:text-[#aaa]"
                   }`}
                 >
                   <Settings2 className="w-3 h-3" />
@@ -823,62 +781,81 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setRightTab("code")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-medium rounded-sm transition-colors ${
+                  className={`flex items-center gap-1.5 px-3 h-full text-[11px] border-b-2 transition-colors ${
                     rightTab === "code"
-                      ? "bg-[#252525] text-[#d4d4d4]"
-                      : "text-[#666] hover:text-[#aaa]"
+                      ? "text-[#d4d4d4] border-[#2d8cf0]"
+                      : "text-[#666] border-transparent hover:text-[#aaa]"
                   }`}
                 >
                   <Code2 className="w-3 h-3" />
-                  PyTorch Code
+                  Code
                 </button>
+                <div className="flex-1" />
                 <button
                   onClick={() => setRightOpen(false)}
-                  className="p-1.5 text-[#555] hover:text-[#aaa] rounded-sm transition-colors ml-0.5"
+                  className="p-1 mr-1 text-[#555] hover:text-[#aaa] transition-colors"
+                  title="Close panel"
                 >
                   <PanelRightClose className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Tab content */}
-              {rightTab === "inspector" ? (
-                <div className="flex-1 p-4 overflow-y-auto">
+              {/* Inspector tab */}
+              {rightTab === "inspector" && (
+                <div className="flex-1 overflow-y-auto p-3">
                   <PropertiesPanel />
                 </div>
-              ) : (
-                <div className="flex-1 flex flex-col min-h-0" style={{ background: "#181818" }}>
-                  {/* Code toolbar */}
+              )}
+
+              {/* Code tab */}
+              {rightTab === "code" && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Code actions */}
                   <div
-                    className="flex items-center justify-between px-3 py-2 flex-shrink-0"
-                    style={{ borderBottom: "1px solid #363636", background: "#1e1e1e" }}
+                    className="flex items-center gap-1.5 px-3 flex-shrink-0"
+                    style={{ height: 32, borderBottom: "1px solid #363636" }}
                   >
-                    <span className="text-[10px] font-mono text-[#555]">nn.Module · output.py</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={handleCopy}
-                        className="flex items-center gap-1 text-[10px] text-[#888] hover:text-[#d4d4d4] bg-[#252525] hover:bg-[#2a2a2a] border border-[#363636] px-2 py-0.5 rounded-sm transition-colors"
-                      >
-                        {copied ? <><Check className="w-3 h-3 text-[#4ade80]" /><span className="text-[#4ade80]">Copied</span></> : <><Copy className="w-3 h-3" /><span>Copy</span></>}
-                      </button>
-                      <button
-                        onClick={handleDownload}
-                        className="flex items-center gap-1 text-[10px] text-[#888] hover:text-[#d4d4d4] bg-[#252525] hover:bg-[#2a2a2a] border border-[#363636] px-2 py-0.5 rounded-sm transition-colors"
-                      >
-                        <Download className="w-3 h-3" />
-                        <span>.py</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={handleCopy}
+                      className="flex items-center gap-1 text-[10px] text-[#888] hover:text-[#e2e2e2] transition-colors"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-[#4ade80]" /> : <Copy className="w-3 h-3" />}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                    <div className="w-px h-3 bg-[#363636]" />
+                    <button
+                      onClick={handleDownload}
+                      className="flex items-center gap-1 text-[10px] text-[#888] hover:text-[#e2e2e2] transition-colors"
+                    >
+                      <Download className="w-3 h-3" />
+                      Download
+                    </button>
                   </div>
 
-                  {/* Code body */}
-                  <div className="flex-1 overflow-auto p-4">
-                    <pre className="text-[11px] font-mono text-[#9da3ae] leading-relaxed whitespace-pre-wrap">
-                      {generatedCode}
+                  {/* Code content */}
+                  <div className="flex-1 overflow-auto p-3">
+                    <pre
+                      className="text-[11px] font-mono leading-relaxed"
+                      style={{ color: generatedCode.startsWith("# ❌") ? "#e54545" : "#7ec8e3" }}
+                    >
+                      {generatedCode || "# Export PyTorch code will appear here after compiling."}
                     </pre>
                   </div>
                 </div>
               )}
             </aside>
+          )}
+
+          {/* Collapsed panel toggle */}
+          {!rightOpen && (
+            <button
+              onClick={() => setRightOpen(true)}
+              className="flex-shrink-0 flex items-center justify-center text-[#555] hover:text-[#aaa] transition-colors"
+              style={{ width: 24, background: "#1e1e1e", borderLeft: "1px solid #363636" }}
+              title="Open panel"
+            >
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       </div>
