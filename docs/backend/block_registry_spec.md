@@ -10,8 +10,9 @@ The Block Registry defines every draggable node's identity, parameters, and inpu
 In the current architecture, the registry is defined natively in Python.
 
 ### Backend Implementation
-- **Data Models**: Defined in `backend/models.py` using Pydantic (e.g., `BlockDef`, `PortDef`, `ParamDef`).
-- **Registry**: The actual blocks are instantiated and stored in `backend/registry.py` within the `REGISTRY` list.
+- **Data Models**: Core structural definitions are in `backend/models.py` using Pydantic (e.g., `BlockDef`, `PortDef`, `ParamDef`).
+- **OOP Architecture**: Blocks are implemented as Python classes inheriting from `BaseBlock`. They are categorized into modules within the `backend/blocks/` directory (e.g., `core.py`, `tensor_ops.py`). Each block class implements `infer_shapes`, `emit_init`, and `emit_forward` methods.
+- **Registry**: `backend/registry.py` imports all block classes and exposes them via `get_all_block_defs()` and `get_block_by_id()`.
 
 ### Frontend Integration
 The frontend (Next.js) dynamically fetches the block palette from the FastAPI backend.
