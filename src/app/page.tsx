@@ -33,6 +33,7 @@ import {
   RotateCcw,
   ChevronRight,
   Plus,
+  X,
   PanelRightClose,
   PanelRightOpen,
   Layers,
@@ -462,9 +463,100 @@ function DnDCanvas() {
   );
 }
 
+// ─── Docs UI ───────────────────────────────────────────────────────────────────────
+
+function DocContextMenu() {
+  const info = useEditorStore((s) => s.docMenuInfo);
+  const setInfo = useEditorStore((s) => s.setDocMenuInfo);
+  const setPanelInfo = useEditorStore((s) => s.setDocPanelInfo);
+
+  if (!info || !info.visible) return null;
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 z-[100]" 
+        onClick={() => setInfo(null)}
+        onContextMenu={(e) => { e.preventDefault(); setInfo(null); }}
+      />
+      <div
+        className="fixed z-[101] w-64 bg-[#1e1e1e] border border-[#3a3a3a] rounded-[5px] shadow-2xl p-3 flex flex-col gap-2"
+        style={{ top: info.y, left: info.x }}
+      >
+        <div className="flex justify-between items-start">
+          <span className="text-[13px] font-semibold text-[#e2e2e2]">{info.name}</span>
+          {!info.isLoading && (
+            <button 
+              className="text-[#888] hover:text-[#d4d4d4] transition-colors bg-[#2a2a2a] p-1 rounded"
+              onClick={() => {
+                setPanelInfo({
+                  visible: true,
+                  blockId: info.blockId,
+                  name: info.name,
+                  intro: info.intro,
+                  details: info.details
+                });
+                setInfo(null);
+              }}
+              title="Show full details"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="text-[11px] text-[#aaa] leading-relaxed">
+          {info.isLoading ? (
+            <span className="animate-pulse flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border-2 border-[#555] border-t-[#888] animate-spin" />
+              Loading docs...
+            </span>
+          ) : (
+            info.intro
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function DocDetailsPanel() {
+  const info = useEditorStore((s) => s.docPanelInfo);
+  const setInfo = useEditorStore((s) => s.setDocPanelInfo);
+
+  if (!info || !info.visible) return null;
+
+  return (
+    <div className="w-80 border-r border-[#3a3a3a] bg-[#1a1a1a] flex flex-col flex-shrink-0 z-50">
+      <div className="flex items-center justify-between p-3 border-b border-[#3a3a3a] flex-shrink-0">
+        <span className="text-[13px] font-semibold text-[#e2e2e2]">{info.name} Docs</span>
+        <button 
+          onClick={() => setInfo(null)}
+          className="text-[#888] hover:text-[#d4d4d4] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 text-[12px] text-[#ccc] flex flex-col gap-3">
+        <div>
+          <h4 className="text-[13px] font-medium text-[#fff] mb-1">Intro</h4>
+          <p className="leading-relaxed">{info.intro}</p>
+        </div>
+        <div>
+          <h4 className="text-[13px] font-medium text-[#fff] mb-1">Details</h4>
+          <pre className="whitespace-pre-wrap font-sans leading-relaxed text-[#aaa]">
+            {info.details}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Block list item ───────────────────────────────────────────────────────────────
 
 const BlockItem = ({ blockDef }: { blockDef: any }) => {
+  const setDocMenuInfo = useEditorStore((s) => s.setDocMenuInfo);
+
   const onDragStart = (event: React.DragEvent) => {
     event.dataTransfer.setData("application/reactflow", "custom");
     event.dataTransfer.setData("application/label", blockDef.name);
@@ -472,9 +564,64 @@ const BlockItem = ({ blockDef }: { blockDef: any }) => {
     event.dataTransfer.effectAllowed = "move";
   };
 
+  const onContextMenu = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    setDocMenuInfo({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      blockId: blockDef.id,
+      name: blockDef.name,
+      intro: "",
+      details: "",
+      isLoading: true
+    });
+    
+    try {
+      const res = await fetch(`http://localhost:8001/api/blocks/${blockDef.id}/docs`);
+      if (res.ok) {
+        const docs = await res.json();
+        setDocMenuInfo({
+          visible: true,
+          x: event.clientX,
+          y: event.clientY,
+          blockId: blockDef.id,
+          name: blockDef.name,
+          intro: docs.intro,
+          details: docs.details,
+          isLoading: false
+        });
+      } else {
+        setDocMenuInfo({
+          visible: true,
+          x: event.clientX,
+          y: event.clientY,
+          blockId: blockDef.id,
+          name: blockDef.name,
+          intro: "Failed to load documentation.",
+          details: "",
+          isLoading: false
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch block docs:", err);
+      setDocMenuInfo({
+        visible: true,
+        x: event.clientX,
+        y: event.clientY,
+        blockId: blockDef.id,
+        name: blockDef.name,
+        intro: "Error loading documentation.",
+        details: "",
+        isLoading: false
+      });
+    }
+  };
+
   return (
     <div
       onDragStart={onDragStart}
+      onContextMenu={onContextMenu}
       draggable
       className="flex items-center gap-2.5 bg-[#1e1e1e] hover:bg-[#2a2a2a] border border-[#3a3a3a] hover:border-[#505050] rounded-[3px] px-3 py-2 cursor-grab active:cursor-grabbing transition-colors group"
     >
@@ -785,6 +932,8 @@ export default function Home() {
               )}
             </div>
           </aside>
+          
+          <DocDetailsPanel />
 
           {/* ── Canvas ──────────────────────────────────────────────── */}
           <DnDCanvas />
@@ -891,6 +1040,7 @@ export default function Home() {
           )}
         </div>
       </div>
+      <DocContextMenu />
     </ReactFlowProvider>
   );
 }

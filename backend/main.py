@@ -20,6 +20,14 @@ app.add_middleware(
 def get_blocks():
     return get_all_block_defs()
 
+@app.get("/api/blocks/{block_id}/docs")
+def get_block_docs(block_id: str):
+    from blocks import get_block_by_id
+    block = get_block_by_id(block_id)
+    if not block:
+        raise HTTPException(status_code=404, detail="Block not found")
+    return block.docs()
+
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:

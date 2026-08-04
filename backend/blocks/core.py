@@ -128,6 +128,12 @@ class LinearBlock(BaseBlock):
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         return f"{out_var} = {layer_name}({in_var})"
 
+    def docs(self) -> Dict[str, str]:
+        return {
+            "intro": "Applies a linear transformation to the incoming data: `y = xA^T + b`",
+            "details": "### `nn.Linear`\nThis module creates a single layer feed forward network with `in_features` inputs and `out_features` outputs. It is commonly used as a fully connected layer."
+        }
+
 
 class Conv2DBlock(BaseBlock):
     @property

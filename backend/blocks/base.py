@@ -24,6 +24,13 @@ class BaseBlock(ABC):
         """Generates the nn.Module instantiation code (if stateful)."""
         pass
 
+    def docs(self) -> Dict[str, str]:
+        """Returns the documentation dictionary for this block."""
+        return {
+            "intro": f"The {self.definition.name} block.",
+            "details": "Documentation for this block has not been written yet."
+        }
+
     @abstractmethod
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         """Generates the functional execution code."""
