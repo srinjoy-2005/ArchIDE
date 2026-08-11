@@ -116,6 +116,30 @@ export default function DevPayloadsPage() {
               ))
             )}
           </div>
+
+          {/* Architecture Reference Cheat Sheet */}
+          <div className="p-3 border-t border-[#2a2a2a] bg-[#151515] flex-shrink-0">
+            <div className="text-[10px] uppercase tracking-wider text-[#666] font-semibold mb-2 flex items-center justify-between">
+              <span>Architecture Map</span>
+            </div>
+            <div className="space-y-3 text-[10px] font-mono">
+              <div>
+                <span className="text-[#4ade80]">/api/check</span><br/>
+                <span className="text-[#888]">→ </span><span className="text-[#d4d4d4]">shape_inference_pass()</span><br/>
+                <span className="text-[#555] ml-3">backend/compiler.py</span>
+              </div>
+              <div>
+                <span className="text-[#4ade80]">/api/compile</span><br/>
+                <span className="text-[#888]">→ </span><span className="text-[#d4d4d4]">generate_pytorch_code()</span><br/>
+                <span className="text-[#555] ml-3">backend/compiler.py</span>
+              </div>
+              <div>
+                <span className="text-[#4ade80]">/api/blocks</span><br/>
+                <span className="text-[#888]">→ </span><span className="text-[#d4d4d4]">get_all_block_defs()</span><br/>
+                <span className="text-[#555] ml-3">backend/blocks/__init__.py</span>
+              </div>
+            </div>
+          </div>
         </aside>
 
         {/* Main: Payload Details */}
