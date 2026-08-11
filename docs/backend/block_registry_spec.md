@@ -2,6 +2,10 @@
 
 This document provides the formal specification for all blocks available in ArchiDE. The Block Registry defines every draggable node's identity, parameters, input/output ports, shape propagation rules, and PyTorch code generation templates.
 
+> [!NOTE]
+> **Status: ✅ Implemented**
+> The block registry specifications detailed here reflect the active backend implementation in `backend/blocks/`.
+
 ---
 
 ## 1. Block Schema & Architecture Specification

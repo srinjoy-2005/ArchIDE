@@ -32,6 +32,25 @@ This document outlines the short-term and long-term goals for the ArchiDE visual
 ### 3. JSON Schema Reference Design
 - **Note**: Early on, a TypeScript-based JSON schema logic was proposed (detailed in `graph_ir_spec.md` and old IR preview files). While the actual implementation of the backend logic has been refactored entirely into Python (FastAPI/Pydantic), that original design remains a highly compelling reference. Future iterations involving complex graph serialization or frontend-backend synchronization should look to that design for inspiration.
 
+### 4. Multiplicity of Blocks
+- **Concept**: Provide a mechanism for users to seamlessly repeat a block or sequence of blocks multiple times (e.g., adding 17x Transformer blocks) without manually dragging and duplicating nodes on the canvas.
+- **Design Options to Explore**:
+  - **Option A (Wrapper)**: A draggable "For Loop" or "Repeat" block with a variable parameter that can be placed on top of or encapsulate any compatible block, representing how many times it should be repeated.
+  - **Option B (Native Parameter)**: A simpler approach where single blocks include an explicit `multiplicity` or `repeat_count` parameter natively.
+
+### 5. Dynamic Variadic Inputs for Add/Concat
+- **Concept**: Streamline the UI for operations that can accept infinite inputs (like Add, Concat). 
+- **Implementation Plan**:
+  - Instead of letting the user select the number of inputs via a hyperparameter and rendering exactly that many input dots, keep a **single** input dot/port in the UI.
+  - Users can connect as many vector/tensor edges to this single port as they want.
+  - The backend/frontend automatically infers the number of inputs based on connected edges, entirely removing the need for a manual hyperparameter field.
+
+### 6. Compiler Scalability (Gourav)
+- **Concept**: Check, profile, and optimize core compiler functions to handle massive, complex computation graphs.
+- **Implementation Plan**:
+  - Ensure Kahn's topological sort and the AST string-building engine scale efficiently.
+  - Test the compilation and shape inference engine against extremely large graphs to ensure performance bottlenecks or recursion/memory limits do not break the generation process.
+
 
 # TODO
 

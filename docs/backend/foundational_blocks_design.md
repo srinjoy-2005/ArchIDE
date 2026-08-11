@@ -2,10 +2,14 @@
 
 As discussed, before we worry about the wiring logic (the compiler), we need to solidify the design of our **Foundational Primitives**. These are the lowest-level math and tensor operations that users will drag-and-drop to build extremely complex modules (like RoPE or Attention).
 
+> [!NOTE]
+> **Status: ✅ Implemented**
+> The Pydantic registry design and dynamic I/O ports described here have been successfully implemented in the backend.
+
 ## 1. Goal
 Identify the core set of operations required to build any complex Neural Network architecture visually, define their exact Inputs/Outputs, and specify what properties the user can edit.
 
-## 2. Pydantic Registry Design (Backend Implementation Proposal)
+## 2. Pydantic Registry Design (Implemented Backend Architecture)
 
 To solve the UI challenges you mentioned (like an `Add` block taking up to 4 tensors, or a `Split` block returning multiple tensors), we need to explicitly define **Inputs** and **Outputs** (Ports) in the `BlockDef`. 
 

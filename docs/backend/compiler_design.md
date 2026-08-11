@@ -1,6 +1,10 @@
 # Compiler Engine Design
 
-This document outlines how we will build the `/api/compile` endpoint in Python. The goal of this compiler is to take the raw JSON graph from the frontend and translate it into a valid, executable PyTorch `nn.Module`.
+This document outlines how we built the `/api/compile` endpoint in Python. The goal of this compiler is to take the raw JSON graph from the frontend and translate it into a valid, executable PyTorch `nn.Module`.
+
+> [!NOTE]
+> **Status: ✅ Implemented**
+> The compiler engine, Kahn's topological sort, and the string-based AST generation described here are fully operational in the backend.
 
 ## 1. The Input Payload (CompileRequest & CheckRequest)
 The frontend will send a JSON payload containing `nodes` and `edges`. We define this strictly using Pydantic:

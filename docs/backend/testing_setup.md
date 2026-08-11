@@ -3,7 +3,7 @@
 ## Goal
 Implement strict PyTorch broadcasting validation for element-wise tensor operations (Add, Sub, Mul, Div) to catch mismatched shapes (like `(4, 3)` and `(3, 4)`). Furthermore, establish a testing mechanism (using `pytest`) for the backend to automate the validation of dimensions and API responses.
 
-## Proposed Changes
+## Implemented Changes
 
 ### 1. Broadcasting Logic (`backend/blocks/tensor_ops.py`)
 - Add a new `broadcast_shapes(*shapes: Tuple) -> Tuple` utility function.
@@ -26,10 +26,10 @@ Implement strict PyTorch broadcasting validation for element-wise tensor operati
 - Integration tests using FastAPI's `TestClient` to send mock topologies (nodes + edges) to `/api/check`.
 - Asserts that a topology containing a `(4, 3)` and `(3, 4)` multiplication fails shape validation and returns a `422 Unprocessable Content` response.
 
-## Verification Plan
+## Verification (Completed)
 1. Install testing dependencies inside `backend/.venv`.
 2. Run `pytest backend/tests/` and ensure all shape mismatch and broadcasting test cases pass.
 3. Validate that the frontend now correctly surfaces the shape error when invalid shapes are connected to a `Multiply` block.
 
 > [!IMPORTANT]  
-> Please review this plan. If you approve, I will proceed to implement the broadcasting logic and set up the `pytest` test suite.
+> This plan has been successfully implemented. The broadcasting logic is active and the `pytest` suite is passing.

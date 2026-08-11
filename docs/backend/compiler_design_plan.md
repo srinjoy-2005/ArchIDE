@@ -1,6 +1,10 @@
 # ArchIDE: Compiler Design & Extensibility Plan
 
-This document outlines the architectural plan for decoupling block functionalities and implementing static shape validation in the ArchIDE Python backend. It addresses the requirements from the roadmap to use established Compiler Design (CD) principles to make the system scalable for custom blocks.
+This document outlines the architecture for decoupling block functionalities and implementing static shape validation in the ArchIDE Python backend. It addresses the requirements from the roadmap to use established Compiler Design (CD) principles to make the system scalable for custom blocks.
+
+> [!NOTE]
+> **Status: ✅ Implemented**
+> The object-oriented IR node architecture and static shape validation described in this document are fully implemented in the `backend/` codebase.
 
 ---
 
@@ -8,7 +12,7 @@ This document outlines the architectural plan for decoupling block functionaliti
 
 Currently, `backend/registry.py` uses a purely data-driven approach (`BlockDef` Pydantic models) to define blocks. However, to support shape checking and code generation scalably, a block's definition must couple its **data schema** (parameters/ports) with its **behavior** (shape inference and code generation).
 
-### Proposed Architecture: Object-Oriented Intermediate Representation (IR) Node Classes
+### Implemented Architecture: Object-Oriented Intermediate Representation (IR) Node Classes
 
 Instead of a single monolithic compiler file mapping IDs to strings, we will adopt a standard Compiler Design pattern using polymorphic AST (Abstract Syntax Tree) nodes.
 

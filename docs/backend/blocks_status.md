@@ -1,5 +1,9 @@
 # ArchIDE: PyTorch Block Implementation Status
 
+> [!NOTE]
+> **Status: 🟢 Up-to-date**
+> This document accurately tracks the implementation status of core blocks in the backend registry.
+
 ## ✅ Implemented Blocks
 
 ### Core Layers
