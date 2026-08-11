@@ -5,6 +5,15 @@ from typing import List
 from models import BlockDef, CompileRequest, CheckRequest
 from blocks import get_all_block_defs
 from compiler import topological_sort, generate_pytorch_code, shape_inference_pass, ShapeError
+import json
+
+def print_payloads(req_model, resp_dict):
+    print("\n\033[96m--- INCOMING PAYLOAD ---")
+    print(json.dumps(req_model.model_dump(), indent=2))
+    print("------------------------\033[0m\n")
+    print("\n\033[92m--- OUTGOING PAYLOAD ---")
+    print(json.dumps(resp_dict, indent=2))
+    print("------------------------\033[0m\n")
 
 app = FastAPI()
 
@@ -33,7 +42,9 @@ def compile_graph(request: CompileRequest):
     try:
         sorted_nodes = topological_sort(request.nodes, request.edges)
         code = generate_pytorch_code(sorted_nodes, request.edges)
-        return {"code": code}
+        resp = {"code": code}
+        print_payloads(request, resp)
+        return resp
     except ShapeError as e:
         raise HTTPException(
             status_code=422,
@@ -61,7 +72,9 @@ def check_shapes(request: CheckRequest):
             node_id: {port: list(shape) for port, shape in ports.items()}
             for node_id, ports in node_shapes.items()
         }
-        return {"ok": True, "node_shapes": serialisable, "node_params": node_params}
+        resp = {"ok": True, "node_shapes": serialisable, "node_params": node_params}
+        print_payloads(request, resp)
+        return resp
     except ShapeError as e:
         raise HTTPException(
             status_code=422,

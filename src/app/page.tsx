@@ -45,6 +45,7 @@ import {
   ArrowRightLeft,
   Brain,
   Activity,
+  Bug,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -675,18 +676,35 @@ function Header() {
     };
   };
 
+  // Helper for dev tools payloads tab
+  const broadcastPayload = (endpoint: string, reqPayload: any, resPayload: any) => {
+    if (typeof window !== "undefined") {
+      try {
+        const channel = new BroadcastChannel("archide_payloads");
+        channel.postMessage({ endpoint, request: reqPayload, response: resPayload, timestamp: Date.now() });
+        channel.close();
+      } catch (e) {
+        console.error("Broadcast failed", e);
+      }
+    }
+  };
+
   // srinjoy's handleExport — uses port 8001, returns code or compiler error
   const handleExport = async () => {
     setCompiling(true);
     setShapeErrorNodeId(null);
     setGeneratedCode("# Compiling via Python Backend Engine...");
     try {
+      const payload = buildPayload();
       const response = await fetch(`${API_BASE}/api/compile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
+      
+      broadcastPayload("/api/compile", payload, data);
+
       if (response.ok) {
         setGeneratedCode(data.code);
         setShapeErrorNodeId(null);
@@ -713,12 +731,16 @@ function Header() {
     setCheckStatus('checking');
     setCheckMsg('');
     try {
+      const payload = buildPayload();
       const response = await fetch(`${API_BASE}/api/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
+      
+      broadcastPayload("/api/check", payload, data);
+
       if (response.ok) {
         setCheckStatus('ok');
         setCheckMsg('Compatible ✓');
@@ -804,6 +826,7 @@ function Header() {
         )}
 
         <button
+          suppressHydrationWarning
           onClick={handleCheck}
           disabled={checkStatus === 'checking'}
           className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2 py-1 rounded-sm border ${checkBtnClass}`}
@@ -812,6 +835,7 @@ function Header() {
         </button>
 
         <button
+          suppressHydrationWarning
           onClick={handleReset}
           className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a] ml-1"
         >
@@ -820,6 +844,7 @@ function Header() {
         </button>
 
         <button
+          suppressHydrationWarning
           onClick={handleExport}
           disabled={compiling}
           className="flex items-center gap-1.5 text-[11px] font-medium text-white bg-[#2d8cf0] hover:bg-[#3a97f5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-sm"
@@ -827,6 +852,17 @@ function Header() {
           <Play className="w-3 h-3 fill-white" />
           {compiling ? "Compiling…" : "Export PyTorch"}
         </button>
+
+        {process.env.NODE_ENV === 'development' && (
+          <button
+            onClick={() => window.open('/dev/payloads', '_blank')}
+            className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1.5 rounded-sm hover:bg-[#2a2a2a] ml-1 border border-[#3a3a3a]"
+            title="Open Dev Tools"
+          >
+            <Bug className="w-3.5 h-3.5" />
+            Debug
+          </button>
+        )}
       </div>
     </header>
   );
