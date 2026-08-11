@@ -1,0 +1,250 @@
+commit a2fd909548a7b80264425a0569cef849fb173cef
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Aug 11 20:36:47 2026 +0530
+
+    feat: implement PyTorch code generation logic and add Zustand store for editor state management
+
+commit 053da6ef0ce46411111c33ec8a945041582a6636
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Aug 4 20:27:36 2026 +0530
+
+    added tooltip feature, detailed tooltips need to be updated for blocks, docs/changelog needs update
+
+commit cf97d421807842de7fa243b8eab15158b8455313
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Aug 4 16:06:08 2026 +0530
+
+    update docs
+
+commit 08a4c569e5b195e83c5f615b01ef1c466dea8586
+Merge: fec0af9 801805c
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Thu Jul 30 23:43:17 2026 +0530
+
+    Updated the UI and merged it with the existing backend, also update the kahn's algorithm to enforce predictability
+    Merge branch 'ui-branch-review' into srinjoy_branch
+
+commit fec0af95d868cc7d32b782febf71b3c6d3dcd0b9
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Thu Jul 30 23:42:59 2026 +0530
+
+    reqcommit
+
+commit 801805c0c51e5f508d26661106cf692c1025dc01
+Merge: b0d0a06 5537209
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Thu Jul 30 23:39:25 2026 +0530
+
+    fixed merge conflict between the ui_branch and ongoing branch(srinjoy_branch)
+
+commit b0d0a06af3174264b07a89ad59fbf9d425d039fc
+Merge: 2ec70f4 ccc7cb1
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Thu Jul 30 22:50:15 2026 +0530
+
+    Merge branch 'srinjoy_branch' of github-gourav:srinjoy-2005/ArchIDE into srinjoy_branch
+
+commit 2ec70f41419cf40aa98fc3898d754bad2402f571
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Thu Jul 30 22:49:37 2026 +0530
+
+    refactored the static tensor checking
+
+commit 55372094b6c2738d2c2adb16482ab21b1fe55887
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 22:06:50 2026 +0530
+
+    All backend features tested on new UI,further refinements and bugs listed
+
+commit cda6bb1abfd2f83cc98dec069b3e65a705372ac7
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 22:04:29 2026 +0530
+
+    docs: add known bugs to roadmap
+
+commit ccc7cb1544434c4e0f169a097aa7d7d45d129631
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Thu Jul 30 22:00:48 2026 +0530
+
+    docs: add implementation plan for tensor broadcasting and testing framework setup
+
+commit 68f71af60daddeca966148eb9ebb383d89fafd2a
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:57:29 2026 +0530
+
+    fix: Type error after merge
+
+commit f6c7f65e4090cd10e4a93a270920f6ebc25d4b90
+Merge: 7a9025e 630b6fa
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:55:59 2026 +0530
+
+    Merge origin/srinjoy_branch and apply Adobe theme to new inferred shapes panel
+
+commit 630b6fa1d1c77b93d1b3839018fb332151452be2
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Thu Jul 30 21:47:17 2026 +0530
+
+    refactor: integrate backend compiler logic for dynamic tensor shape generation.
+
+commit 7a9025e556a28c1a535d164f281b2cb888c30313
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:26:29 2026 +0530
+
+    feat: hover shape tooltips on nodes and edges
+
+commit 5d298c91a5228b31f2a108f96303038886e3fa2e
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:22:06 2026 +0530
+
+    Integrate srinjoy_branch logic cleanly under ui-branch theme
+
+commit d3abb472fd20e95fae7d6c6ec88227ec17950bf9
+Merge: 6e72506 0a4222d
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:12:41 2026 +0530
+
+    Merge origin/srinjoy_branch into ui-branch, fix conflicts
+
+commit 6e725061cc69e871567d13bd0515595d42705659
+Merge: 7d10a13 58e5303
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:08:39 2026 +0530
+
+    Merge origin/main into ui-branch
+
+commit 7d10a1319c632b69396d77c666b18fa293fd6b19
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Thu Jul 30 21:07:50 2026 +0530
+
+    Save local changes before pulling updates
+
+commit 0a4222daa0a3f74209bb2553fe810246163314eb
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Tue Jul 28 23:01:43 2026 +0530
+
+    feat(compiler): add parameter auto-inference and expand block library:
+    - Implemented two-way parameter auto-inference in shape_inference_pass (e.g. in_features=-1)
+    - Reorganized block library into semantic modules (activations, pooling, normalization, shape)
+    - Added 10 new PyTorch blocks (MaxPool2D, BatchNorm2D, LayerNorm, Dropout, Reshape, etc.)
+    - Fixed React crash during shape validation on the frontend
+    - Refined InputBlock UX by removing redundant output_shape field
+    - Added docs/blocks_status.md to track implementation progress"
+
+commit 2a136fe5c5bcd0be9f4671998ed1d8c159ceb658
+Merge: 5dad83d 69dc14b
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 22:16:48 2026 +0530
+
+    refactor: improve compiler pipeline with refined shape inference, unique variable naming, and improved identifier sanitization.
+
+commit 5dad83dfe96a1d3bee22b0fad987eb3df0f46d92
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 22:06:47 2026 +0530
+
+    feat: Each block declares a var_hint string on its output ports. The compiler uses it as the base name for the variable.
+
+commit 69dc14b315451bc1360cb8ed7d89ae5826e346b0
+Merge: 7a19ab6 4b5e68b
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Tue Jul 28 22:01:54 2026 +0530
+
+    resolve merge conflicts: integrate ShapeError + port 8001 from srinjoy_branch
+
+commit 7a19ab635ac3cf5f8062cdc04ebc776e02e0f80f
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Tue Jul 28 21:58:26 2026 +0530
+
+    major compiler rewrite
+
+commit 4b5e68beb4fb355e12eafae7f5c2f8156a090d38
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 21:42:45 2026 +0530
+
+    feat: implement static shape inference pass and structured error reporting and dynamic input variable names.
+
+commit 32c5b1e30f92925105b0b5d60f2fe75df2e4cf28
+Merge: 8ca5c59 614b478
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 21:29:24 2026 +0530
+
+    Merge remote-tracking branch 'refs/remotes/origin/srinjoy_branch' into srinjoy_branch
+    merged divergent branches
+
+commit 614b4784ee31e8fe027a008dd7a84899b8e7445d
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Tue Jul 28 21:27:57 2026 +0530
+
+    added changelog 2026_07_28_srinjoy.md
+
+commit 58e5303e0e59f390b10b9da63890dd59b242c64d
+Author: Sampad De <sampad2k6@gmail.com>
+Date:   Tue Jul 28 21:19:58 2026 +0530
+
+    docs
+
+commit 8ca5c59fe425dcb9a4bbb631e9878e0ee6a1a080
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 20:45:40 2026 +0530
+
+    concurrently open both servers
+
+commit 6337bd81c56d30188af7ea89486ea26276236e6e
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 16:05:41 2026 +0530
+
+    started basic implementation
+
+commit bd73a5b80149b8117423bb01b14187aab5a688d9
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Tue Jul 28 15:50:15 2026 +0530
+
+    planning
+
+commit 4210c5188c24a85f8b34874b2378f4d196979452
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Mon Jul 27 22:03:43 2026 +0530
+
+    add planning docs docs/compi
+
+commit 67628a6aed8bc8826cbde78d3d571017ec0c482c
+Author: Gourav Roy <gouravroy2110@gmail.com>
+Date:   Sun Jul 26 14:05:10 2026 +0530
+
+    feat: migrate to Python FastAPI backend & PyTorch compiler engine
+    
+        - Re-architected backend to use FastAPI and Pydantic schemas (models.py, registry.py).
+        - Implemented Kahn's Algorithm for topological sorting and cycle detection in PyTorch code generator (compiler.py).
+        - Refactored React Flow canvas to uncontrolled mode, fixing UI state desynchronization in PropertiesPanel.
+        - Restructured and updated all technical documentation, created docs index, and added AI agent guardrails.
+        - Added custom generate-changelog skill for automated tracking.
+
+commit d4d55ade69a47bb2ccf4a96919727035272e6cba
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Sat Jul 25 13:24:43 2026 +0530
+
+    add doc for prev commit
+
+commit 13dd629a0edfba72404b112b66b79fc6d9aa5d12
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Sat Jul 25 13:16:33 2026 +0530
+
+    basic somewhat working PoC
+
+commit 3eec8c10405459fa27d0652d2dc3f08306ddd3ba
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Sat Jul 25 12:12:52 2026 +0530
+
+    planning
+
+commit c1c976ff05fd710ba421851cfc9f7d515846d0a1
+Author: Srinjoy <srinjoymukherjee2005@gmail.com>
+Date:   Wed Jul 22 17:17:59 2026 +0530
+
+    plan v1
+
+commit 990c50c00190962f4c0fbd431a5cbc86ae411d69
+Author: Srinjoy Mukherjee <srinjoymukherjee2005@gmail.com>
+Date:   Wed Jul 22 17:15:57 2026 +0530
+
+    Initial commit
