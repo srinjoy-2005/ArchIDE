@@ -12,10 +12,11 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[Graph IR Spec (Legacy)](graph_ir_spec.md)**: The original TypeScript-based JSON schema specification. Note that actual logic is now handled in Python, but this remains as a strong design reference.
 
 ## 🚀 Roadmaps & Future
-*   **[Roadmap & Features](roadmap_and_features.md)**: Short-term and long-term goals (Shape Inference, Model Export, Advanced Blocks).
+*   **[TODO / Roadmap](TODO.md)**: Short-term and long-term goals (Shape Inference, Model Export, Advanced Blocks).
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[August 11, 2026 - Sampad De](changelog/2026_08_11_sampad.md)**: Added comprehensive PyTest suite for FastAPI endpoints and tensor operation shape inference, renamed roadmap documentation to TODO.md, and updated TypeScript compiler configurations.
 *   **[July 28, 2026 - Gourav Roy](changelog/2026_07_28_gourav.md)**: Compiler correctness fixes (dedup input vars, single return, sequential naming), three-section Properties Panel, "Run Static Tensor Check" button, `/api/check` endpoint, and merge conflict resolution.
 *   **[July 28, 2026 - Srinjoy](changelog/2026_07_28_srinjoy.md)**: Compiler OO architecture refactor, ShapeError + structured 422 responses, var_hint-based readable variable names, ParamDef schema upgrade (read_only/section/description), full Conv2D/Linear signatures, and frontend three-section Properties Panel.
 *   **[July 26, 2026 - Gourav Roy](changelog/2026_07_26_gourav.md)**: Major architecture shift to Python (FastAPI) backend, Kahn's algorithm PyTorch compiler, and critical UI state synchronization fixes in React Flow.
