@@ -187,6 +187,10 @@ class Conv2DBlock(BaseBlock):
         try:
             out_h = math.floor((H + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
             out_w = math.floor((W + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
+            if out_h <= 0 or out_w <= 0:
+                raise ValueError("Conv2D: Negative spatial dimensions")
+        except ValueError as e:
+            raise e
         except Exception:
             out_h, out_w = "ANY", "ANY"
 
