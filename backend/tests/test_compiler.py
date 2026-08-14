@@ -60,3 +60,60 @@ def test_pytorch_execution():
     assert "self.layer_n3 = nn.ReLU(inplace=False)" in code
     assert "def forward(self, x_input):" in code
     assert "return activated" in code
+
+
+def test_orphan_edges_handled_gracefully():
+    """Ensure orphan edges from deleted nodes (e.g. node_102) do not raise KeyError."""
+    nodes = [
+        Node(id="n1", data=NodeData(block_id="input", label="Input", paramValues={"shape": "(1, 10)"})),
+        Node(id="n2", data=NodeData(block_id="output", label="Output", paramValues={}))
+    ]
+    edges = [
+        Edge(id="e1", source="n1", sourceHandle="out", target="n2", targetHandle="in"),
+        # Orphan edges referencing non-existent nodes
+        Edge(id="e_orphan_src", source="node_102", sourceHandle="out", target="n2", targetHandle="in"),
+        Edge(id="e_orphan_tgt", source="n1", sourceHandle="out", target="node_999", targetHandle="in"),
+    ]
+    sorted_nodes = topological_sort(nodes, edges)
+    assert [n.id for n in sorted_nodes] == ["n1", "n2"]
+    code = generate_pytorch_code(sorted_nodes, edges)
+    assert "def forward(self, x_input):" in code
+    assert "return x_input" in code
+
+
+def test_variadic_add_multi_input():
+    """Ensure variadic AddBlock accepts multiple incoming connections into a single port."""
+    nodes = [
+        Node(id="in1", data=NodeData(block_id="input", label="Input 1", paramValues={"shape": "(1, 64)"})),
+        Node(id="in2", data=NodeData(block_id="input", label="Input 2", paramValues={"shape": "(1, 64)"})),
+        Node(id="in3", data=NodeData(block_id="input", label="Input 3", paramValues={"shape": "(1, 64)"})),
+        Node(id="add1", data=NodeData(block_id="add", label="Add", paramValues={})),
+        Node(id="out1", data=NodeData(block_id="output", label="Output", paramValues={}))
+    ]
+    edges = [
+        Edge(id="e1", source="in1", sourceHandle="out", target="add1", targetHandle="in"),
+        Edge(id="e2", source="in2", sourceHandle="out", target="add1", targetHandle="in"),
+        Edge(id="e3", source="in3", sourceHandle="out", target="add1", targetHandle="in"),
+        Edge(id="e4", source="add1", sourceHandle="out", target="out1", targetHandle="in"),
+    ]
+    sorted_nodes = topological_sort(nodes, edges)
+    code = generate_pytorch_code(sorted_nodes, edges)
+    assert "x_input_1 + x_input_2 + x_input_3" in code
+    assert "return sum" in code
+
+
+def test_multi_output_aggregation():
+    """Ensure multiple tensors connected to Output or multiple Output blocks emit unified return tuple."""
+    nodes = [
+        Node(id="in1", data=NodeData(block_id="input", label="Input 1", paramValues={"shape": "(1, 10)"})),
+        Node(id="in2", data=NodeData(block_id="input", label="Input 2", paramValues={"shape": "(1, 20)"})),
+        Node(id="out1", data=NodeData(block_id="output", label="Output", paramValues={}))
+    ]
+    edges = [
+        Edge(id="e1", source="in1", sourceHandle="out", target="out1", targetHandle="in"),
+        Edge(id="e2", source="in2", sourceHandle="out", target="out1", targetHandle="in"),
+    ]
+    sorted_nodes = topological_sort(nodes, edges)
+    code = generate_pytorch_code(sorted_nodes, edges)
+    assert "return x_input_1, x_input_2" in code
+

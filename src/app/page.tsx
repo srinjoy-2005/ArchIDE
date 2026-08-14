@@ -64,12 +64,13 @@ const API_BASE = "http://localhost:8001";
 
 const FALLBACK_BLOCKS: any[] = [
   { id: "input",   name: "Input",   category: "Core Layers", is_functional: true,  color: "#4ade80", inputs: [],                                             outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }] },
-  { id: "output",  name: "Output",  category: "Core Layers", is_functional: true,  color: "#f87171", inputs: [{ id: "in", name: "Return Value" }],            outputs: [],                                                  params: [] },
+  { id: "output",  name: "Output",  category: "Core Layers", is_functional: true,  color: "#f87171", inputs: [{ id: "in", name: "Return Value", is_list: true }], outputs: [],                                                  params: [] },
   { id: "linear",  name: "Linear",  category: "Core Layers", is_functional: false, color: "#818cf8", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "in_features", type: "int", default: 128 }, { name: "out_features", type: "int", default: 64 }] },
   { id: "conv2d",  name: "Conv2D",  category: "Core Layers", is_functional: false, color: "#60a5fa", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }] },
   { id: "relu",    name: "ReLU",    category: "Activations", is_functional: false, color: "#a78bfa", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [] },
   { id: "softmax", name: "Softmax", category: "Activations", is_functional: false, color: "#c084fc", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "dim", type: "int", default: 1 }] },
-  { id: "add",     name: "Add",     category: "Tensor Ops",  is_functional: true,  color: "#fb923c", inputs: [{ id: "in_0", name: "Input 1" }, { id: "in_1", name: "Input 2" }], outputs: [{ id: "out", name: "Out" }], params: [{ name: "num_inputs", type: "int", default: 2 }] },
+  { id: "add",     name: "Add",     category: "Tensor Ops",  is_functional: true,  color: "#fb923c", inputs: [{ id: "in", name: "Inputs", is_list: true }], outputs: [{ id: "out", name: "Out" }], params: [] },
+  { id: "mul",     name: "Multiply",category: "Tensor Ops",  is_functional: true,  color: "#8b5cf6", inputs: [{ id: "in", name: "Inputs", is_list: true }], outputs: [{ id: "out", name: "Out" }], params: [] },
   { id: "split",   name: "Split",   category: "Tensor Ops",  is_functional: true,  color: "#34d399", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out_0", name: "Chunk 1" }, { id: "out_1", name: "Chunk 2" }], params: [{ name: "chunks", type: "int", default: 2 }, { name: "dim", type: "int", default: 0 }] },
 ];
 
@@ -192,6 +193,7 @@ function ParamInput({ param, value, onChange }: { param: any; value: any; onChan
 function PropertiesPanel() {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
+  const edges = useEdges();
   const selectedNode = nodes.find((n) => n.selected) || null;
 
   // srinjoy's exact handleParamChange logic (incl. dynamic input/output resizing)
@@ -228,6 +230,8 @@ function PropertiesPanel() {
   const basicParams    = params.filter((p: any) => !p.section || p.section === 'basic');
   const advancedParams = params.filter((p: any) => p.section === 'advanced');
   const inferredShapes = (selectedNode.data.inferredShapes as Record<string, any>) || {};
+
+  const incomingEdges = edges.filter((e) => e.target === selectedNode.id);
 
   return (
     <div className="flex flex-col gap-4">
@@ -276,6 +280,34 @@ function PropertiesPanel() {
           </div>
         </div>
       </div>
+
+      {/* Connected Incoming Tensors (useful for multi-input & variadic blocks) */}
+      {incomingEdges.length > 0 && (
+        <div className="flex flex-col gap-2 border-b border-[#363636] pb-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider text-[#555]">Connected Inputs</span>
+            <span className="text-[9px] font-mono text-[#2d8cf0] bg-[#1e1e1e] border border-[#363636] px-1.5 py-px rounded-sm">
+              {incomingEdges.length} {incomingEdges.length === 1 ? "tensor" : "tensors"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {incomingEdges.map((e, idx) => {
+              const srcNode = nodes.find((n) => n.id === e.source);
+              const srcLabel = (srcNode?.data?.label as string) || e.source;
+              const srcVar = (srcNode?.data?.varName as string) || `x_${e.source.replace(/-/g, "_")}`;
+              return (
+                <div key={e.id} className="flex items-center justify-between bg-[#1e1e1e] border border-[#3a3a3a] px-2.5 py-1.5 rounded-[3px] text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono text-[#666]">#{idx + 1}</span>
+                    <span className="text-[#e2e2e2] font-medium">{srcLabel}</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-[#2d8cf0]">{srcVar}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Inferred Shapes section (srinjoy) — our theme */}
       {Object.keys(inferredShapes).length > 0 && (
@@ -349,8 +381,30 @@ function PropertiesPanel() {
 
 function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, setNodes, setEdges } = useReactFlow();
+  const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (connection.source === connection.target) return false;
+      const targetNode = getNode(connection.target);
+      if (!targetNode) return true;
+      const inputs = (targetNode.data?.inputs as any[]) || [];
+      const targetPort = inputs.find((p) => p.id === connection.targetHandle);
+
+      // Single-input ports (is_list === false/undefined) can only accept 1 incoming connection
+      if (targetPort && !targetPort.is_list) {
+        const existing = getEdges().find(
+          (e) => e.target === connection.target && e.targetHandle === connection.targetHandle
+        );
+        if (existing && existing.id !== (connection as any).id) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [getNode, getEdges]
+  );
 
   const onConnect = useCallback(
     (params: Connection | Edge) =>
@@ -373,6 +427,15 @@ function DnDCanvas() {
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
     [setEdges, setShapeErrorNodeId]
+  );
+
+  // Prune connected edges when nodes are deleted via keyboard
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      const deletedIds = new Set(deleted.map((n) => n.id));
+      setEdges((eds) => eds.filter((e) => !deletedIds.has(e.source) && !deletedIds.has(e.target)));
+    },
+    [setEdges]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -438,6 +501,8 @@ function DnDCanvas() {
         onConnect={onConnect}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodesDelete={onNodesDelete}
+        isValidConnection={isValidConnection}
         onDrop={onDrop}
         onDragOver={onDragOver}
         deleteKeyCode={["Backspace", "Delete"]}

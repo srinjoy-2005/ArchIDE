@@ -1,15 +1,24 @@
-# Compiler Engine Design
+# ArchIDE: PyTorch Compiler Engine Design
 
-This document outlines how we built the `/api/compile` endpoint in Python. The goal of this compiler is to take the raw JSON graph from the frontend and translate it into a valid, executable PyTorch `nn.Module`.
+This document details the architecture and execution pipeline of the ArchIDE PyTorch code compiler and shape inference engine.
 
 > [!NOTE]
-> **Status: ✅ Implemented**
-> The compiler engine, Kahn's topological sort, and the string-based AST generation described here are fully operational in the backend.
+> **Source Files**:
+> - Compiler Core: [`backend/compiler.py`](../../backend/compiler.py)
+> - Pydantic Request Models: [`backend/models.py`](../../backend/models.py#L4-L28)
+> - API Routing & Exception Handling: [`backend/main.py`](../../backend/main.py#L40-L90)
 
-## 1. The Input Payload (CompileRequest & CheckRequest)
-The frontend will send a JSON payload containing `nodes` and `edges`. We define this strictly using Pydantic:
+---
+
+## 1. Request Schemas (`backend/models.py`)
+
+The compiler receives graph representations from the frontend as `CompileRequest` or `CheckRequest` payloads:
 
 ```python
+class Node(BaseModel):
+    id: str
+    data: NodeData  # block_id, label, is_functional, paramValues, varName
+
 class Edge(BaseModel):
     id: str
     source: str
@@ -17,46 +26,61 @@ class Edge(BaseModel):
     target: str
     targetHandle: str
 
-class NodeData(BaseModel):
-    block_id: str = ""
-    label: str
-    is_functional: bool = False
-    paramValues: dict = {}
-    varName: str = ""
-
-class Node(BaseModel):
-    id: str
-    data: NodeData
-
 class CompileRequest(BaseModel):
     nodes: List[Node]
     edges: List[Edge]
 ```
 
-## 2. Topological Sort (The Execution Order)
-You cannot execute a `Linear` layer before the `Input` layer. We must order the nodes mathematically.
+---
 
-**The Algorithm (Kahn's Algorithm):**
-1. Map every edge to an adjacency list: `adjacency[source_node].append(target_node)`
-2. Count the `in_degree` (number of incoming edges) for every node.
-3. Find all nodes with `in_degree == 0` (these are our `Input` blocks) and put them in a Queue.
-4. Pop a node from the Queue, add it to our `sorted_nodes` list, and decrement the `in_degree` of all its neighbors.
-5. If a neighbor's `in_degree` becomes `0`, push it to the Queue.
-6. Continue until the Queue is empty.
+## 2. Compilation Pipeline
 
-## 3. Code Generation (AST / String Building)
-Once we have `sorted_nodes`, we iterate through them exactly twice:
-- **Pass 1 (`__init__`)**: We find all nodes where `is_functional == False`. We look up their block class via `get_block_by_id(node.data.block_id)` and delegate generation by calling `block.emit_init()`.
-- **Pass 2 (`forward`)**: We iterate through *all* nodes to generate the execution path. We look up their incoming edge variables, resolve their output variables, and call `block.emit_forward()`.
+```mermaid
+flowchart TD
+    A[Frontend Graph Payload] --> B[1. Kahn's Topological Sort]
+    B -->|Cycle Detected| ERR1[Raise ValueError 400]
+    B --> C[2. Static Shape Inference Pass]
+    C -->|Shape Mismatch| ERR2[Raise ShapeError 422]
+    C -->|Shape Auto-Inference| D[Mutate Auto-Params]
+    C --> E[3. PyTorch Code Emission]
+    E --> F[Synthesize nn.Module String]
+```
 
-### Variable Tracking (The tricky part)
-To write the `forward` pass, we need to know the names of the variables passed between blocks. We maintain a dictionary: `port_to_var: dict[str, str]`.
-- Key: The `NodeID + PortID` (e.g., `node_1_out`)
-- Value: The generated Python variable name (e.g., `x_1` or a user-provided `varName`)
+### Stage 1: Topological Sort (`backend/compiler.py:L47-L72`)
+To ensure blocks are executed in valid mathematical dependency order, the compiler runs **Kahn's Algorithm**:
+1. Computes `in_degree` (incoming edges) for every node.
+2. Initializes a queue with all zero `in_degree` nodes (the graph's entry points / inputs).
+3. Pops nodes deterministically (`queue.sort()`), decrements neighbor degrees, and pushes newly unblocked nodes.
+4. If `len(sorted_nodes) != len(nodes)`, a cyclic dependency exists and the compiler raises `ValueError("Cycle detected in graph! Cannot compile.")` (mapped to HTTP `400 Bad Request`).
 
-**OOP Generation Loop:**
-Instead of a giant switch/case statement, the compiler relies on polymorphic blocks defined in `backend/blocks/`:
-1. It resolves incoming ports by finding all edges that point to the current node.
-2. It fetches the variables from `port_to_var` for those incoming edges.
-3. It passes `input_vars` and `output_vars` to `block.emit_forward(node_id, input_vars, output_vars, params)`.
-4. The block handles generating its own specific PyTorch string (like `return f"{out_var} = self.layer_{node_id}({in_var})"`) and the compiler simply appends it to the code body.
+### Stage 2: Static Shape & Semantic Analysis (`backend/compiler.py:L78-L148`)
+The `shape_inference_pass` traverses the topologically sorted nodes to validate tensor compatibility without running PyTorch:
+1. **Upstream Gathering**: Maps each input port to its incoming source shape tuple (or `("ANY",)` if dynamic).
+2. **Block Inference**: Calls `block.infer_shapes(incoming, params)` for each node.
+3. **Auto-Parameter Inference**: When a block parameter is `-1` (e.g. `in_features=-1`, `in_channels=-1`, `num_features=-1`), the block auto-infers the dimension from incoming tensor shapes and mutates `node.data.paramValues`.
+4. **Mismatch Detection**: If dimensions violate layer constraints or broadcasting rules, `ShapeError` is raised with `node_id`, `node_label`, and `edge_ids` (mapped to HTTP `422 Unprocessable Content`).
+
+### Stage 3: PyTorch AST Code Generation (`backend/compiler.py:L154-L333`)
+The code generator synthesizes a clean, standard PyTorch `nn.Module`:
+
+1. **Input Signature Resolution** ([`backend/compiler.py`](../../backend/compiler.py#L154-L192)):
+   - Identifies `input` nodes and creates disambiguated argument names: `def forward(self, x_input, x_input_2, ...):`.
+2. **Variable Naming Priority** ([`backend/compiler.py`](../../backend/compiler.py#L194-L220)):
+   - User override in `paramValues["_output_aliases"][port.id]`
+   - User-defined `varName` on the node
+   - Port default `var_hint` (e.g. `fc_out`, `conv_feat`, `sum`)
+   - Sequential fallback: `x_{node_id}`
+3. **`__init__()` Emission**:
+   - Iterates non-functional nodes and calls `block.emit_init(node.id, params)` to create layers (e.g. `self.layer_n2 = nn.Linear(128, 64, bias=True)`).
+4. **`forward()` Emission**:
+   - Calls `block.emit_forward(node.id, input_vars, output_vars, params)` to produce assignment lines.
+   - Collects outputs from `output` blocks to construct the final `return <vars>` statement.
+
+---
+
+## 3. Compiler API Endpoints (`backend/main.py`)
+
+| Endpoint | Method | Request Payload | Response Schema | Purpose |
+|---|---|---|---|---|
+| `/api/check` | `POST` | `CheckRequest` | `{"ok": True, "node_shapes": {...}, "node_params": {...}}` | Fast static shape validation & canvas badge updates without code generation |
+| `/api/compile` | `POST` | `CompileRequest` | `{"code": "import torch\n..."}` | Full static check followed by complete PyTorch module code synthesis |

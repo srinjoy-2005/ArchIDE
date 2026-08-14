@@ -45,11 +45,14 @@ class ShapeError(Exception):
 # ---------------------------------------------------------------------------
 
 def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
+    node_ids = {node.id for node in nodes}
+    valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]
+
     adj       = {node.id: [] for node in nodes}
     in_degree = {node.id: 0  for node in nodes}
     node_map  = {node.id: node for node in nodes}
 
-    for edge in edges:
+    for edge in valid_edges:
         adj[edge.source].append(edge.target)
         in_degree[edge.target] += 1
 
@@ -87,6 +90,9 @@ def shape_inference_pass(
     A dimension value of the string "ANY" means the dimension is dynamically
     determined at runtime.
     """
+    node_ids = {node.id for node in sorted_nodes}
+    valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]
+
     # Maps f"{node_id}_{port_id}" -> shape tuple, e.g. (1, 64, 112, 112)
     tensor_shapes: Dict[str, Tuple] = {}
     # Per-node output shapes for rich reporting
@@ -101,19 +107,27 @@ def shape_inference_pass(
             continue
 
         # Gather incoming shapes from already-resolved upstream ports
-        incoming: Dict[str, Tuple] = {}
+        incoming: Dict[str, Any] = {}
         incoming_edge_ids: List[str] = []
         for port in block.definition.inputs:
-            incoming_edge = next(
-                (e for e in edges if e.target == node.id and e.targetHandle == port.id),
-                None,
-            )
-            if incoming_edge:
-                src_key = f"{incoming_edge.source}_{incoming_edge.sourceHandle}"
-                incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
-                incoming_edge_ids.append(incoming_edge.id)
+            matching_edges = [
+                e for e in valid_edges if e.target == node.id and e.targetHandle == port.id
+            ]
+            if port.is_list:
+                shapes_list = []
+                for e in matching_edges:
+                    src_key = f"{e.source}_{e.sourceHandle}"
+                    shapes_list.append(tensor_shapes.get(src_key, ("ANY",)))
+                    incoming_edge_ids.append(e.id)
+                incoming[port.id] = shapes_list if shapes_list else [("ANY",)]
             else:
-                incoming[port.id] = ("ANY",)
+                if matching_edges:
+                    e = matching_edges[0]
+                    src_key = f"{e.source}_{e.sourceHandle}"
+                    incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
+                    incoming_edge_ids.append(e.id)
+                else:
+                    incoming[port.id] = ("ANY",)
 
         # Keep track of original params to detect auto-inference mutations
         original_params = dict(node.data.paramValues)
@@ -220,8 +234,11 @@ def _build_output_var(
 
 
 def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
+    node_ids = {node.id for node in sorted_nodes}
+    valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]
+
     # ── Step 1: Static shape check (raises ShapeError on mismatch) ──────────
-    shape_inference_pass(sorted_nodes, edges)
+    shape_inference_pass(sorted_nodes, valid_edges)
 
     # ── Step 2: Boilerplate ──────────────────────────────────────────────────
     code = [
@@ -245,14 +262,7 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
     ]
     forward_lines: List[str] = [f"    def forward(self, {', '.join(forward_arg_names)}):"]
 
-    # ── Step 4: Edge lookup table ─────────────────────────────────────────────
-    input_to_source: Dict[str, str] = {}
-    for edge in edges:
-        target_key = f"{edge.target}_{edge.targetHandle}"
-        source_key = f"{edge.source}_{edge.sourceHandle}"
-        input_to_source[target_key] = source_key
-
-    # ── Step 5: Walk the sorted graph and emit code ───────────────────────────
+    # ── Step 4: Walk the sorted graph and emit code ───────────────────────────
     hint_counts: Dict[str, int] = {}
     return_vars: List[str] = []
 
@@ -271,15 +281,32 @@ def generate_pytorch_code(sorted_nodes: List[Node], edges: List[Edge]) -> str:
         params = node.data.paramValues
 
         # Resolve input variable names
-        input_vars: Dict[str, str] = {}
+        input_vars: Dict[str, Any] = {}
         for port in block.definition.inputs:
-            src_key = input_to_source.get(f"{node.id}_{port.id}")
-            input_vars[port.id] = var_map.get(src_key, "None") if src_key else "None"
+            matching_edges = [
+                e for e in valid_edges if e.target == node.id and e.targetHandle == port.id
+            ]
+            if port.is_list:
+                v_list = []
+                for e in matching_edges:
+                    src_key = f"{e.source}_{e.sourceHandle}"
+                    v = var_map.get(src_key, "None")
+                    if v != "None":
+                        v_list.append(v)
+                input_vars[port.id] = v_list
+            else:
+                if matching_edges:
+                    src_key = f"{matching_edges[0].source}_{matching_edges[0].sourceHandle}"
+                    input_vars[port.id] = var_map.get(src_key, "None")
+                else:
+                    input_vars[port.id] = "None"
 
         # Handle Output nodes explicitly
         if block_id == "output":
-            in_var = input_vars.get("in", "None")
-            if in_var != "None":
+            in_var = input_vars.get("in", [])
+            if isinstance(in_var, list):
+                return_vars.extend([v for v in in_var if v != "None"])
+            elif in_var != "None":
                 return_vars.append(in_var)
             continue
 

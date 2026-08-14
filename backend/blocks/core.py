@@ -52,7 +52,7 @@ class OutputBlock(BaseBlock):
             category="Core Layers",
             color="#f43f5e",
             is_functional=True,
-            inputs=[PortDef(id="in", name="Return Value")],
+            inputs=[PortDef(id="in", name="Return Value", is_list=True)],
             outputs=[],
             params=[]
         )

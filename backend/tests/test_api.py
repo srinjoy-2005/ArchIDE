@@ -43,14 +43,14 @@ def test_compile_shape_mismatch():
                 "source": "node_input_a",
                 "sourceHandle": "out",
                 "target": "node_mul",
-                "targetHandle": "in_a"
+                "targetHandle": "in"
             },
             {
                 "id": "edge_b",
                 "source": "node_input_b",
                 "sourceHandle": "out",
                 "target": "node_mul",
-                "targetHandle": "in_b"
+                "targetHandle": "in"
             }
         ]
     }
