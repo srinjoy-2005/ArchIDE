@@ -60,6 +60,64 @@ const getId = () => `node_${nodeCounter++}`;
 // Backend base URL — srinjoy_branch runs the API on port 8001
 const API_BASE = "http://localhost:8001";
 
+// ─── File Tab Bar ──────────────────────────────────────────────────────────────────
+
+function FileTabBar() {
+  const { files, activeFileId, switchFile, createFile, deleteFile, updateFileState } = useEditorStore();
+  const { getNodes, getEdges } = useReactFlow();
+
+  const handleSwitch = (id: string) => {
+    if (id === activeFileId) return;
+    updateFileState(activeFileId, getNodes(), getEdges());
+    switchFile(id);
+  };
+
+  const handleCreate = () => {
+    updateFileState(activeFileId, getNodes(), getEdges());
+    const name = prompt("Enter new module name:");
+    if (name) createFile(name);
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm("Delete this module?")) {
+      deleteFile(id);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1 px-2 pt-2 pb-1 bg-[#181818] border-b border-[#363636] overflow-x-auto flex-shrink-0">
+      {files.map(f => (
+        <div
+          key={f.id}
+          onClick={() => handleSwitch(f.id)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-t-[4px] cursor-pointer text-[11px] transition-colors border border-b-0 ${
+            f.id === activeFileId
+              ? "bg-[#1e1e1e] border-[#363636] text-[#e2e2e2]"
+              : "bg-[#252525] border-transparent text-[#888] hover:bg-[#2a2a2a] hover:text-[#d4d4d4]"
+          }`}
+        >
+          <span>{f.name}</span>
+          {files.length > 1 && (
+            <button
+              onClick={(e) => handleDelete(e, f.id)}
+              className="text-[#555] hover:text-[#e54545]"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={handleCreate}
+        className="ml-1 p-1 rounded hover:bg-[#2a2a2a] text-[#888] hover:text-[#d4d4d4] transition-colors border border-transparent"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 // ─── Fallback blocks (used when backend is unreachable) ────────────────────────
 
 const FALLBACK_BLOCKS: any[] = [
@@ -383,6 +441,9 @@ function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
+  const files = useEditorStore((s) => s.files);
+  const activeFile = files.find(f => f.id === activeFileId);
 
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
@@ -483,6 +544,7 @@ function DnDCanvas() {
           outputs: blockDef.outputs || [],
           is_functional: blockDef.is_functional || false,
           varName: "",
+          custom_module_id: blockDef.custom_module_id, // Store reference to custom file
         },
       };
 
@@ -492,12 +554,15 @@ function DnDCanvas() {
   );
 
   return (
-    <div className="flex-1 relative" ref={canvasRef}>
-      <ReactFlow
-        defaultNodes={initialNodes}
-        defaultEdges={initialEdges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+    <div className="flex-1 relative flex flex-col" ref={canvasRef}>
+      <FileTabBar />
+      <div className="flex-1 relative">
+        <ReactFlow
+          key={activeFileId}
+          defaultNodes={activeFile?.nodes || initialNodes}
+          defaultEdges={activeFile?.edges || initialEdges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
         onConnect={onConnect}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -525,6 +590,7 @@ function DnDCanvas() {
           color="#333"
         />
       </ReactFlow>
+      </div>
     </div>
   );
 }
@@ -716,28 +782,46 @@ function Header() {
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [checkMsg, setCheckMsg] = useState('');
 
+  const files = useEditorStore((s) => s.files);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
+
   // srinjoy's buildPayload — reads live nodes/edges; includes our varName field
   const buildPayload = () => {
     const currentNodes = getNodes();
     const currentEdges = getEdges();
+    
+    const graphs: any = {};
+    for (const f of files) {
+      const isCurrent = f.id === activeFileId;
+      const nList = isCurrent ? currentNodes : f.nodes;
+      const eList = isCurrent ? currentEdges : f.edges;
+
+      graphs[f.id] = {
+        name: f.name,
+        nodes: nList.map((n) => ({
+          id: n.id,
+          data: {
+            block_id: n.data.block_id || "",
+            label: n.data.label,
+            is_functional: n.data.is_functional || false,
+            paramValues: n.data.paramValues || {},
+            varName: (n.data.varName as string) || "",
+            custom_module_id: (n.data.custom_module_id as string) || "",
+          },
+        })),
+        edges: eList.map((e) => ({
+          id: e.id,
+          source: e.source,
+          sourceHandle: e.sourceHandle || "",
+          target: e.target,
+          targetHandle: e.targetHandle || "",
+        })),
+      };
+    }
+
     return {
-      nodes: currentNodes.map((n) => ({
-        id: n.id,
-        data: {
-          block_id: n.data.block_id || "",
-          label: n.data.label,
-          is_functional: n.data.is_functional || false,
-          paramValues: n.data.paramValues || {},
-          varName: (n.data.varName as string) || "",
-        },
-      })),
-      edges: currentEdges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        sourceHandle: e.sourceHandle || "",
-        target: e.target,
-        targetHandle: e.targetHandle || "",
-      })),
+      main_graph_id: activeFileId,
+      graphs
     };
   };
 
@@ -951,9 +1035,32 @@ export default function Home() {
       .catch(() => {}); // fall back to FALLBACK_BLOCKS
   }, []);
 
+  const files = useEditorStore(s => s.files);
+  const activeFileId = useEditorStore(s => s.activeFileId);
+
   // Group by category (srinjoy pattern)
   const categories: Record<string, any[]> = {};
-  registry
+  
+  // Calculate dynamic custom blocks from other files
+  const customBlocks = files.filter(f => f.id !== activeFileId).map(f => {
+    const inputs = f.nodes.filter(n => n.data.block_id === 'input').map(n => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+    const outputs = f.nodes.filter(n => n.data.block_id === 'output').map(n => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+    return {
+      id: `custom_module`,
+      custom_module_id: f.id,
+      name: f.name,
+      category: "Custom Modules",
+      color: "#eab308", // Yellow color
+      is_functional: false,
+      inputs,
+      outputs,
+      params: []
+    };
+  });
+
+  const fullRegistry = [...registry, ...customBlocks];
+
+  fullRegistry
     .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
     .forEach((block) => {
       if (!categories[block.category]) categories[block.category] = [];

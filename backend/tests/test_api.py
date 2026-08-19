@@ -8,52 +8,31 @@ from main import app
 
 client = TestClient(app)
 
+def wrap_payload(nodes, edges):
+    return {
+        "main_graph_id": "main",
+        "graphs": {
+            "main": {
+                "name": "Main",
+                "nodes": nodes,
+                "edges": edges
+            }
+        }
+    }
+
 def test_compile_shape_mismatch():
     # Construct a payload with a Multiply block trying to multiply (4, 3) and (3, 4)
     # This should fail the shape broadcasting and return 422
-    payload = {
-        "nodes": [
-            {
-                "id": "node_input_a",
-                "data": {
-                    "block_id": "input",
-                    "label": "Input A",
-                    "paramValues": {"shape": "(4, 3)"}
-                }
-            },
-            {
-                "id": "node_input_b",
-                "data": {
-                    "block_id": "input",
-                    "label": "Input B",
-                    "paramValues": {"shape": "(3, 4)"}
-                }
-            },
-            {
-                "id": "node_mul",
-                "data": {
-                    "block_id": "mul",
-                    "label": "Multiply"
-                }
-            }
-        ],
-        "edges": [
-            {
-                "id": "edge_a",
-                "source": "node_input_a",
-                "sourceHandle": "out",
-                "target": "node_mul",
-                "targetHandle": "in"
-            },
-            {
-                "id": "edge_b",
-                "source": "node_input_b",
-                "sourceHandle": "out",
-                "target": "node_mul",
-                "targetHandle": "in"
-            }
-        ]
-    }
+    nodes = [
+        {"id": "node_input_a", "data": {"block_id": "input", "label": "Input A", "paramValues": {"shape": "(4, 3)"}}},
+        {"id": "node_input_b", "data": {"block_id": "input", "label": "Input B", "paramValues": {"shape": "(3, 4)"}}},
+        {"id": "node_mul", "data": {"block_id": "mul", "label": "Multiply", "paramValues": {}}}
+    ]
+    edges = [
+        {"id": "edge_a", "source": "node_input_a", "sourceHandle": "out", "target": "node_mul", "targetHandle": "in"},
+        {"id": "edge_b", "source": "node_input_b", "sourceHandle": "out", "target": "node_mul", "targetHandle": "in"}
+    ]
+    payload = wrap_payload(nodes, edges)
     
     response = client.post("/api/check", json=payload)
     
@@ -75,32 +54,30 @@ def test_get_blocks():
     assert any(b["id"] == "linear" for b in blocks)
 
 def test_compile_cycle():
-    payload = {
-        "nodes": [
-            {"id": "n1", "data": {"block_id": "linear", "label": "A", "paramValues": {}}},
-            {"id": "n2", "data": {"block_id": "linear", "label": "B", "paramValues": {}}}
-        ],
-        "edges": [
-            {"id": "e1", "source": "n1", "sourceHandle": "out", "target": "n2", "targetHandle": "in"},
-            {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n1", "targetHandle": "in"}
-        ]
-    }
+    nodes = [
+        {"id": "n1", "data": {"block_id": "linear", "label": "A", "paramValues": {}}},
+        {"id": "n2", "data": {"block_id": "linear", "label": "B", "paramValues": {}}}
+    ]
+    edges = [
+        {"id": "e1", "source": "n1", "sourceHandle": "out", "target": "n2", "targetHandle": "in"},
+        {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n1", "targetHandle": "in"}
+    ]
+    payload = wrap_payload(nodes, edges)
     response = client.post("/api/compile", json=payload)
     assert response.status_code == 400
     assert "Cycle detected" in response.json().get("detail", "")
 
 def test_compile_success():
-    payload = {
-        "nodes": [
-            {"id": "n1", "data": {"block_id": "input", "label": "Input", "paramValues": {"shape": "(2, 10)"}}},
-            {"id": "n2", "data": {"block_id": "linear", "label": "Linear", "paramValues": {"in_features": 10, "out_features": 5}}},
-            {"id": "n3", "data": {"block_id": "output", "label": "Output", "paramValues": {}}}
-        ],
-        "edges": [
-            {"id": "e1", "source": "n1", "sourceHandle": "out", "target": "n2", "targetHandle": "in"},
-            {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n3", "targetHandle": "in"}
-        ]
-    }
+    nodes = [
+        {"id": "n1", "data": {"block_id": "input", "label": "Input", "paramValues": {"shape": "(2, 10)"}}},
+        {"id": "n2", "data": {"block_id": "linear", "label": "Linear", "paramValues": {"in_features": 10, "out_features": 5}}},
+        {"id": "n3", "data": {"block_id": "output", "label": "Output", "paramValues": {}}}
+    ]
+    edges = [
+        {"id": "e1", "source": "n1", "sourceHandle": "out", "target": "n2", "targetHandle": "in"},
+        {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n3", "targetHandle": "in"}
+    ]
+    payload = wrap_payload(nodes, edges)
     response = client.post("/api/compile", json=payload)
     assert response.status_code == 200
     data = response.json()

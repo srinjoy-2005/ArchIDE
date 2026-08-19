@@ -19,6 +19,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[August 20, 2026](changelog/2026_08_20.md)**: Implemented multi-file custom modules with double-pass Kahn's topological sort for deep nesting support, integrated dynamic sidebar UI, and upgraded compiler payloads.
 *   **[August 14, 2026](changelog/2026_08_14.md)**: Overhauled docs with relative links, sync workflow (`scripts/sync.py`, CI), variadic ports, orphan edge resilience, and master roadmap overhaul.
 *   **[August 11, 2026](changelog/2026_08_11.md)**: Implemented backend testing suite (block inference, cycle detection, AST compilation checks), testing plan, and TypeScript configs.
 *   **[July 28, 2026](changelog/2026_07_28.md)**: Compiler OO architecture refactor, shape inference pass & ShapeError 422 responses, three-section Properties Panel, and 10 new blocks.

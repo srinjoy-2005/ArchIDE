@@ -26,9 +26,15 @@ class Edge(BaseModel):
     target: str
     targetHandle: str
 
-class CompileRequest(BaseModel):
+class GraphData(BaseModel):
+    name: str = "Model"
     nodes: List[Node]
     edges: List[Edge]
+
+class CompileRequest(BaseModel):
+    main_graph_id: str
+    graphs: Dict[str, GraphData]
+
 ```
 
 ---
@@ -46,12 +52,12 @@ flowchart TD
     E --> F[Synthesize nn.Module String]
 ```
 
-### Stage 1: Topological Sort (`backend/compiler.py:L47-L72`)
-To ensure blocks are executed in valid mathematical dependency order, the compiler runs **Kahn's Algorithm**:
-1. Computes `in_degree` (incoming edges) for every node.
-2. Initializes a queue with all zero `in_degree` nodes (the graph's entry points / inputs).
+### Stage 1: Topological Sort (`backend/compiler.py:L47-L86`)
+To ensure blocks are executed in valid mathematical dependency order, the compiler runs **Kahn's Algorithm** in two passes:
+1. **Graph-Level Sort**: Resolves inter-module dependencies across `request.graphs`. Custom modules are detected via `custom_module_id` payloads. If Graph A uses a custom module defined in Graph B, Graph B is sorted first.
+2. **Node-Level Sort**: Computes `in_degree` (incoming edges) for every node inside a graph. Initializes a queue with all zero `in_degree` nodes.
 3. Pops nodes deterministically (`queue.sort()`), decrements neighbor degrees, and pushes newly unblocked nodes.
-4. If `len(sorted_nodes) != len(nodes)`, a cyclic dependency exists and the compiler raises `ValueError("Cycle detected in graph! Cannot compile.")` (mapped to HTTP `400 Bad Request`).
+4. If `len(sorted_nodes) != len(nodes)`, a cyclic dependency exists and the compiler raises `ValueError` (mapped to HTTP `400 Bad Request`).
 
 ### Stage 2: Static Shape & Semantic Analysis (`backend/compiler.py:L78-L148`)
 The `shape_inference_pass` traverses the topologically sorted nodes to validate tensor compatibility without running PyTorch:

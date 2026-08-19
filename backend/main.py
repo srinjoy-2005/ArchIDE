@@ -40,8 +40,7 @@ def get_block_docs(block_id: str):
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
-        sorted_nodes = topological_sort(request.nodes, request.edges)
-        code = generate_pytorch_code(sorted_nodes, request.edges)
+        code = generate_pytorch_code(request.graphs, request.main_graph_id)
         resp = {"code": code}
         print_payloads(request, resp)
         return resp
@@ -65,8 +64,8 @@ def check_shapes(request: CheckRequest):
     Returns per-node output shapes and auto-inferred parameters, or a structured error on the first mismatch.
     """
     try:
-        sorted_nodes = topological_sort(request.nodes, request.edges)
-        node_shapes, node_params = shape_inference_pass(sorted_nodes, request.edges)
+        from compiler import shape_inference_multi_graph
+        node_shapes, node_params = shape_inference_multi_graph(request.graphs, request.main_graph_id)
         # Convert tuples to lists for JSON serialisation
         serialisable = {
             node_id: {port: list(shape) for port, shape in ports.items()}

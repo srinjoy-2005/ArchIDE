@@ -71,6 +71,8 @@ flowchart LR
 
 | State Field | Type | Description |
 |---|---|---|
+| `files` | `GraphFile[]` | List of all open files/graphs in the project |
+| `activeFileId` | `string` | ID of the currently active tab/file |
 | `generatedCode` | `string` | Current PyTorch module code string |
 | `shapeErrorNodeId` | `string \| null` | Node ID with an active shape mismatch (highlights node red) |
 | `nodeShapes` | `Record<string, Record<string, number[]>>` | Maps `node_id -> { port_id: shape_array }` returned by `/api/check` |
@@ -81,11 +83,11 @@ flowchart LR
 
 ## 4. Backend Communication Pipeline
 
-1. **Palette Loading**: `GET /api/blocks` initializes the sidebar palette. If backend is offline, falls back to `FALLBACK_BLOCKS`.
+1. **Palette Loading**: `GET /api/blocks` initializes the sidebar palette. The frontend also scans all `files` (except the active one) to generate "Custom Modules" on the fly based on their `Input` and `Output` nodes.
 2. **Static Shape Check ("Run Static Tensor Check")**:
-   - Sends `{ nodes, edges }` to `POST /api/check`.
+   - Sends recursive multi-graph payload `{ main_graph_id, graphs }` to `POST /api/check`.
    - On success (`200 OK`): Updates `nodeShapes` in store; shape chips appear on edges and nodes.
    - On error (`422 Unprocessable Content`): Reads `detail.node_id`, sets `shapeErrorNodeId`, and displays toast with error details.
 3. **PyTorch Export ("Export PyTorch")**:
-   - Sends `{ nodes, edges }` to `POST /api/compile`.
+   - Sends `{ main_graph_id, graphs }` to `POST /api/compile`. Node `data` for custom modules includes `custom_module_id`.
    - On success: Stores compiled code in `generatedCode` and opens code viewer modal.
