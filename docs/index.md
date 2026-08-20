@@ -4,6 +4,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 
 ## 🏗 Architecture & Overview
 *   **[Architecture Overview](architecture_overview.md)**: High-level overview of the Next.js frontend and Python FastAPI backend architecture.
+*   **[Custom Modules Architecture](backend/custom_modules_architecture.md)**: Technical specification for custom module resolution, project structure, dual-target codegen, and incremental compilation.
 *   **[Frontend Architecture](frontend/architecture.md)**: Technical guidelines for React Flow uncontrolled canvas, custom node/edge components, and Zustand store.
 *   **[Compiler Design](backend/compiler_design.md)**: Details on Kahn's topological sort algorithm, static shape inference pass, and PyTorch AST code generation.
 *   **[Backend Testing](backend/testing.md)**: Specifications for automated backend unit and integration test suites.
