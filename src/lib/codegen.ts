@@ -1,3 +1,12 @@
+/**
+ * src/lib/codegen.ts
+ * 
+ * This module provides a basic fallback code generation implementation.
+ * It traverses the React Flow graph (nodes and edges) and generates 
+ * simple sequential PyTorch code. Note: A more robust Kahn's topological
+ * sort compiler exists in the backend (`backend/compiler.py`), but this 
+ * provides a naive client-side PoC compilation.
+ */
 import { Node, Edge } from '@xyflow/react';
 
 export function generatePyTorchCode(nodes: Node[], edges: Edge[]): string {

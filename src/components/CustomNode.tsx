@@ -1,3 +1,13 @@
+/**
+ * src/components/CustomNode.tsx
+ *
+ * This component defines the visual representation of a PyTorch block (layer/function)
+ * on the React Flow canvas. It includes:
+ * - Dynamic category accent colors
+ * - Input/Output handles (`<Handle>`) for connections
+ * - A hover tooltip that displays tensor shape inferences for the node's ports
+ * - A quick action toolbar for deleting or duplicating the node
+ */
 import React, { memo, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Trash2, Copy, AlertTriangle } from 'lucide-react';

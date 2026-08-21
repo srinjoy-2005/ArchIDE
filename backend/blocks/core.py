@@ -93,8 +93,10 @@ class LinearBlock(BaseBlock):
         if not in_shape or in_shape == ("ANY",):
             return {"out": ("ANY",)}
 
+        # nn.Linear operates on the last dimension only: (*, H_in) -> (*, H_out).
+        # It natively supports any number of leading dimensions, so no shape guard is needed.
         in_features = params.get("in_features", 128)
-        
+
         # Auto-infer in_features if set to -1
         if in_features == -1 and len(in_shape) > 0 and in_shape[-1] != "ANY":
             in_features = in_shape[-1]

@@ -1,3 +1,13 @@
+/**
+ * src/lib/store.ts
+ *
+ * This is the central Zustand state management store for ArchIDE.
+ * It manages:
+ * - Generated PyTorch code display
+ * - Shape validation states (errors and inferred shapes)
+ * - Documentation panel and context menu visibility
+ * - Multi-file graph sessions (creating, switching, and deleting tabs)
+ */
 import { create } from 'zustand';
 import { Node, Edge } from '@xyflow/react';
 

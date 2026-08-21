@@ -153,17 +153,19 @@ function ModelSummaryDashboard() {
 
   const loadStarter = () => {
     const n: Node[] = [
-      { id: "s1", type: "custom", position: { x: 60,  y: 160 }, data: { block_id: "input",  label: "Input",  is_functional: true,  params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }], paramValues: { shape: "(1,3,224,224)" }, inputs: [], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s2", type: "custom", position: { x: 270, y: 160 }, data: { block_id: "conv2d", label: "Conv2D", is_functional: false, params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s3", type: "custom", position: { x: 480, y: 160 }, data: { block_id: "relu",   label: "ReLU",   is_functional: false, params: [], paramValues: {}, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s4", type: "custom", position: { x: 680, y: 160 }, data: { block_id: "linear", label: "Linear", is_functional: false, params: [{ name: "in_features", type: "int", default: 16 }, { name: "out_features", type: "int", default: 10 }], paramValues: { in_features: 16, out_features: 10 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s5", type: "custom", position: { x: 880, y: 160 }, data: { block_id: "output", label: "Output", is_functional: true,  params: [], paramValues: {}, inputs: [{ id: "in", name: "Return Value" }], outputs: [] } },
+      { id: "s1", type: "custom", position: { x: 60,  y: 160 }, data: { block_id: "input",   label: "Input",   is_functional: true,  params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }], paramValues: { shape: "(1,3,224,224)" }, inputs: [], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s2", type: "custom", position: { x: 270, y: 160 }, data: { block_id: "conv2d",  label: "Conv2D",  is_functional: false, params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s3", type: "custom", position: { x: 480, y: 160 }, data: { block_id: "relu",    label: "ReLU",    is_functional: false, params: [], paramValues: {}, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s4", type: "custom", position: { x: 670, y: 160 }, data: { block_id: "flatten", label: "Flatten", is_functional: true,  params: [{ name: "start_dim", type: "int", default: 1 }, { name: "end_dim", type: "int", default: -1 }], paramValues: { start_dim: 1, end_dim: -1 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s5", type: "custom", position: { x: 880, y: 160 }, data: { block_id: "linear",  label: "Linear",  is_functional: false, params: [{ name: "in_features", type: "int", default: 128 }, { name: "out_features", type: "int", default: 10 }], paramValues: { in_features: -1, out_features: 10 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s6", type: "custom", position: { x: 1090, y: 160 }, data: { block_id: "output",  label: "Output",  is_functional: true,  params: [], paramValues: {}, inputs: [{ id: "in", name: "Return Value" }], outputs: [] } },
     ];
     const e: Edge[] = [
       { id: "e12", source: "s1", sourceHandle: "out", target: "s2", targetHandle: "in", type: "tensor" },
       { id: "e23", source: "s2", sourceHandle: "out", target: "s3", targetHandle: "in", type: "tensor" },
       { id: "e34", source: "s3", sourceHandle: "out", target: "s4", targetHandle: "in", type: "tensor" },
       { id: "e45", source: "s4", sourceHandle: "out", target: "s5", targetHandle: "in", type: "tensor" },
+      { id: "e56", source: "s5", sourceHandle: "out", target: "s6", targetHandle: "in", type: "tensor" },
     ];
     setNodes(n);
     setEdges(e);
@@ -563,16 +565,19 @@ function DnDCanvas() {
           defaultEdges={activeFile?.edges || initialEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-        onConnect={onConnect}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodesDelete={onNodesDelete}
-        isValidConnection={isValidConnection}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        deleteKeyCode={["Backspace", "Delete"]}
-        fitView
-      >
+          // panOnScroll={true}
+          // panOnScrollSpeed={1}
+          zoomOnPinch={true}
+          onConnect={onConnect}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodesDelete={onNodesDelete}
+          isValidConnection={isValidConnection}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          deleteKeyCode={["Backspace", "Delete"]}
+          fitView
+        >
         <Controls
           className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]"
           style={{ bottom: 16, left: 16 }}
@@ -956,7 +961,7 @@ function Header() {
         <div className="w-5 h-5 rounded-sm bg-[#2d8cf0] flex items-center justify-center">
           <Layers className="w-3 h-3 text-white" />
         </div>
-        <span className="text-[13px] font-semibold text-[#d4d4d4] tracking-tight">ArchiDE</span>
+        <span className="text-[2rem] font-semibold text-[#d4d4d4] tracking-tight">ArchiDE</span>
         <span className="text-[10px] font-mono text-[#555] border border-[#363636] px-1.5 py-px rounded-sm">PyTorch</span>
       </div>
 
