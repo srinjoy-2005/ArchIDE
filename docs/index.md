@@ -19,6 +19,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[August 25, 2026](changelog/2026_08_25.md)**: Refactored monolithic `page.tsx` (1255 lines) into 8 modular component files (`DnDCanvas`, `Header`, `BlockLibrary`, `PropertiesPanel`, `RightPanel`, `CodePanel`, `DocPanels`) plus `src/lib/constants.ts`. Updated `docs/frontend/architecture.md` to reflect new structure.
 *   **[August 22, 2026](changelog/2026_08_22.md)**: Added source file comments across frontend modules, fixed `LinearBlock` silent 4D→Linear shape pass-through bug, and corrected the `loadStarter` demo pipeline by inserting a required Flatten node.
 *   **[August 20, 2026](changelog/2026_08_20.md)**: Implemented multi-file custom modules with double-pass Kahn's topological sort for deep nesting support, integrated dynamic sidebar UI, and upgraded compiler payloads.
 *   **[August 14, 2026](changelog/2026_08_14.md)**: Overhauled docs with relative links, sync workflow (`scripts/sync.py`, CI), variadic ports, orphan edge resilience, and master roadmap overhaul.

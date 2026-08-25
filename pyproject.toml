@@ -1,0 +1,4 @@
+[tool.pyrefly]
+python-interpreter-path = "backend/venv/bin/python3"
+site-package-path = ["backend/venv/lib/python3.10/site-packages"]
+search-path = ["backend"]
