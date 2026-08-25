@@ -33,7 +33,7 @@ def _label_to_identifier(label: str) -> str:
 
 class ShapeError(Exception):
     """Raised when a shape mismatch is detected during static analysis."""
-    def __init__(self, message: str, node_id: str, node_label: str, edge_ids: List[str] = None):
+    def __init__(self, message: str, node_id: str, node_label: str, edge_ids: List[str] | None = None):
         super().__init__(message)
         self.node_id = node_id
         self.node_label = node_label
@@ -163,7 +163,7 @@ class CustomModuleBlock(BaseBlock):
         else:
             return f"{', '.join(out_args)} = {var_name}({in_str})"
             
-    def infer_shapes(self, incoming: dict, params: dict) -> dict:
+    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         return {port.id: ("ANY",) for port in self.definition.outputs}
 
 
@@ -192,7 +192,7 @@ def shape_inference_multi_graph(graphs: Dict[str, Any], main_graph_id: str):
 def shape_inference_pass(
     sorted_nodes: List[Node],
     edges: List[Edge],
-    graphs: Dict[str, Any] = None
+    graphs: Dict[str, Any]|None = None
 ) -> Tuple[Dict[str, Dict[str, Tuple]], Dict[str, Dict[str, Any]]]:
     graphs = graphs or {}
     node_ids = {node.id for node in sorted_nodes}
