@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Git pre-push hook to prevent pushing broken commits to main
+
+set -e
+
+# Read pushed refs from stdin
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Check if pushing to main or master
+  if [[ "$remote_ref" =~ refs/heads/main$ ]] || [[ "$remote_ref" =~ refs/heads/master$ ]]; then
+    echo ""
+    echo "========================================================="
+    echo "🛡️  Running ArchIDE Pre-Push Validation for $remote_ref..."
+    echo "========================================================="
+
+    # 1. Backend PyTest Validation
+    echo "🧪 Running Backend Tests (pytest)..."
+    if [ -f "backend/.venv/bin/pytest" ]; then
+      backend/.venv/bin/pytest backend/tests/ -q
+    elif command -v pytest >/dev/null 2>&1; then
+      pytest backend/tests/ -q
+    else
+      python3 -m pytest backend/tests/ -q
+    fi
+
+    # 2. Frontend Typecheck & Build Validation
+    echo "⚙️  Typechecking Frontend (tsc)..."
+    npx tsc --noEmit
+
+    echo "📦 Building Frontend (npm run build)..."
+    npm run build
+
+    echo "✅ All tests and builds passed! Proceeding with push."
+    echo "========================================================="
+    echo ""
+  fi
+done
+
+exit 0

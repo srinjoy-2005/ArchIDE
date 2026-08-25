@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "sync": "python scripts/sync.py",
-    "test:backend": "pytest backend/tests"
+    "test:backend": "pytest backend/tests",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",
