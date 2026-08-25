@@ -26,8 +26,11 @@ import {
   Edit2,
   Trash2,
   FileCode,
+  Network,
   Check,
   X,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 interface CreatingState {
@@ -46,6 +49,7 @@ export function FileExplorer() {
     folders,
     files,
     activeFileId,
+    setActiveViewMode,
     createFile,
     createFolder,
     renameFile,
@@ -56,6 +60,8 @@ export function FileExplorer() {
     setAllFoldersExpanded,
     openTab,
     updateFileState,
+    exportProjectJson,
+    importProjectJson,
   } = useEditorStore();
 
   const { getNodes, getEdges } = useReactFlow();
@@ -67,6 +73,36 @@ export function FileExplorer() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportProject = () => {
+    updateFileState(activeFileId, getNodes(), getEdges());
+    const jsonStr = exportProjectJson();
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'archide_project.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportProject = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        const ok = importProjectJson(content);
+        if (!ok) {
+          alert('Failed to import project: Invalid format.');
+        }
+      }
+    };
+    reader.readAsText(file);
+    if (event.target) event.target.value = '';
+  };
 
   useEffect(() => {
     if (creating && inputRef.current) {
@@ -82,10 +118,14 @@ export function FileExplorer() {
     }
   }, [renaming]);
 
-  // Handle opening/switching active file with state snapshot
+  // Handle opening/switching active file with state snapshot & view mode
   const handleSelectFile = (fileId: string) => {
     updateFileState(activeFileId, getNodes(), getEdges());
     openTab(fileId);
+    const targetFile = files.find(f => f.id === fileId);
+    if (targetFile?.fileType === 'code' || targetFile?.name.endsWith('.py')) {
+      setActiveViewMode('code');
+    }
   };
 
   // Confirm creation of new item
@@ -95,7 +135,8 @@ export function FileExplorer() {
     if (name) {
       updateFileState(activeFileId, getNodes(), getEdges());
       if (creating.type === 'file') {
-        createFile(name, creating.parentId);
+        const isCode = name.endsWith('.py');
+        createFile(name, creating.parentId, isCode ? 'code' : 'graph');
       } else {
         createFolder(name, creating.parentId);
       }
@@ -265,6 +306,7 @@ export function FileExplorer() {
         {currentFiles.map((file) => {
           const isActive = file.id === activeFileId;
           const isRenamingThis = renaming?.id === file.id && !renaming.isFolder;
+          const isCode = file.fileType === 'code' || file.name.endsWith('.py');
 
           return (
             <div
@@ -278,7 +320,11 @@ export function FileExplorer() {
               style={{ paddingLeft: `${depth * 12 + (parentId ? 18 : 8)}px` }}
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#2d8cf0]' : 'text-[#666666]'}`} />
+                {isCode ? (
+                  <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#eab308]' : 'text-[#888888]'}`} />
+                ) : (
+                  <Network className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#38bdf8]' : 'text-[#666666]'}`} />
+                )}
                 {isRenamingThis ? (
                   <input
                     ref={renameInputRef}
@@ -381,6 +427,28 @@ export function FileExplorer() {
           >
             <FolderMinus className="w-3.5 h-3.5" />
           </button>
+          <div className="w-[1px] h-3 bg-[#333] mx-0.5" />
+          <button
+            onClick={handleExportProject}
+            title="Export Project (Save)"
+            className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Import Project (Open)"
+            className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportProject}
+            className="hidden"
+          />
         </div>
       </div>
 

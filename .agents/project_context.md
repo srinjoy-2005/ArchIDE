@@ -9,21 +9,24 @@ ArchIDE is a full-stack node-based PyTorch architecture builder.
 - **Communication**: Frontend sends JSON payloads describing nodes and edges to the `/api/compile` endpoint, and fetches available block definitions from `/api/blocks`.
 
 ## 2. Technical Guidelines & Guardrails
-### Frontend (React Flow)
-- **UNCONTROLLED MODE IS REQUIRED**: The `ReactFlow` component in `src/app/page.tsx` (`DnDCanvas`) is strictly designed to be **uncontrolled** (using `defaultNodes` and `defaultEdges` instead of `nodes={nodes}`). This allows internal React Flow state to be the single source of truth.
-- **State Manipulation**: Do NOT use `useNodesState` or `useEdgesState`. To manipulate nodes from outside the canvas (like in `PropertiesPanel`), use `useReactFlow().setNodes()` or simply mutate the node parameters.
+### Frontend (React Flow & VFS)
+- **UNCONTROLLED MODE IS REQUIRED**: The `ReactFlow` component in `src/components/DnDCanvas.tsx` is strictly designed to be **uncontrolled** (using `defaultNodes` and `defaultEdges` instead of `nodes={nodes}`). This allows internal React Flow state to be the single source of truth.
+- **State Manipulation**: Do NOT use `useNodesState` or `useEdgesState`. To manipulate nodes from outside the canvas (like in `PropertiesPanel`), use `useReactFlow().setNodes()`.
 - **Selection**: We rely on reading the internal store (e.g. `const selectedNode = useNodes().find(n => n.selected)`) rather than `useOnSelectionChange` local state tracking to ensure UI always stays perfectly synced with the canvas.
+- **VFS Snapshotting**: Before switching tabs or files in `FileTabBar` or `FileExplorer`, call `updateFileState(activeFileId, getNodes(), getEdges())` to snapshot live canvas state to Zustand.
 
-### Backend (FastAPI & Compiler)
-- **Topological Sorting**: `backend/compiler.py` uses Kahn's algorithm to resolve dependencies. Node cyclic dependencies will throw a `ValueError` which gets propagated back to the frontend as a `400 Bad Request`.
-- **String-Based Code Generation**: PyTorch code is generated structurally. Stateful layers (like `nn.Linear` or `nn.Conv2d`) are appended to `__init__`, while functional operations (like `Add` or `Split`) go straight into `forward()`.
-- **Extending Blocks**: If adding a new block, define it in `backend/registry.py` under the `REGISTRY` list using the `BlockDef` Pydantic model (`backend/models.py`). 
+### Backend (FastAPI, Compiler & Submodules)
+- **Topological Sorting**: `backend/compiler.py` uses Kahn's algorithm to resolve dependencies. Node cyclic dependencies throw a `ValueError` which gets propagated back as a `400 Bad Request`.
+- **Submodule Constructor & Shape Propagation**: Custom submodules extract graph parameters (`GraphData.parameters`), forward arguments to instances (e.g. `ResBlock(in_channels=64, ...)`), and run isolated sub-graph passes in `infer_shapes` overriding input nodes with actual incoming tensor shapes.
+- **Headless Project Loader**: `backend/project_loader.py` allows direct loading and compilation of manifest projects (`archide.project.json`) and directories of JSON graphs for automated testing.
+- **Extending Blocks**: If adding a new block, define its schema and logic in `backend/blocks/` and register in `backend/registry.py`.
 
-## 3. What to Look Into & When
-- **UI/UX Changes**: Look in `src/app/page.tsx` (the main layout, properties panel, and canvas) or `src/components/CustomNode.tsx`.
-- **Compiler/Export Bugs**: Look in `backend/compiler.py`.
-- **Adding New Nodes/Layers**: Look in `backend/registry.py` and `backend/compiler.py` (to define how it parses into PyTorch string blocks).
-- **TypeScript Type Issues**: Refer to `backend/models.py` to see the Python Pydantic schemas that we mirror in the frontend.
+## 3. Component & Source Directory Mapping
+- **Activity Bar & Sidebar**: `src/components/ActivityBar.tsx`, `src/components/FileExplorer.tsx` (VFS), `src/components/BlockLibrary.tsx`.
+- **Canvas & Code Workspace**: `src/components/DnDCanvas.tsx`, `src/components/CentralCodeEditor.tsx`, `src/components/CustomNode.tsx`, `src/components/TensorEdge.tsx`.
+- **Inspector & Properties**: `src/components/RightPanel.tsx`, `src/components/PropertiesPanel.tsx`.
+- **Header & API Payload**: `src/components/Header.tsx`.
+- **Compiler & Testing**: `backend/compiler.py`, `backend/project_loader.py`, `backend/tests/`.
 
 ## 4. Documentation References
-Refer to the `docs/index.md` file for deep technical references on the Block Registry, Compiler Engine, and Roadmaps. Always update the relevant documentation if you alter architecture logic.
+Refer to `docs/index.md` for deep technical references on the Block Registry, Compiler Engine, and Roadmaps. Always update the relevant documentation if you alter architecture logic.

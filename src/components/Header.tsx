@@ -30,6 +30,7 @@ export function Header() {
   const setGeneratedCode  = useEditorStore((s) => s.setGeneratedCode);
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const setNodeShapes     = useEditorStore((s) => s.setNodeShapes);
+  const setActiveViewMode = useEditorStore((s) => s.setActiveViewMode);
   const files             = useEditorStore((s) => s.files);
   const activeFileId      = useEditorStore((s) => s.activeFileId);
 
@@ -43,13 +44,16 @@ export function Header() {
     const currentEdges = getEdges();
     const graphs: any = {};
     for (const f of files) {
+      if (f.fileType === 'code' || f.name.endsWith('.py')) continue;
       const isCurrent = f.id === activeFileId;
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
       graphs[f.id] = {
-        name: f.name,
+        name: f.name.replace(/\.[^/.]+$/, ""),
+        parameters: f.parameters || [],
         nodes: nList.map((n) => ({
           id: n.id,
+          position: n.position || { x: 100, y: 100 },
           data: {
             block_id: n.data.block_id || '',
             label: n.data.label,
@@ -101,6 +105,7 @@ export function Header() {
       if (response.ok) {
         setGeneratedCode(data.code);
         setShapeErrorNodeId(null);
+        setActiveViewMode('code');
       } else {
         if (data.detail?.error === 'ShapeMismatch') {
           setShapeErrorNodeId(data.detail.node_id);

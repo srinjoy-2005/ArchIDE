@@ -1,0 +1,44 @@
+{
+  "id": "res_block",
+  "name": "ResBlock",
+  "nodes": [
+    {
+      "id": "rb_in",
+      "position": { "x": 50, "y": 100 },
+      "data": { "block_id": "input", "label": "x", "paramValues": { "shape": "(1, 32, 224, 224)" } }
+    },
+    {
+      "id": "rb_cbr1",
+      "position": { "x": 200, "y": 100 },
+      "data": { "block_id": "custom_module", "custom_module_id": "conv_bn_relu", "label": "CBR1", "paramValues": { "in_channels": 32, "out_channels": 32 } }
+    },
+    {
+      "id": "rb_cbr2",
+      "position": { "x": 380, "y": 100 },
+      "data": { "block_id": "custom_module", "custom_module_id": "conv_bn_relu", "label": "CBR2", "paramValues": { "in_channels": 32, "out_channels": 32 } }
+    },
+    {
+      "id": "rb_add",
+      "position": { "x": 550, "y": 100 },
+      "data": { "block_id": "add", "label": "Add Residual", "paramValues": {} }
+    },
+    {
+      "id": "rb_relu",
+      "position": { "x": 700, "y": 100 },
+      "data": { "block_id": "relu", "label": "ReLU", "paramValues": {} }
+    },
+    {
+      "id": "rb_out",
+      "position": { "x": 850, "y": 100 },
+      "data": { "block_id": "output", "label": "out", "paramValues": {} }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "rb_in", "sourceHandle": "out", "target": "rb_cbr1", "targetHandle": "cbr_in" },
+    { "id": "e2", "source": "rb_cbr1", "sourceHandle": "cbr_out", "target": "rb_cbr2", "targetHandle": "cbr_in" },
+    { "id": "e3", "source": "rb_cbr2", "sourceHandle": "cbr_out", "target": "rb_add", "targetHandle": "in" },
+    { "id": "e4", "source": "rb_in", "sourceHandle": "out", "target": "rb_add", "targetHandle": "in" },
+    { "id": "e5", "source": "rb_add", "sourceHandle": "out", "target": "rb_relu", "targetHandle": "in" },
+    { "id": "e6", "source": "rb_relu", "sourceHandle": "out", "target": "rb_out", "targetHandle": "in" }
+  ]
+}

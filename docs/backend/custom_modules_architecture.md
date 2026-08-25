@@ -288,9 +288,9 @@ my_model_project/
 ├── archide.project.json            # Project manifest & metadata
 ├── main_graph.xml                  # Main model graph
 ├── modules/                        # Reusable custom submodules
-│   ├── conv_bn_relu.xml
-│   ├── attention_head.xml
-│   └── transformer_block.xml
+│   ├── conv_bn_relu.json
+│   ├── attention_head.json
+│   └── transformer_block.json
 ├── .arch_cache/                    # Transient build cache (gitignored)
 │   ├── manifest_cache.json
 │   └── shape_cache.json

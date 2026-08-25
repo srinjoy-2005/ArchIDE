@@ -1,0 +1,13 @@
+{
+  "name": "ResNetModel",
+  "version": "1.0.0",
+  "entry_point": "main",
+  "folders": [
+    { "id": "fol_blocks", "name": "blocks", "parentId": null }
+  ],
+  "files": [
+    { "id": "conv_bn_relu", "name": "ConvBnRelu", "path": "blocks/conv_bn_relu.json", "parentId": "fol_blocks" },
+    { "id": "res_block", "name": "ResBlock", "path": "blocks/res_block.json", "parentId": "fol_blocks" },
+    { "id": "main", "name": "Main", "path": "main.json", "parentId": null }
+  ]
+}

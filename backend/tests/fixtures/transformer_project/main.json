@@ -1,0 +1,38 @@
+{
+  "id": "main",
+  "name": "TransformerEncoderLayer",
+  "nodes": [
+    {
+      "id": "t_in",
+      "position": { "x": 50, "y": 100 },
+      "data": { "block_id": "input", "label": "Tokens", "paramValues": { "shape": "(1, 16, 64)" } }
+    },
+    {
+      "id": "t_ln",
+      "position": { "x": 200, "y": 100 },
+      "data": { "block_id": "layernorm", "label": "Pre-LN", "paramValues": { "normalized_shape": "64" } }
+    },
+    {
+      "id": "t_mlp",
+      "position": { "x": 380, "y": 100 },
+      "data": { "block_id": "custom_module", "custom_module_id": "mlp_block", "label": "MLP Submodule", "paramValues": { "d_model": 64, "d_ff": 128 } }
+    },
+    {
+      "id": "t_add",
+      "position": { "x": 550, "y": 100 },
+      "data": { "block_id": "add", "label": "Residual Add", "paramValues": {} }
+    },
+    {
+      "id": "t_out",
+      "position": { "x": 700, "y": 100 },
+      "data": { "block_id": "output", "label": "Encoded Out", "paramValues": {} }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "t_in", "sourceHandle": "out", "target": "t_ln", "targetHandle": "in" },
+    { "id": "e2", "source": "t_ln", "sourceHandle": "out", "target": "t_mlp", "targetHandle": "mlp_in" },
+    { "id": "e3", "source": "t_mlp", "sourceHandle": "mlp_out", "target": "t_add", "targetHandle": "in" },
+    { "id": "e4", "source": "t_in", "sourceHandle": "out", "target": "t_add", "targetHandle": "in" },
+    { "id": "e5", "source": "t_add", "sourceHandle": "out", "target": "t_out", "targetHandle": "in" }
+  ]
+}

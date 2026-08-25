@@ -2,7 +2,12 @@ from typing import Dict, Tuple, Any, List
 from .base import BaseBlock
 from models import BlockDef, PortDef, ParamDef
 
-def broadcast_shapes(shape_a: Tuple, shape_b: Tuple) -> Tuple:
+def broadcast_shapes(shape_a: Any, shape_b: Any) -> Tuple:
+    if isinstance(shape_a, list):
+        shape_a = tuple(shape_a)
+    if isinstance(shape_b, list):
+        shape_b = tuple(shape_b)
+
     if shape_a == ("ANY",): return shape_b
     if shape_b == ("ANY",): return shape_a
     

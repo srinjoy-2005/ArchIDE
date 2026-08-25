@@ -35,8 +35,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode';
 import TensorEdge from './TensorEdge';
+import { CentralCodeEditor } from './CentralCodeEditor';
 import { useEditorStore } from '../lib/store';
-import { Plus, X, FileCode } from 'lucide-react';
+import { Plus, X, FileCode, Network, Code2 } from 'lucide-react';
 import { getId, initialNodes, initialEdges } from '../lib/constants';
 
 // Defined at module level to avoid re-creating objects on every render,
@@ -47,7 +48,18 @@ const edgeTypes = { tensor: TensorEdge };
 // ─── FileTabBar ───────────────────────────────────────────────────────────────
 
 function FileTabBar() {
-  const { files, folders, openTabIds, activeFileId, switchFile, createFile, closeTab, updateFileState } = useEditorStore();
+  const {
+    files,
+    folders,
+    openTabIds,
+    activeFileId,
+    activeViewMode,
+    setActiveViewMode,
+    switchFile,
+    createFile,
+    closeTab,
+    updateFileState
+  } = useEditorStore();
   const { getNodes, getEdges } = useReactFlow();
 
   const handleSwitch = (id: string) => {
@@ -59,7 +71,7 @@ function FileTabBar() {
 
   const handleCreate = () => {
     updateFileState(activeFileId, getNodes(), getEdges());
-    const name = prompt('Enter new file name:');
+    const name = prompt('Enter new file name (e.g. attention.json or layer.py):');
     if (name) createFile(name);
   };
 
@@ -69,7 +81,7 @@ function FileTabBar() {
     closeTab(id);
   };
 
-  // Helper to compute display path (e.g. "models/attention")
+  // Helper to compute display path (e.g. "blocks/conv/res_block.json")
   const getDisplayPath = (file: typeof files[0]) => {
     const parent = folders.find((f) => f.id === file.parentId);
     return parent ? `${parent.name}/${file.name}` : file.name;
@@ -81,41 +93,77 @@ function FileTabBar() {
     .filter((f): f is typeof files[0] => Boolean(f));
 
   return (
-    <div className="flex items-center gap-0 bg-[#121212] border-b border-[#282828] overflow-x-auto flex-shrink-0 select-none h-9 px-1">
-      {openFiles.map((f) => {
-        const isActive = f.id === activeFileId;
-        const displayPath = getDisplayPath(f);
+    <div className="flex items-center justify-between bg-[#121212] border-b border-[#282828] select-none h-9 px-1">
+      {/* Tab list */}
+      <div className="flex items-center gap-0 overflow-x-auto flex-1 h-full">
+        {openFiles.map((f) => {
+          const isActive = f.id === activeFileId;
+          const displayPath = getDisplayPath(f);
+          const isCode = f.fileType === 'code' || f.name.endsWith('.py');
 
-        return (
-          <div
-            key={f.id}
-            onClick={() => handleSwitch(f.id)}
-            title={displayPath}
-            className={`group relative flex items-center gap-2 px-3 py-1.5 h-full cursor-pointer text-[11.5px] transition-colors border-r border-[#222222] ${
-              isActive
-                ? 'bg-[#1e1e1e] text-[#f0f0f0] font-medium border-t-2 border-t-[#2d8cf0]'
-                : 'bg-[#151515] text-[#7a7a7a] hover:bg-[#1a1a1a] hover:text-[#cccccc] border-t-2 border-t-transparent'
-            }`}
-          >
-            <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#2d8cf0]' : 'text-[#555555]'}`} />
-            <span className="truncate max-w-[150px]">{displayPath}</span>
-            <button
-              onClick={(e) => handleClose(e, f.id)}
-              title="Close tab"
-              className="opacity-0 group-hover:opacity-100 hover:text-[#e54545] hover:bg-[#2e2e2e] p-0.5 rounded transition-all ml-0.5"
+          return (
+            <div
+              key={f.id}
+              onClick={() => handleSwitch(f.id)}
+              title={displayPath}
+              className={`group relative flex items-center gap-2 px-3 py-1.5 h-full cursor-pointer text-[11.5px] transition-colors border-r border-[#222222] ${
+                isActive
+                  ? 'bg-[#1e1e1e] text-[#f0f0f0] font-medium border-t-2 border-t-[#2d8cf0]'
+                  : 'bg-[#151515] text-[#7a7a7a] hover:bg-[#1a1a1a] hover:text-[#cccccc] border-t-2 border-t-transparent'
+              }`}
             >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        );
-      })}
-      <button
-        onClick={handleCreate}
-        title="New File"
-        className="ml-1 p-1 rounded hover:bg-[#252525] text-[#666] hover:text-[#d4d4d4] transition-colors flex items-center justify-center"
-      >
-        <Plus className="w-3.5 h-3.5" />
-      </button>
+              {isCode ? (
+                <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#eab308]' : 'text-[#888]'}`} />
+              ) : (
+                <Network className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-[#38bdf8]' : 'text-[#555]'}`} />
+              )}
+              <span className="truncate max-w-[150px]">{displayPath}</span>
+              <button
+                onClick={(e) => handleClose(e, f.id)}
+                title="Close tab"
+                className="opacity-0 group-hover:opacity-100 hover:text-[#e54545] hover:bg-[#2e2e2e] p-0.5 rounded transition-all ml-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
+        <button
+          onClick={handleCreate}
+          title="New File"
+          className="ml-1 p-1 rounded hover:bg-[#252525] text-[#666] hover:text-[#d4d4d4] transition-colors flex items-center justify-center"
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Dual View Mode Switcher: Graph vs Python Code */}
+      <div className="flex items-center bg-[#181818] p-0.5 rounded border border-[#2a2a2a] mx-2 flex-shrink-0">
+        <button
+          onClick={() => setActiveViewMode('graph')}
+          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
+            activeViewMode === 'graph'
+              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
+              : 'text-[#777] hover:text-[#bbb]'
+          }`}
+          title="Visual Node Graph Canvas"
+        >
+          <Network className="w-3 h-3 text-[#38bdf8]" />
+          <span>Graph</span>
+        </button>
+        <button
+          onClick={() => setActiveViewMode('code')}
+          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
+            activeViewMode === 'code'
+              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
+              : 'text-[#777] hover:text-[#bbb]'
+          }`}
+          title="Python Code Editor"
+        >
+          <Code2 className="w-3 h-3 text-[#eab308]" />
+          <span>Python Code</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -127,8 +175,11 @@ export function DnDCanvas() {
   const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const activeFileId = useEditorStore((s) => s.activeFileId);
+  const activeViewMode = useEditorStore((s) => s.activeViewMode);
   const files = useEditorStore((s) => s.files);
   const activeFile = files.find((f) => f.id === activeFileId);
+
+  const isCodeMode = activeViewMode === 'code' || activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py');
 
   // Prevent connecting a single-input port that already has an incoming edge
   const isValidConnection = useCallback(
@@ -227,36 +278,38 @@ export function DnDCanvas() {
   );
 
   return (
-    <div className="flex-1 relative flex flex-col" ref={canvasRef}>
+    <div className="flex-1 relative flex flex-col h-full overflow-hidden" ref={canvasRef}>
       <FileTabBar />
-      <div className="flex-1 relative">
-        {/* key=activeFileId forces a full remount when switching files,
-            applying the new defaultNodes/defaultEdges for that tab */}
-        <ReactFlow
-          key={activeFileId}
-          defaultNodes={activeFile?.nodes || initialNodes}
-          defaultEdges={activeFile?.edges || initialEdges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onConnect={onConnect}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodesDelete={onNodesDelete}
-          isValidConnection={isValidConnection}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          deleteKeyCode={['Backspace', 'Delete']}
-          fitView
-        >
-          <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }} />
-          <MiniMap
-            nodeColor={() => '#2d8cf0'}
-            maskColor="rgba(18,18,18,0.8)"
-            className="!bg-[#1e1e1e] !border !border-[#3a3a3a] !rounded-[3px]"
-            style={{ bottom: 16, right: 16 }}
-          />
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#333" />
-        </ReactFlow>
+      <div className="flex-1 relative overflow-hidden">
+        {isCodeMode ? (
+          <CentralCodeEditor />
+        ) : (
+          <ReactFlow
+            key={activeFileId}
+            defaultNodes={activeFile?.nodes || initialNodes}
+            defaultEdges={activeFile?.edges || initialEdges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onConnect={onConnect}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodesDelete={onNodesDelete}
+            isValidConnection={isValidConnection}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            deleteKeyCode={['Backspace', 'Delete']}
+            fitView
+          >
+            <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }} />
+            <MiniMap
+              nodeColor={() => '#2d8cf0'}
+              maskColor="rgba(18,18,18,0.8)"
+              className="!bg-[#1e1e1e] !border !border-[#3a3a3a] !rounded-[3px]"
+              style={{ bottom: 16, right: 16 }}
+            />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#333" />
+          </ReactFlow>
+        )}
       </div>
     </div>
   );

@@ -1,12 +1,14 @@
 import pytest
-from starlette.testclient import TestClient
+import httpx
 import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from main import app
 
-client = TestClient(app)
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
 
 def wrap_payload(nodes, edges):
     return {
@@ -20,9 +22,8 @@ def wrap_payload(nodes, edges):
         }
     }
 
-def test_compile_shape_mismatch():
-    # Construct a payload with a Multiply block trying to multiply (4, 3) and (3, 4)
-    # This should fail the shape broadcasting and return 422
+@pytest.mark.anyio
+async def test_compile_shape_mismatch():
     nodes = [
         {"id": "node_input_a", "data": {"block_id": "input", "label": "Input A", "paramValues": {"shape": "(4, 3)"}}},
         {"id": "node_input_b", "data": {"block_id": "input", "label": "Input B", "paramValues": {"shape": "(3, 4)"}}},
@@ -34,26 +35,26 @@ def test_compile_shape_mismatch():
     ]
     payload = wrap_payload(nodes, edges)
     
-    response = client.post("/api/check", json=payload)
-    
-    # 422 is returned by check_graph in main.py when a ShapeError is raised
-    assert response.status_code == 422
-    
-    data = response.json()
-    assert "detail" in data
-    assert "not broadcastable" in data["detail"].get("message", "")
-    assert data["detail"].get("node_id") == "node_mul"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/check", json=payload)
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+        assert "not broadcastable" in data["detail"].get("message", "")
+        assert data["detail"].get("node_id") == "node_mul"
 
-def test_get_blocks():
-    response = client.get("/api/blocks")
-    assert response.status_code == 200
-    blocks = response.json()
-    assert isinstance(blocks, list)
-    assert len(blocks) > 0
-    # verify linear block is in there
-    assert any(b["id"] == "linear" for b in blocks)
+@pytest.mark.anyio
+async def test_get_blocks():
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/blocks")
+        assert response.status_code == 200
+        blocks = response.json()
+        assert isinstance(blocks, list)
+        assert len(blocks) > 0
+        assert any(b["id"] == "linear" for b in blocks)
 
-def test_compile_cycle():
+@pytest.mark.anyio
+async def test_compile_cycle():
     nodes = [
         {"id": "n1", "data": {"block_id": "linear", "label": "A", "paramValues": {}}},
         {"id": "n2", "data": {"block_id": "linear", "label": "B", "paramValues": {}}}
@@ -63,11 +64,13 @@ def test_compile_cycle():
         {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n1", "targetHandle": "in"}
     ]
     payload = wrap_payload(nodes, edges)
-    response = client.post("/api/compile", json=payload)
-    assert response.status_code == 400
-    assert "Cycle detected" in response.json().get("detail", "")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/compile", json=payload)
+        assert response.status_code == 400
+        assert "Cycle detected" in response.json().get("detail", "")
 
-def test_compile_success():
+@pytest.mark.anyio
+async def test_compile_success():
     nodes = [
         {"id": "n1", "data": {"block_id": "input", "label": "Input", "paramValues": {"shape": "(2, 10)"}}},
         {"id": "n2", "data": {"block_id": "linear", "label": "Linear", "paramValues": {"in_features": 10, "out_features": 5}}},
@@ -78,8 +81,9 @@ def test_compile_success():
         {"id": "e2", "source": "n2", "sourceHandle": "out", "target": "n3", "targetHandle": "in"}
     ]
     payload = wrap_payload(nodes, edges)
-    response = client.post("/api/compile", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "code" in data
-    assert "nn.Linear" in data["code"]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/compile", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert "code" in data
+        assert "nn.Linear" in data["code"]
