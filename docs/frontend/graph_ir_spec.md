@@ -1,6 +1,8 @@
-# ArchiDE — Graph IR & Code Generation Specification
+# ArchiDE — Graph IR & Code Generation Specification (Legacy)
 
-This document details the **Graph Intermediate Representation (IR)** format used by ArchiDE to serialize visual DAG canvases and the **Code Generation Pipeline** that compiles Graph IR instances into clean PyTorch `nn.Module` Python code.
+> [!NOTE]
+> **Status: 🏛️ Legacy / Design Reference**
+> This document specifies the original client-side TypeScript Graph IR schema. In the active architecture, graph processing and code compilation are executed by the FastAPI backend (see [`../backend/compiler_design.md`](../backend/compiler_design.md)), while UI canvas mechanics are documented in [`architecture.md`](architecture.md).
 
 ---
 

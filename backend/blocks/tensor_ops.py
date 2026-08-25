@@ -31,17 +31,19 @@ class AddBlock(BaseBlock):
             color="#8b5cf6",
             is_functional=True,
             inputs=[
-                PortDef(id="in_0", name="Input 1"),
-                PortDef(id="in_1", name="Input 2")
+                PortDef(id="in", name="Inputs", is_list=True)
             ],
             outputs=[PortDef(id="out", name="Out", var_hint="sum")],
-            params=[
-                ParamDef(name="num_inputs", type="int", default=2)
-            ]
+            params=[]
         )
 
-    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        shapes = [v for v in input_shapes.values() if v != ("ANY",)]
+    def infer_shapes(self, input_shapes: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        shapes = []
+        for v in input_shapes.values():
+            if isinstance(v, list):
+                shapes.extend([s for s in v if s != ("ANY",)])
+            elif v != ("ANY",):
+                shapes.append(v)
         if not shapes:
             return {"out": ("ANY",)}
             
@@ -54,9 +56,14 @@ class AddBlock(BaseBlock):
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
 
-    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+    def emit_forward(self, node_id: str, input_vars: Dict[str, Any], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
-        src_vars = [var for var in input_vars.values() if var != "None"]
+        src_vars = []
+        for v in input_vars.values():
+            if isinstance(v, list):
+                src_vars.extend([x for x in v if x and x != "None"])
+            elif v and v != "None":
+                src_vars.append(v)
         if src_vars:
             add_expr = " + ".join(src_vars)
             return f"{out_var} = {add_expr}"
@@ -101,24 +108,42 @@ class MulBlock(BaseBlock):
             category="Tensor Ops",
             color="#8b5cf6",
             is_functional=True,
-            inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out", var_hint="product")],
+            inputs=[PortDef(id="in", name="Inputs", is_list=True)],
+            outputs=[PortDef(id="out", name="Out", var_hint="product")],
             params=[]
         )
 
-    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        a = input_shapes.get("in_a", ("ANY",))
-        b = input_shapes.get("in_b", ("ANY",))
-        return {"out": broadcast_shapes(a, b)}
+    def infer_shapes(self, input_shapes: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        shapes = []
+        for v in input_shapes.values():
+            if isinstance(v, list):
+                shapes.extend([s for s in v if s != ("ANY",)])
+            elif v != ("ANY",):
+                shapes.append(v)
+        if not shapes:
+            return {"out": ("ANY",)}
+            
+        current_shape = shapes[0]
+        for shape in shapes[1:]:
+            current_shape = broadcast_shapes(current_shape, shape)
+            
+        return {"out": current_shape}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
 
-    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+    def emit_forward(self, node_id: str, input_vars: Dict[str, Any], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
-        a = input_vars.get("in_a", "None")
-        b = input_vars.get("in_b", "None")
-        return f"{out_var} = {a} * {b}"
+        src_vars = []
+        for v in input_vars.values():
+            if isinstance(v, list):
+                src_vars.extend([x for x in v if x and x != "None"])
+            elif v and v != "None":
+                src_vars.append(v)
+        if src_vars:
+            mul_expr = " * ".join(src_vars)
+            return f"{out_var} = {mul_expr}"
+        return f"{out_var} = 1"
 
 
 class DivBlock(BaseBlock):
@@ -263,29 +288,30 @@ class CatBlock(BaseBlock):
             color="#ef4444",
             is_functional=True,
             inputs=[
-                PortDef(id="in_a",name="A"),
-                PortDef(id="in_b",name="B"),
-                PortDef(id="in_c",name="C")
+                PortDef(id="in", name="Tensors", is_list=True)
             ],
-            outputs=[PortDef(id="out",name="Out", var_hint="concat")],
+            outputs=[PortDef(id="out", name="Out", var_hint="concat")],
             params=[ParamDef(name="dim", type="int", default=-1)]
         )
 
-    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
+    def infer_shapes(self, input_shapes: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
         return {"out": ("ANY",)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
 
-    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+    def emit_forward(self, node_id: str, input_vars: Dict[str, Any], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         dim = params.get("dim", -1)
-        
-        valid_vars = [v for k, v in input_vars.items() if v != "None"]
-        if not valid_vars:
+        src_vars = []
+        for v in input_vars.values():
+            if isinstance(v, list):
+                src_vars.extend([x for x in v if x and x != "None"])
+            elif v and v != "None":
+                src_vars.append(v)
+        if not src_vars:
             return f"{out_var} = None"
-            
-        vars_str = ", ".join(valid_vars)
+        vars_str = ", ".join(src_vars)
         return f"{out_var} = torch.cat([{vars_str}], dim={dim})"
 
 

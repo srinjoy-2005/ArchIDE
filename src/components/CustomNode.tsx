@@ -1,3 +1,13 @@
+/**
+ * src/components/CustomNode.tsx
+ *
+ * This component defines the visual representation of a PyTorch block (layer/function)
+ * on the React Flow canvas. It includes:
+ * - Dynamic category accent colors
+ * - Input/Output handles (`<Handle>`) for connections
+ * - A hover tooltip that displays tensor shape inferences for the node's ports
+ * - A quick action toolbar for deleting or duplicating the node
+ */
 import React, { memo, useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Trash2, Copy, AlertTriangle } from 'lucide-react';
@@ -55,7 +65,7 @@ function fmtShape(shape: number[] | undefined): string {
 }
 
 const CustomNode = ({ id, data, isConnectable }: any) => {
-  const { setNodes } = useReactFlow();
+  const { setNodes, setEdges } = useReactFlow();
   const shapeErrorNodeId = useEditorStore((s) => s.shapeErrorNodeId);
   const nodeShapes = useEditorStore((s) => s.nodeShapes);
   const [hovered, setHovered] = useState(false);
@@ -91,6 +101,7 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((nds) => nds.filter((n) => n.id !== id));
+    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
   };
 
   const handleDuplicate = (e: React.MouseEvent) => {

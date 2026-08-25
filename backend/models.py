@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Dict
 
 class Edge(BaseModel):
     id: str
@@ -19,13 +19,18 @@ class Node(BaseModel):
     id: str
     data: NodeData
 
-class CompileRequest(BaseModel):
+class GraphData(BaseModel):
+    name: str = "Model"
     nodes: List[Node]
     edges: List[Edge]
 
+class CompileRequest(BaseModel):
+    main_graph_id: str
+    graphs: Dict[str, GraphData]
+
 class CheckRequest(BaseModel):
-    nodes: List[Node]
-    edges: List[Edge]
+    main_graph_id: str
+    graphs: Dict[str, GraphData]
 
 class PortDef(BaseModel):
     id: str

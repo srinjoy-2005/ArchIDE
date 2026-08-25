@@ -1,3 +1,12 @@
+/**
+ * src/components/TensorEdge.tsx
+ *
+ * This component defines the custom edge (connection) between nodes in the graph.
+ * It extends the default Bezier path with interactive features:
+ * - An invisible wider hit area for easier hovering
+ * - A tooltip (EdgeLabelRenderer) that shows the exact tensor shape flowing through this edge
+ * - Highlight states when hovered or selected
+ */
 import React, { useState, useCallback } from 'react';
 import {
   BaseEdge,

@@ -45,6 +45,7 @@ import {
   ArrowRightLeft,
   Brain,
   Activity,
+  Bug,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -59,16 +60,75 @@ const getId = () => `node_${nodeCounter++}`;
 // Backend base URL — srinjoy_branch runs the API on port 8001
 const API_BASE = "http://localhost:8001";
 
+// ─── File Tab Bar ──────────────────────────────────────────────────────────────────
+
+function FileTabBar() {
+  const { files, activeFileId, switchFile, createFile, deleteFile, updateFileState } = useEditorStore();
+  const { getNodes, getEdges } = useReactFlow();
+
+  const handleSwitch = (id: string) => {
+    if (id === activeFileId) return;
+    updateFileState(activeFileId, getNodes(), getEdges());
+    switchFile(id);
+  };
+
+  const handleCreate = () => {
+    updateFileState(activeFileId, getNodes(), getEdges());
+    const name = prompt("Enter new module name:");
+    if (name) createFile(name);
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (confirm("Delete this module?")) {
+      deleteFile(id);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1 px-2 pt-2 pb-1 bg-[#181818] border-b border-[#363636] overflow-x-auto flex-shrink-0">
+      {files.map(f => (
+        <div
+          key={f.id}
+          onClick={() => handleSwitch(f.id)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-t-[4px] cursor-pointer text-[11px] transition-colors border border-b-0 ${
+            f.id === activeFileId
+              ? "bg-[#1e1e1e] border-[#363636] text-[#e2e2e2]"
+              : "bg-[#252525] border-transparent text-[#888] hover:bg-[#2a2a2a] hover:text-[#d4d4d4]"
+          }`}
+        >
+          <span>{f.name}</span>
+          {files.length > 1 && (
+            <button
+              onClick={(e) => handleDelete(e, f.id)}
+              className="text-[#555] hover:text-[#e54545]"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={handleCreate}
+        className="ml-1 p-1 rounded hover:bg-[#2a2a2a] text-[#888] hover:text-[#d4d4d4] transition-colors border border-transparent"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
 // ─── Fallback blocks (used when backend is unreachable) ────────────────────────
 
 const FALLBACK_BLOCKS: any[] = [
   { id: "input",   name: "Input",   category: "Core Layers", is_functional: true,  color: "#4ade80", inputs: [],                                             outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }] },
-  { id: "output",  name: "Output",  category: "Core Layers", is_functional: true,  color: "#f87171", inputs: [{ id: "in", name: "Return Value" }],            outputs: [],                                                  params: [] },
+  { id: "output",  name: "Output",  category: "Core Layers", is_functional: true,  color: "#f87171", inputs: [{ id: "in", name: "Return Value", is_list: true }], outputs: [],                                                  params: [] },
   { id: "linear",  name: "Linear",  category: "Core Layers", is_functional: false, color: "#818cf8", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "in_features", type: "int", default: 128 }, { name: "out_features", type: "int", default: 64 }] },
   { id: "conv2d",  name: "Conv2D",  category: "Core Layers", is_functional: false, color: "#60a5fa", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }] },
   { id: "relu",    name: "ReLU",    category: "Activations", is_functional: false, color: "#a78bfa", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [] },
   { id: "softmax", name: "Softmax", category: "Activations", is_functional: false, color: "#c084fc", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out", name: "Output" }],                     params: [{ name: "dim", type: "int", default: 1 }] },
-  { id: "add",     name: "Add",     category: "Tensor Ops",  is_functional: true,  color: "#fb923c", inputs: [{ id: "in_0", name: "Input 1" }, { id: "in_1", name: "Input 2" }], outputs: [{ id: "out", name: "Out" }], params: [{ name: "num_inputs", type: "int", default: 2 }] },
+  { id: "add",     name: "Add",     category: "Tensor Ops",  is_functional: true,  color: "#fb923c", inputs: [{ id: "in", name: "Inputs", is_list: true }], outputs: [{ id: "out", name: "Out" }], params: [] },
+  { id: "mul",     name: "Multiply",category: "Tensor Ops",  is_functional: true,  color: "#8b5cf6", inputs: [{ id: "in", name: "Inputs", is_list: true }], outputs: [{ id: "out", name: "Out" }], params: [] },
   { id: "split",   name: "Split",   category: "Tensor Ops",  is_functional: true,  color: "#34d399", inputs: [{ id: "in", name: "Input" }],                   outputs: [{ id: "out_0", name: "Chunk 1" }, { id: "out_1", name: "Chunk 2" }], params: [{ name: "chunks", type: "int", default: 2 }, { name: "dim", type: "int", default: 0 }] },
 ];
 
@@ -93,17 +153,19 @@ function ModelSummaryDashboard() {
 
   const loadStarter = () => {
     const n: Node[] = [
-      { id: "s1", type: "custom", position: { x: 60,  y: 160 }, data: { block_id: "input",  label: "Input",  is_functional: true,  params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }], paramValues: { shape: "(1,3,224,224)" }, inputs: [], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s2", type: "custom", position: { x: 270, y: 160 }, data: { block_id: "conv2d", label: "Conv2D", is_functional: false, params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s3", type: "custom", position: { x: 480, y: 160 }, data: { block_id: "relu",   label: "ReLU",   is_functional: false, params: [], paramValues: {}, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s4", type: "custom", position: { x: 680, y: 160 }, data: { block_id: "linear", label: "Linear", is_functional: false, params: [{ name: "in_features", type: "int", default: 16 }, { name: "out_features", type: "int", default: 10 }], paramValues: { in_features: 16, out_features: 10 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
-      { id: "s5", type: "custom", position: { x: 880, y: 160 }, data: { block_id: "output", label: "Output", is_functional: true,  params: [], paramValues: {}, inputs: [{ id: "in", name: "Return Value" }], outputs: [] } },
+      { id: "s1", type: "custom", position: { x: 60,  y: 160 }, data: { block_id: "input",   label: "Input",   is_functional: true,  params: [{ name: "shape", type: "string", default: "(1,3,224,224)" }], paramValues: { shape: "(1,3,224,224)" }, inputs: [], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s2", type: "custom", position: { x: 270, y: 160 }, data: { block_id: "conv2d",  label: "Conv2D",  is_functional: false, params: [{ name: "in_channels", type: "int", default: 3 }, { name: "out_channels", type: "int", default: 16 }, { name: "kernel_size", type: "int", default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s3", type: "custom", position: { x: 480, y: 160 }, data: { block_id: "relu",    label: "ReLU",    is_functional: false, params: [], paramValues: {}, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s4", type: "custom", position: { x: 670, y: 160 }, data: { block_id: "flatten", label: "Flatten", is_functional: true,  params: [{ name: "start_dim", type: "int", default: 1 }, { name: "end_dim", type: "int", default: -1 }], paramValues: { start_dim: 1, end_dim: -1 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s5", type: "custom", position: { x: 880, y: 160 }, data: { block_id: "linear",  label: "Linear",  is_functional: false, params: [{ name: "in_features", type: "int", default: 128 }, { name: "out_features", type: "int", default: 10 }], paramValues: { in_features: -1, out_features: 10 }, inputs: [{ id: "in", name: "Input" }], outputs: [{ id: "out", name: "Output" }] } },
+      { id: "s6", type: "custom", position: { x: 1090, y: 160 }, data: { block_id: "output",  label: "Output",  is_functional: true,  params: [], paramValues: {}, inputs: [{ id: "in", name: "Return Value" }], outputs: [] } },
     ];
     const e: Edge[] = [
       { id: "e12", source: "s1", sourceHandle: "out", target: "s2", targetHandle: "in", type: "tensor" },
       { id: "e23", source: "s2", sourceHandle: "out", target: "s3", targetHandle: "in", type: "tensor" },
       { id: "e34", source: "s3", sourceHandle: "out", target: "s4", targetHandle: "in", type: "tensor" },
       { id: "e45", source: "s4", sourceHandle: "out", target: "s5", targetHandle: "in", type: "tensor" },
+      { id: "e56", source: "s5", sourceHandle: "out", target: "s6", targetHandle: "in", type: "tensor" },
     ];
     setNodes(n);
     setEdges(e);
@@ -191,6 +253,7 @@ function ParamInput({ param, value, onChange }: { param: any; value: any; onChan
 function PropertiesPanel() {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
+  const edges = useEdges();
   const selectedNode = nodes.find((n) => n.selected) || null;
 
   // srinjoy's exact handleParamChange logic (incl. dynamic input/output resizing)
@@ -227,6 +290,8 @@ function PropertiesPanel() {
   const basicParams    = params.filter((p: any) => !p.section || p.section === 'basic');
   const advancedParams = params.filter((p: any) => p.section === 'advanced');
   const inferredShapes = (selectedNode.data.inferredShapes as Record<string, any>) || {};
+
+  const incomingEdges = edges.filter((e) => e.target === selectedNode.id);
 
   return (
     <div className="flex flex-col gap-4">
@@ -275,6 +340,34 @@ function PropertiesPanel() {
           </div>
         </div>
       </div>
+
+      {/* Connected Incoming Tensors (useful for multi-input & variadic blocks) */}
+      {incomingEdges.length > 0 && (
+        <div className="flex flex-col gap-2 border-b border-[#363636] pb-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider text-[#555]">Connected Inputs</span>
+            <span className="text-[9px] font-mono text-[#2d8cf0] bg-[#1e1e1e] border border-[#363636] px-1.5 py-px rounded-sm">
+              {incomingEdges.length} {incomingEdges.length === 1 ? "tensor" : "tensors"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {incomingEdges.map((e, idx) => {
+              const srcNode = nodes.find((n) => n.id === e.source);
+              const srcLabel = (srcNode?.data?.label as string) || e.source;
+              const srcVar = (srcNode?.data?.varName as string) || `x_${e.source.replace(/-/g, "_")}`;
+              return (
+                <div key={e.id} className="flex items-center justify-between bg-[#1e1e1e] border border-[#3a3a3a] px-2.5 py-1.5 rounded-[3px] text-[11px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono text-[#666]">#{idx + 1}</span>
+                    <span className="text-[#e2e2e2] font-medium">{srcLabel}</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-[#2d8cf0]">{srcVar}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Inferred Shapes section (srinjoy) — our theme */}
       {Object.keys(inferredShapes).length > 0 && (
@@ -348,8 +441,33 @@ function PropertiesPanel() {
 
 function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, setNodes, setEdges } = useReactFlow();
+  const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
+  const files = useEditorStore((s) => s.files);
+  const activeFile = files.find(f => f.id === activeFileId);
+
+  const isValidConnection = useCallback(
+    (connection: Connection | Edge) => {
+      if (connection.source === connection.target) return false;
+      const targetNode = getNode(connection.target);
+      if (!targetNode) return true;
+      const inputs = (targetNode.data?.inputs as any[]) || [];
+      const targetPort = inputs.find((p) => p.id === connection.targetHandle);
+
+      // Single-input ports (is_list === false/undefined) can only accept 1 incoming connection
+      if (targetPort && !targetPort.is_list) {
+        const existing = getEdges().find(
+          (e) => e.target === connection.target && e.targetHandle === connection.targetHandle
+        );
+        if (existing && existing.id !== (connection as any).id) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [getNode, getEdges]
+  );
 
   const onConnect = useCallback(
     (params: Connection | Edge) =>
@@ -372,6 +490,15 @@ function DnDCanvas() {
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
     [setEdges, setShapeErrorNodeId]
+  );
+
+  // Prune connected edges when nodes are deleted via keyboard
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      const deletedIds = new Set(deleted.map((n) => n.id));
+      setEdges((eds) => eds.filter((e) => !deletedIds.has(e.source) && !deletedIds.has(e.target)));
+    },
+    [setEdges]
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -419,6 +546,7 @@ function DnDCanvas() {
           outputs: blockDef.outputs || [],
           is_functional: blockDef.is_functional || false,
           varName: "",
+          custom_module_id: blockDef.custom_module_id, // Store reference to custom file
         },
       };
 
@@ -428,20 +556,28 @@ function DnDCanvas() {
   );
 
   return (
-    <div className="flex-1 relative" ref={canvasRef}>
-      <ReactFlow
-        defaultNodes={initialNodes}
-        defaultEdges={initialEdges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onConnect={onConnect}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        deleteKeyCode={["Backspace", "Delete"]}
-        fitView
-      >
+    <div className="flex-1 relative flex flex-col" ref={canvasRef}>
+      <FileTabBar />
+      <div className="flex-1 relative">
+        <ReactFlow
+          key={activeFileId}
+          defaultNodes={activeFile?.nodes || initialNodes}
+          defaultEdges={activeFile?.edges || initialEdges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          // panOnScroll={true}
+          // panOnScrollSpeed={1}
+          zoomOnPinch={true}
+          onConnect={onConnect}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodesDelete={onNodesDelete}
+          isValidConnection={isValidConnection}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          deleteKeyCode={["Backspace", "Delete"]}
+          fitView
+        >
         <Controls
           className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]"
           style={{ bottom: 16, left: 16 }}
@@ -459,6 +595,7 @@ function DnDCanvas() {
           color="#333"
         />
       </ReactFlow>
+      </div>
     </div>
   );
 }
@@ -650,29 +787,60 @@ function Header() {
   const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [checkMsg, setCheckMsg] = useState('');
 
+  const files = useEditorStore((s) => s.files);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
+
   // srinjoy's buildPayload — reads live nodes/edges; includes our varName field
   const buildPayload = () => {
     const currentNodes = getNodes();
     const currentEdges = getEdges();
+    
+    const graphs: any = {};
+    for (const f of files) {
+      const isCurrent = f.id === activeFileId;
+      const nList = isCurrent ? currentNodes : f.nodes;
+      const eList = isCurrent ? currentEdges : f.edges;
+
+      graphs[f.id] = {
+        name: f.name,
+        nodes: nList.map((n) => ({
+          id: n.id,
+          data: {
+            block_id: n.data.block_id || "",
+            label: n.data.label,
+            is_functional: n.data.is_functional || false,
+            paramValues: n.data.paramValues || {},
+            varName: (n.data.varName as string) || "",
+            custom_module_id: (n.data.custom_module_id as string) || "",
+          },
+        })),
+        edges: eList.map((e) => ({
+          id: e.id,
+          source: e.source,
+          sourceHandle: e.sourceHandle || "",
+          target: e.target,
+          targetHandle: e.targetHandle || "",
+        })),
+      };
+    }
+
     return {
-      nodes: currentNodes.map((n) => ({
-        id: n.id,
-        data: {
-          block_id: n.data.block_id || "",
-          label: n.data.label,
-          is_functional: n.data.is_functional || false,
-          paramValues: n.data.paramValues || {},
-          varName: (n.data.varName as string) || "",
-        },
-      })),
-      edges: currentEdges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        sourceHandle: e.sourceHandle || "",
-        target: e.target,
-        targetHandle: e.targetHandle || "",
-      })),
+      main_graph_id: activeFileId,
+      graphs
     };
+  };
+
+  // Helper for dev tools payloads tab
+  const broadcastPayload = (endpoint: string, reqPayload: any, resPayload: any) => {
+    if (typeof window !== "undefined") {
+      try {
+        const channel = new BroadcastChannel("archide_payloads");
+        channel.postMessage({ endpoint, request: reqPayload, response: resPayload, timestamp: Date.now() });
+        channel.close();
+      } catch (e) {
+        console.error("Broadcast failed", e);
+      }
+    }
   };
 
   // srinjoy's handleExport — uses port 8001, returns code or compiler error
@@ -681,12 +849,16 @@ function Header() {
     setShapeErrorNodeId(null);
     setGeneratedCode("# Compiling via Python Backend Engine...");
     try {
+      const payload = buildPayload();
       const response = await fetch(`${API_BASE}/api/compile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
+      
+      broadcastPayload("/api/compile", payload, data);
+
       if (response.ok) {
         setGeneratedCode(data.code);
         setShapeErrorNodeId(null);
@@ -713,12 +885,16 @@ function Header() {
     setCheckStatus('checking');
     setCheckMsg('');
     try {
+      const payload = buildPayload();
       const response = await fetch(`${API_BASE}/api/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
+      
+      broadcastPayload("/api/check", payload, data);
+
       if (response.ok) {
         setCheckStatus('ok');
         setCheckMsg('Compatible ✓');
@@ -785,7 +961,7 @@ function Header() {
         <div className="w-5 h-5 rounded-sm bg-[#2d8cf0] flex items-center justify-center">
           <Layers className="w-3 h-3 text-white" />
         </div>
-        <span className="text-[13px] font-semibold text-[#d4d4d4] tracking-tight">ArchiDE</span>
+        <span className="text-[2rem] font-semibold text-[#d4d4d4] tracking-tight">ArchiDE</span>
         <span className="text-[10px] font-mono text-[#555] border border-[#363636] px-1.5 py-px rounded-sm">PyTorch</span>
       </div>
 
@@ -804,6 +980,7 @@ function Header() {
         )}
 
         <button
+          suppressHydrationWarning
           onClick={handleCheck}
           disabled={checkStatus === 'checking'}
           className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2 py-1 rounded-sm border ${checkBtnClass}`}
@@ -812,6 +989,7 @@ function Header() {
         </button>
 
         <button
+          suppressHydrationWarning
           onClick={handleReset}
           className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1 rounded-sm hover:bg-[#2a2a2a] ml-1"
         >
@@ -820,6 +998,7 @@ function Header() {
         </button>
 
         <button
+          suppressHydrationWarning
           onClick={handleExport}
           disabled={compiling}
           className="flex items-center gap-1.5 text-[11px] font-medium text-white bg-[#2d8cf0] hover:bg-[#3a97f5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-sm"
@@ -827,6 +1006,17 @@ function Header() {
           <Play className="w-3 h-3 fill-white" />
           {compiling ? "Compiling…" : "Export PyTorch"}
         </button>
+
+        {process.env.NODE_ENV === 'development' && (
+          <button
+            onClick={() => window.open('/dev/payloads', '_blank')}
+            className="flex items-center gap-1.5 text-[11px] text-[#888] hover:text-[#e2e2e2] transition-colors px-2 py-1.5 rounded-sm hover:bg-[#2a2a2a] ml-1 border border-[#3a3a3a]"
+            title="Open Dev Tools"
+          >
+            <Bug className="w-3.5 h-3.5" />
+            Debug
+          </button>
+        )}
       </div>
     </header>
   );
@@ -850,9 +1040,32 @@ export default function Home() {
       .catch(() => {}); // fall back to FALLBACK_BLOCKS
   }, []);
 
+  const files = useEditorStore(s => s.files);
+  const activeFileId = useEditorStore(s => s.activeFileId);
+
   // Group by category (srinjoy pattern)
   const categories: Record<string, any[]> = {};
-  registry
+  
+  // Calculate dynamic custom blocks from other files
+  const customBlocks = files.filter(f => f.id !== activeFileId).map(f => {
+    const inputs = f.nodes.filter(n => n.data.block_id === 'input').map(n => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+    const outputs = f.nodes.filter(n => n.data.block_id === 'output').map(n => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+    return {
+      id: `custom_module`,
+      custom_module_id: f.id,
+      name: f.name,
+      category: "Custom Modules",
+      color: "#eab308", // Yellow color
+      is_functional: false,
+      inputs,
+      outputs,
+      params: []
+    };
+  });
+
+  const fullRegistry = [...registry, ...customBlocks];
+
+  fullRegistry
     .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
     .forEach((block) => {
       if (!categories[block.category]) categories[block.category] = [];

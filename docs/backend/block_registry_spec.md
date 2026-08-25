@@ -1,162 +1,60 @@
-# ArchiDE — Block Registry Specification
+# ArchIDE — Block Registry Specification
 
-This document provides the formal specification for all blocks available in ArchiDE. The Block Registry defines every draggable node's identity, parameters, input/output ports, shape propagation rules, and PyTorch code generation templates.
+This document provides the formal specification for how draggable neural network blocks, ports, parameters, and code emission protocols are defined in ArchIDE.
 
----
-
-## 1. Block Schema & Architecture Specification
-
-The Block Registry defines every draggable node's identity, parameters, and input/output ports. 
-In the current architecture, the registry is defined natively in Python.
-
-### Backend Implementation
-- **Data Models**: Core structural definitions are in `backend/models.py` using Pydantic (e.g., `BlockDef`, `PortDef`, `ParamDef`).
-- **OOP Architecture**: Blocks are implemented as Python classes inheriting from `BaseBlock`. They are categorized into modules within the `backend/blocks/` directory (e.g., `core.py`, `tensor_ops.py`). Each block class implements `infer_shapes`, `emit_init`, and `emit_forward` methods.
-- **Registry**: `backend/registry.py` imports all block classes and exposes them via `get_all_block_defs()` and `get_block_by_id()`.
-
-### Frontend Integration
-The frontend (Next.js) dynamically fetches the block palette from the FastAPI backend.
-1. `src/app/page.tsx` makes a `GET` request to `/api/blocks`.
-2. The UI groups the blocks by their `category` and populates the sidebar.
-3. Upon clicking "Export PyTorch", the frontend packages the nodes and edges into a `CompileRequest` payload and sends it via `POST` to `/api/compile`.
-
-### Pydantic Schema Reference (`backend/models.py`)
-```python
-class PortDef(BaseModel):
-    id: str
-    name: str # User-facing name
-    type: str = "tensor"
-    is_list: bool = False  
-    
-class ParamDef(BaseModel):
-    name: str
-    type: str
-    default: Any
-
-class BlockDef(BaseModel):
-    id: str
-    name: str
-    category: str
-    color: str
-    is_functional: bool
-    inputs: List[PortDef]
-    outputs: List[PortDef]
-    params: List[ParamDef]
-```
----
-
-## 2. Block Catalog & Categories
-
-### Category A: Core Layers (`Layers`)
-
-#### 1. Linear (`nn.Linear`)
-- **Params**: `in_features` (int, default: 128), `out_features` (int, default: 64), `bias` (bool, default: true)
-- **Inputs**: `x` `[B, ..., in_features]`
-- **Outputs**: `out` `[B, ..., out_features]`
-- **Shape Propagation**: `out_shape = [...input_shape.slice(0, -1), out_features]`
-- **PyTorch Init**: `nn.Linear({in_features}, {out_features}, bias={bias})`
-- **PyTorch Forward**: `{out} = self.{attr}({x})`
-
-#### 2. Conv2D (`nn.Conv2d`)
-- **Params**: `in_channels` (int, default: 3), `out_channels` (int, default: 16), `kernel_size` (int, default: 3), `stride` (int, default: 1), `padding` (int, default: 1)
-- **Inputs**: `x` `[B, C_in, H, W]`
-- **Outputs**: `out` `[B, C_out, H_out, W_out]`
-- **Shape Propagation**:
-  - $H_{out} = \lfloor \frac{H + 2 \times \text{padding} - \text{kernel\_size}}{\text{stride}} + 1 \rfloor$
-  - $W_{out} = \lfloor \frac{W + 2 \times \text{padding} - \text{kernel\_size}}{\text{stride}} + 1 \rfloor$
-- **PyTorch Init**: `nn.Conv2d({in_channels}, {out_channels}, kernel_size={kernel_size}, stride={stride}, padding={padding})`
-
-#### 3. ConvTranspose2D (`nn.ConvTranspose2d`)
-- **Params**: `in_channels` (int), `out_channels` (int), `kernel_size` (int, default: 3), `stride` (int, default: 2), `padding` (int, default: 1)
-- **Inputs**: `x` `[B, C_in, H, W]`
-- **Outputs**: `out` `[B, C_out, H_out, W_out]`
-- **PyTorch Init**: `nn.ConvTranspose2d({in_channels}, {out_channels}, kernel_size={kernel_size}, stride={stride}, padding={padding})`
-
-#### 4. Flatten (`nn.Flatten`)
-- **Params**: `start_dim` (int, default: 1), `end_dim` (int, default: -1)
-- **Inputs**: `x` `[B, C, H, W]`
-- **Outputs**: `out` `[B, C * H * W]`
-- **Shape Propagation**: Preserves dimensions before `start_dim`, flattens target dimensions into product.
-- **PyTorch Init**: `nn.Flatten(start_dim={start_dim}, end_dim={end_dim})`
+> [!NOTE]
+> **Source Files**:
+> - Pydantic Schemas: [`backend/models.py`](../../backend/models.py#L30-L57)
+> - Block Base Class & Interface: [`backend/blocks/base.py`](../../backend/blocks/base.py#L10-L38)
+> - Registry Aggregation & Lookup: [`backend/blocks/__init__.py`](../../backend/blocks/__init__.py#L16-L64) and [`backend/registry.py`](../../backend/registry.py)
 
 ---
 
-### Category B: Activations (`Activations`)
+## 1. Core Data Models (`backend/models.py`)
 
-Activations are stateless functional operations or lightweight modules.
+Every block is declared via a `BlockDef` Pydantic model returned by the block's `definition` property:
 
-| Block Name | PyTorch Class / Function | Parameters | Forward Snippet |
-|---|---|---|---|
-| **ReLU** | `nn.ReLU` | `inplace=False` | `self.relu(x)` |
-| **GELU** | `nn.GELU` | - | `self.gelu(x)` |
-| **Sigmoid** | `nn.Sigmoid` | - | `self.sigmoid(x)` |
-| **Tanh** | `nn.Tanh` | - | `self.tanh(x)` |
-| **LeakyReLU** | `nn.LeakyReLU` | `negative_slope=0.01` | `self.leaky_relu(x)` |
-| **Softmax** | `nn.Softmax` | `dim=1` | `self.softmax(x)` |
+- **`PortDef`** ([`backend/models.py`](../../backend/models.py#L30-L39)):
+  - `id: str`: Unique handle identifier on the node (e.g., `"in"`, `"out"`, `"in_a"`, `"out_1"`).
+  - `name: str`: UI label shown next to the port handle.
+  - `type: str`: Port data type (default: `"tensor"`).
+  - `is_list: bool`: Whether the port accepts multiple incoming connections (e.g. variadic inputs).
+  - `var_hint: Optional[str]`: Suggested variable name prefix during PyTorch code generation (e.g. `"fc_out"`, `"conv_feat"`, `"probs"`).
 
----
+- **`ParamDef`** ([`backend/models.py`](../../backend/models.py#L40-L47)):
+  - `name: str`: Parameter name passed into `paramValues` dictionary.
+  - `type: str`: Type identifier (`"int"`, `"float"`, `"string"`, `"bool"`).
+  - `default: Any`: Default initial value.
+  - `read_only: bool`: When `True`, shown greyed-out / non-editable in the UI.
+  - `section: str`: Property grouping (`"basic"` | `"advanced"` | `"shape"`).
+  - `description: str`: Tooltip description rendered in the inspector.
 
-### Category C: Normalization & Regularization (`Normalization`)
-
-#### 1. BatchNorm2D (`nn.BatchNorm2d`)
-- **Params**: `num_features` (int, default: 16), `eps` (float, default: 1e-5)
-- **PyTorch Init**: `nn.BatchNorm2d({num_features}, eps={eps})`
-
-#### 2. LayerNorm (`nn.LayerNorm`)
-- **Params**: `normalized_shape` (int, default: 64), `eps` (float, default: 1e-5)
-- **PyTorch Init**: `nn.LayerNorm({normalized_shape}, eps={eps})`
-
-#### 3. Dropout (`nn.Dropout`)
-- **Params**: `p` (float, default: 0.5)
-- **PyTorch Init**: `nn.Dropout(p={p})`
-
----
-
-### Category D: Pooling (`Pooling`)
-
-#### 1. MaxPool2D (`nn.MaxPool2d`)
-- **Params**: `kernel_size` (int, default: 2), `stride` (int, default: 2), `padding` (int, default: 0)
-- **Shape Propagation**: Halves spatial dimensions when `kernel_size=2, stride=2`.
-
-#### 2. AdaptiveAvgPool2D (`nn.AdaptiveAvgPool2d`)
-- **Params**: `output_size` (tuple/int, default: "(1, 1)")
-- **Shape Propagation**: Output spatial dimensions fixed to `output_size`.
+- **`BlockDef`** ([`backend/models.py`](../../backend/models.py#L48-L57)):
+  - `id: str`: Unique identifier (e.g. `"linear"`, `"conv2d"`, `"relu"`).
+  - `name: str`: Display name (e.g. `"Linear"`, `"Conv2D"`).
+  - `category: str`: Category for sidebar grouping (`"Core Layers"`, `"Activations"`, `"Pooling"`, `"Normalization"`, `"Shape Ops"`, `"Tensor Ops"`, `"Trig"`, `"Generators"`).
+  - `color: str`: Accent hex color for canvas nodes.
+  - `is_functional: bool`: `True` for stateless/functional operations (inlined into `forward()` only); `False` for stateful layers requiring `nn.Module` instantiation in `__init__()`.
+  - `inputs: List[PortDef]`: Target handles rendered on node left side.
+  - `outputs: List[PortDef]`: Source handles rendered on node right side.
+  - `params: List[ParamDef]`: Configurable parameters shown in Properties Panel.
 
 ---
 
-### Category E: Multi-Port Tensor Operations (`TensorOps`)
+## 2. Block Implementation Protocol (`BaseBlock`)
 
-These multi-input operations enable complex DAG topologies (skip connections, ResNets, Transformers):
+Every block inherits from `BaseBlock` ([`backend/blocks/base.py`](../../backend/blocks/base.py#L10-L38)) and implements:
 
-#### 1. Add / Residual Connection (`torch.add`)
-- **Inputs**: `a` (tensor), `b` (tensor)
-- **Outputs**: `out` (tensor)
-- **Shape Propagation**: Asserts `shape(a) == shape(b)`
-- **PyTorch Forward**: `{out} = {a} + {b}`
-
-#### 2. Concatenate (`torch.cat`)
-- **Inputs**: `a` (tensor), `b` (tensor)
-- **Params**: `dim` (int, default: 1)
-- **Outputs**: `out` (tensor)
-- **Shape Propagation**: Concatenates along specified `dim`.
-- **PyTorch Forward**: `{out} = torch.cat([{a}, {b}], dim={dim})`
-
-#### 3. MultiHeadAttention (`nn.MultiheadAttention`)
-- **Inputs**: `query`, `key`, `value`
-- **Params**: `embed_dim` (int, default: 256), `num_heads` (int, default: 8), `dropout` (float, default: 0.1)
-- **Outputs**: `out`
-- **PyTorch Init**: `nn.MultiheadAttention(embed_dim={embed_dim}, num_heads={num_heads}, dropout={dropout}, batch_first=True)`
-- **PyTorch Forward**: `{out}, _ = self.{attr}({query}, {key}, {value})`
+1. **`definition -> BlockDef`**: Returns the Pydantic schema for the block.
+2. **`infer_shapes(input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]`**: Computes output port shapes from input port shapes. May mutate `params` for auto-inference (e.g. `in_features=-1`). Raises `ValueError` on shape mismatch.
+3. **`emit_init(node_id: str, params: Dict[str, Any]) -> str`**: Emits `self.layer_{node_id} = nn.<Module>(...)` for stateful layers, or `""` for functional ops.
+4. **`emit_forward(node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str`**: Emits Python forward pass computation string.
+5. **`docs() -> Dict[str, str]`**: Returns `{"intro": "...", "details": "..."}` markdown documentation.
 
 ---
 
-### Category F: Graph I/O (`I/O`)
+## 3. Frontend & Backend Interaction
 
-#### 1. Input Node
-- **Params**: `shape` (string, default: "(1, 3, 224, 224)")
-- **Outputs**: `out`
-- **Description**: Defines entry tensor into the model `forward(self, x)`.
-
-#### 2. Output Node
-- **Inputs**: `in`
-- **Description**: Defines exit tensor returned by `return x`.
+- **Palette Fetch**: On initialization, the frontend calls `GET /api/blocks` ([`backend/main.py`](../../backend/main.py#L28-L30)), which serializes all block definitions from `get_all_block_defs()` ([`backend/blocks/__init__.py`](../../backend/blocks/__init__.py#L61-L63)).
+- **Block Docs Tooltips**: The frontend requests markdown documentation on demand via `GET /api/blocks/{block_id}/docs` ([`backend/main.py`](../../backend/main.py#L32-L38)).
+- **Compilation & Validation**: Graph payloads (`nodes` and `edges`) are sent via `POST /api/check` for static shape analysis or `POST /api/compile` for PyTorch code generation ([`backend/main.py`](../../backend/main.py#L40-L90)).
