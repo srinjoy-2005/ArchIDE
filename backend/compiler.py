@@ -1,4 +1,4 @@
-from models import CompileRequest, Node, Edge, PortDef, BlockDef
+from models import CompileRequest, Node, Edge, PortDef, BlockDef, NodeData
 from typing import List, Dict, Tuple, Any, Optional
 from blocks import get_block_by_id, BaseBlock
 import re
@@ -19,6 +19,21 @@ def _resolve_block_id(node: Node) -> str:
     block_id = getattr(node.data, "block_id", "").lower().strip()
     return block_id or "unknown"
 
+def _to_pascal_case(name: str) -> str:
+    """Turn a module name or string into a clean PascalCase Python class name."""
+    words = [w for w in re.split(r"[^a-zA-Z0-9]+", name) if w]
+    if not words:
+        return "Model"
+    res = ""
+    for w in words:
+        if w.isupper():
+            res += w.capitalize()
+        elif any(c.isupper() for c in w[1:]):
+            res += w[0].upper() + w[1:]
+        else:
+            res += w.capitalize()
+    return res
+
 def _label_to_identifier(label: str) -> str:
     """Turn a user-provided node name into a clean Python snake_case identifier."""
     s = _sanitize(label)
@@ -33,7 +48,7 @@ def _label_to_identifier(label: str) -> str:
 
 class ShapeError(Exception):
     """Raised when a shape mismatch is detected during static analysis."""
-    def __init__(self, message: str, node_id: str, node_label: str, edge_ids: List[str] = None):
+    def __init__(self, message: str, node_id: str, node_label: str, edge_ids: List[str] | None = None):
         super().__init__(message)
         self.node_id = node_id
         self.node_label = node_label
@@ -113,22 +128,25 @@ def _get_custom_block_def(gid: str, graphs: Dict[str, Any]) -> BlockDef:
     
     inputs = [PortDef(id=n.id, name=n.data.label) for n in input_nodes]
     outputs = [PortDef(id=n.id, name=n.data.label) for n in output_nodes]
+    params = getattr(graph_data, "parameters", []) or []
     
     return BlockDef(
         id=f"custom_module_{gid}",
         name=graph_data.name,
         category="Custom Modules",
-        color="#000",
+        color="#eab308",
         is_functional=False,
         inputs=inputs,
         outputs=outputs,
-        params=[]
+        params=params
     )
 
 class CustomModuleBlock(BaseBlock):
-    def __init__(self, definition: BlockDef, class_name: str):
+    def __init__(self, definition: BlockDef, class_name: str, dep_graph: Optional[Any] = None, graphs: Optional[Dict[str, Any]] = None):
         self._definition = definition
         self.class_name = class_name
+        self.dep_graph = dep_graph
+        self.graphs = graphs or {}
         
     @property
     def definition(self) -> BlockDef:
@@ -136,7 +154,25 @@ class CustomModuleBlock(BaseBlock):
         
     def emit_init(self, node_id: str, params: dict) -> str:
         var_name = f"self.custom_{node_id.replace('-', '_')[:8]}"
-        return f"{var_name} = {self.class_name}()"
+        kwargs = []
+        if self.definition.params:
+            for p in self.definition.params:
+                val = params.get(p.name, p.default)
+                if isinstance(val, str) and not val.isidentifier():
+                    kwargs.append(f"{p.name}={repr(val)}")
+                else:
+                    kwargs.append(f"{p.name}={val}")
+        elif params:
+            for k, v in params.items():
+                if k.startswith("_"):
+                    continue
+                if isinstance(v, str) and not v.isidentifier():
+                    kwargs.append(f"{k}={repr(v)}")
+                else:
+                    kwargs.append(f"{k}={v}")
+                    
+        args_str = ", ".join(kwargs)
+        return f"{var_name} = {self.class_name}({args_str})"
         
     def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict) -> str:
         var_name = f"self.custom_{node_id.replace('-', '_')[:8]}"
@@ -163,8 +199,52 @@ class CustomModuleBlock(BaseBlock):
         else:
             return f"{', '.join(out_args)} = {var_name}({in_str})"
             
-    def infer_shapes(self, incoming: dict, params: dict) -> dict:
-        return {port.id: ("ANY",) for port in self.definition.outputs}
+    def infer_shapes(self, incoming: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        if not self.dep_graph:
+            return {port.id: ("ANY",) for port in self.definition.outputs}
+            
+        try:
+            # Create isolated copy of nodes so instance-level parameter auto-inference doesn't mutate graph
+            sub_nodes = [
+                Node(
+                    id=n.id,
+                    data=NodeData(
+                        block_id=n.data.block_id,
+                        label=n.data.label,
+                        is_functional=n.data.is_functional,
+                        paramValues=dict(n.data.paramValues),
+                        varName=n.data.varName,
+                        custom_module_id=getattr(n.data, "custom_module_id", ""),
+                    ),
+                    position=n.position
+                )
+                for n in self.dep_graph.nodes
+            ]
+            sorted_nodes = topological_sort(sub_nodes, self.dep_graph.edges)
+            sub_shapes, _ = shape_inference_pass(
+                sorted_nodes,
+                self.dep_graph.edges,
+                self.graphs,
+                initial_input_shapes=incoming
+            )
+            
+            out_shapes = {}
+            for port in self.definition.outputs:
+                out_shape_dict = sub_shapes.get(port.id, {})
+                shape = out_shape_dict.get("in", ("ANY",))
+                if isinstance(shape, list):
+                    shape = shape[0] if shape else ("ANY",)
+                out_shapes[port.id] = tuple(shape) if isinstance(shape, (list, tuple)) else (shape,)
+            return out_shapes
+        except ShapeError as se:
+            raise ShapeError(
+                message=f"In module '{self.definition.name}': {se}",
+                node_id=se.node_id,
+                node_label=se.node_label,
+                edge_ids=se.edge_ids
+            ) from se
+        except Exception:
+            return {port.id: ("ANY",) for port in self.definition.outputs}
 
 
 # ---------------------------------------------------------------------------
@@ -182,17 +262,39 @@ def shape_inference_multi_graph(graphs: Dict[str, Any], main_graph_id: str):
     
     for gid in sorted_gids:
         graph_data = graphs[gid]
-        sorted_nodes = topological_sort(graph_data.nodes, graph_data.edges)
+        working_nodes = [
+            Node(
+                id=n.id,
+                data=NodeData(
+                    block_id=n.data.block_id,
+                    label=n.data.label,
+                    is_functional=n.data.is_functional,
+                    paramValues=dict(n.data.paramValues),
+                    varName=n.data.varName,
+                    custom_module_id=getattr(n.data, "custom_module_id", ""),
+                ),
+                position=n.position
+            )
+            for n in graph_data.nodes
+        ]
+        sorted_nodes = topological_sort(working_nodes, graph_data.edges)
         ns, np = shape_inference_pass(sorted_nodes, graph_data.edges, graphs)
         all_node_shapes.update(ns)
         all_node_params.update(np)
+        
+        # Apply inferred parameters back to the main graph only
+        if gid == main_graph_id:
+            for n in graph_data.nodes:
+                if n.id in np:
+                    n.data.paramValues.update(np[n.id])
         
     return all_node_shapes, all_node_params
 
 def shape_inference_pass(
     sorted_nodes: List[Node],
     edges: List[Edge],
-    graphs: Dict[str, Any] = None
+    graphs: Dict[str, Any] | None = None,
+    initial_input_shapes: Dict[str, Tuple] | None = None
 ) -> Tuple[Dict[str, Dict[str, Tuple]], Dict[str, Dict[str, Any]]]:
     graphs = graphs or {}
     node_ids = {node.id for node in sorted_nodes}
@@ -209,9 +311,9 @@ def shape_inference_pass(
             dep_id = getattr(node.data, "custom_module_id", "")
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
-                class_name = _sanitize(dep_graph.name).capitalize()
+                class_name = _to_pascal_case(dep_graph.name)
                 block_def = _get_custom_block_def(dep_id, graphs)
-                block = CustomModuleBlock(block_def, class_name)
+                block = CustomModuleBlock(block_def, class_name, dep_graph=dep_graph, graphs=graphs)
             else:
                 continue
         else:
@@ -244,15 +346,23 @@ def shape_inference_pass(
 
         original_params = dict(node.data.paramValues)
 
-        try:
-            out_shapes = block.infer_shapes(incoming, node.data.paramValues)
-        except ValueError as exc:
-            raise ShapeError(
-                message=str(exc),
-                node_id=node.id,
-                node_label=node.data.label,
-                edge_ids=incoming_edge_ids,
-            ) from exc
+        # Handle input node override if provided via initial_input_shapes
+        if block_id in {"input", "gourav"} and initial_input_shapes and node.id in initial_input_shapes:
+            override_shape = initial_input_shapes[node.id]
+            if override_shape and override_shape != ("ANY",):
+                out_shapes = {"out": override_shape}
+            else:
+                out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+        else:
+            try:
+                out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+            except ValueError as exc:
+                raise ShapeError(
+                    message=str(exc),
+                    node_id=node.id,
+                    node_label=node.data.label,
+                    edge_ids=incoming_edge_ids,
+                ) from exc
 
         for port_id, shape in out_shapes.items():
             tensor_shapes[f"{node.id}_{port_id}"] = shape
@@ -323,8 +433,8 @@ def _build_output_var(
 def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
     sorted_gids = topological_sort_graphs(graphs)
     
-    # Run shape inference pass across all graphs to catch mismatches early
-    shape_inference_multi_graph(graphs, main_graph_id)
+    # Run shape inference pass across all graphs to catch mismatches early and get inferred params
+    all_node_shapes, all_node_params = shape_inference_multi_graph(graphs, main_graph_id)
     
     code = [
         "import torch",
@@ -335,7 +445,7 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
     for gid in sorted_gids:
         graph_data = graphs[gid]
         is_main = (gid == main_graph_id)
-        class_name = _sanitize(graph_data.name).capitalize() if not is_main else "Model"
+        class_name = _to_pascal_case(graph_data.name) if not is_main else "Model"
         if not class_name:
             class_name = f"Module_{gid[:8]}"
             
@@ -345,7 +455,12 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
             raise ValueError(f"Cycle detected in module {graph_data.name}: {e}")
             
         graph_code = _generate_single_graph_code(
-            sorted_nodes, graph_data.edges, class_name, graphs
+            sorted_nodes,
+            graph_data.edges,
+            class_name,
+            graphs,
+            graph_data=graph_data,
+            inferred_params=all_node_params
         )
         code.append(graph_code)
         code.append("")
@@ -353,13 +468,31 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
     return "\n".join(code).strip()
 
 
-def _generate_single_graph_code(sorted_nodes: List[Node], edges: List[Edge], class_name: str, graphs: Dict[str, Any]) -> str:
+def _generate_single_graph_code(
+    sorted_nodes: List[Node],
+    edges: List[Edge],
+    class_name: str,
+    graphs: Dict[str, Any],
+    graph_data: Any = None,
+    inferred_params: Dict[str, Dict[str, Any]] = None
+) -> str:
     node_ids = {node.id for node in sorted_nodes}
     valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]
 
+    params_decl = getattr(graph_data, "parameters", []) if graph_data else []
+    if params_decl:
+        init_args = ["self"]
+        for p in params_decl:
+            t_str = f": {p.type}" if p.type else ""
+            d_val = repr(p.default) if isinstance(p.default, str) else str(p.default)
+            init_args.append(f"{p.name}{t_str} = {d_val}")
+        init_sig = f"    def __init__({', '.join(init_args)}):"
+    else:
+        init_sig = "    def __init__(self):"
+
     code = [
         f"class {class_name}(nn.Module):",
-        "    def __init__(self):",
+        init_sig,
         "        super().__init__()",
     ]
     init_lines: List[str] = []
@@ -387,9 +520,9 @@ def _generate_single_graph_code(sorted_nodes: List[Node], edges: List[Edge], cla
             dep_id = getattr(node.data, "custom_module_id", "")
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
-                custom_class_name = _sanitize(dep_graph.name).capitalize()
+                custom_class_name = _to_pascal_case(dep_graph.name)
                 block_def = _get_custom_block_def(dep_id, graphs)
-                block = CustomModuleBlock(block_def, custom_class_name)
+                block = CustomModuleBlock(block_def, custom_class_name, dep_graph=dep_graph, graphs=graphs)
             else:
                 forward_lines.append(f"        # WARNING: unknown custom module '{dep_id}' — skipped")
                 continue
@@ -400,7 +533,19 @@ def _generate_single_graph_code(sorted_nodes: List[Node], edges: List[Edge], cla
             forward_lines.append(f"        # WARNING: unknown block '{block_id}' — skipped")
             continue
 
-        params = node.data.paramValues
+        params = dict(node.data.paramValues)
+        
+        # 1. Substitute constructor argument names if parameter is in graph_data.parameters
+        if graph_data and getattr(graph_data, "parameters", []):
+            for p in graph_data.parameters:
+                if params.get(p.name) in (-1, None, ""):
+                    params[p.name] = p.name
+                    
+        # 2. Fill any remaining -1 parameters from inferred_params
+        if inferred_params and node.id in inferred_params:
+            for k, v in inferred_params[node.id].items():
+                if params.get(k) == -1:
+                    params[k] = v
 
         input_vars: Dict[str, Any] = {}
         for port in block.definition.inputs:

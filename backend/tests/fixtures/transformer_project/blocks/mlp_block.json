@@ -1,0 +1,41 @@
+{
+  "id": "mlp_block",
+  "name": "MlpBlock",
+  "parameters": [
+    { "name": "d_model", "type": "int", "default": 64 },
+    { "name": "d_ff", "type": "int", "default": 128 }
+  ],
+  "nodes": [
+    {
+      "id": "mlp_in",
+      "position": { "x": 50, "y": 100 },
+      "data": { "block_id": "input", "label": "x", "paramValues": { "shape": "(1, 16, 64)" } }
+    },
+    {
+      "id": "mlp_fc1",
+      "position": { "x": 200, "y": 100 },
+      "data": { "block_id": "linear", "label": "FC 1", "paramValues": { "in_features": -1, "out_features": 128 } }
+    },
+    {
+      "id": "mlp_relu",
+      "position": { "x": 350, "y": 100 },
+      "data": { "block_id": "relu", "label": "GELU/ReLU", "paramValues": {} }
+    },
+    {
+      "id": "mlp_fc2",
+      "position": { "x": 500, "y": 100 },
+      "data": { "block_id": "linear", "label": "FC 2", "paramValues": { "in_features": -1, "out_features": 64 } }
+    },
+    {
+      "id": "mlp_out",
+      "position": { "x": 650, "y": 100 },
+      "data": { "block_id": "output", "label": "out", "paramValues": {} }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "mlp_in", "sourceHandle": "out", "target": "mlp_fc1", "targetHandle": "in" },
+    { "id": "e2", "source": "mlp_fc1", "sourceHandle": "out", "target": "mlp_relu", "targetHandle": "in" },
+    { "id": "e3", "source": "mlp_relu", "sourceHandle": "out", "target": "mlp_fc2", "targetHandle": "in" },
+    { "id": "e4", "source": "mlp_fc2", "sourceHandle": "out", "target": "mlp_out", "targetHandle": "in" }
+  ]
+}

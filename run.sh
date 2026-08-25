@@ -44,8 +44,8 @@ echo "Starting FastAPI backend..."
 PIDS+=($!)
 
 echo "Both servers running. Press Ctrl+C to stop."
-echo "  Frontend: http://localhost:3000"
 echo "  Backend:  http://localhost:8001"
+echo "  Frontend: http://localhost:3000"
 echo ""
 
 # Wait for all background jobs to finish

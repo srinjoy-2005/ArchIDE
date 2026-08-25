@@ -3,16 +3,18 @@
 This document provides the formal architecture and technical guidelines for the ArchIDE visual DAG builder frontend.
 
 > [!NOTE]
-> **Source Files** (modular structure as of Aug 25, 2026):
+> **Source Files** (modular structure as of Aug 26, 2026):
 > - Layout Shell: [`src/app/page.tsx`](../../src/app/page.tsx)
-> - Canvas + File Tabs: [`src/components/DnDCanvas.tsx`](../../src/components/DnDCanvas.tsx)
+> - Activity Bar: [`src/components/ActivityBar.tsx`](../../src/components/ActivityBar.tsx)
+> - File & Folder Explorer (VFS): [`src/components/FileExplorer.tsx`](../../src/components/FileExplorer.tsx)
+> - Canvas + Dual-View Switcher: [`src/components/DnDCanvas.tsx`](../../src/components/DnDCanvas.tsx)
+> - Central Python Code Editor: [`src/components/CentralCodeEditor.tsx`](../../src/components/CentralCodeEditor.tsx)
 > - Custom Node: [`src/components/CustomNode.tsx`](../../src/components/CustomNode.tsx)
 > - Tensor Edge: [`src/components/TensorEdge.tsx`](../../src/components/TensorEdge.tsx)
-> - Properties Panel: [`src/components/PropertiesPanel.tsx`](../../src/components/PropertiesPanel.tsx)
+> - Properties Inspector: [`src/components/PropertiesPanel.tsx`](../../src/components/PropertiesPanel.tsx)
 > - Block Library Sidebar: [`src/components/BlockLibrary.tsx`](../../src/components/BlockLibrary.tsx)
 > - Header + API Logic: [`src/components/Header.tsx`](../../src/components/Header.tsx)
 > - Right Panel Shell: [`src/components/RightPanel.tsx`](../../src/components/RightPanel.tsx)
-> - Code Viewer: [`src/components/CodePanel.tsx`](../../src/components/CodePanel.tsx)
 > - Doc Popups: [`src/components/DocPanels.tsx`](../../src/components/DocPanels.tsx)
 > - Shared Constants: [`src/lib/constants.ts`](../../src/lib/constants.ts)
 > - Global Editor Store: [`src/lib/store.ts`](../../src/lib/store.ts)
@@ -25,13 +27,14 @@ ArchIDE's frontend is built with **Next.js (App Router)**, **React Flow (`@xyflo
 
 ```mermaid
 flowchart LR
-    Palette[Sidebar Palette] -->|Drag & Drop| Canvas[DnDCanvas @xyflow/react]
-    Canvas -->|Select Node| Inspector[PropertiesPanel]
-    Canvas -->|Edge / Node Changes| Store[Zustand Store]
+    ActivityBar[ActivityBar] -->|Toggle Sidebar| VFS[FileExplorer VFS] & Palette[BlockLibrary]
+    VFS -->|Open File| Canvas[DnDCanvas / CentralCodeEditor]
+    Palette -->|Drag & Drop| Canvas
+    Canvas -->|Select Node| Inspector[RightPanel: PropertiesPanel]
     Canvas -->|Static Check| API_Check[POST /api/check]
     Canvas -->|Compile Request| API_Compile[POST /api/compile]
-    API_Check -->|Shapes & Errors| Store
-    API_Compile -->|Synthesized PyTorch| CodeDrawer[Code Export Drawer]
+    API_Check -->|Shapes & Errors| Store[Zustand Store]
+    API_Compile -->|Synthesized PyTorch| CentralCode[CentralCodeEditor]
 ```
 
 ### ⚠️ Critical Guardrail: Uncontrolled Canvas State
@@ -42,56 +45,24 @@ flowchart LR
 
 ---
 
-> [!NOTE]
-> **Modular Architecture (Aug 25, 2026)**: The original monolithic `page.tsx` (1255 lines) was refactored into 8 focused component files plus `src/lib/constants.ts`. `page.tsx` is now a 43-line layout shell.
+## 2. Component Architecture
 
-### 1. `DnDCanvas` + `FileTabBar` ([`src/components/DnDCanvas.tsx`](../../src/components/DnDCanvas.tsx))
-- Renders the interactive grid canvas with `MiniMap`, `Controls`, and dot grid `Background`.
-- `nodeTypes` and `edgeTypes` are defined at module level to prevent React Flow from unmounting nodes on re-render.
-- Handles `onDrop`: Deserializes block definition JSON from `dataTransfer`, sets initial parameter defaults, computes canvas coordinates via `screenToFlowPosition`, and appends a `custom` node.
-- Handles `onConnect`: Adds custom `tensor` edges between handles.
-- Automatically clears `shapeErrorNodeId` when nodes or edges change.
-- `FileTabBar` snapshots the active file's live React Flow state into Zustand via `updateFileState()` before switching tabs; `key={activeFileId}` forces a full remount with `defaultNodes`/`defaultEdges` for the new file.
+### 1. `ActivityBar` & `FileExplorer` ([`src/components/ActivityBar.tsx`](../../src/components/ActivityBar.tsx), [`src/components/FileExplorer.tsx`](../../src/components/FileExplorer.tsx))
+- **ActivityBar**: Far-left 44px icon bar allowing instant switching between **Explorer** (VFS tree), **Block Library** (Layer palette), and future views.
+- **FileExplorer (VFS)**: OneCompiler-style directory tree managing nested folders, visual graph files (`.json`), and Python code scripts (`.py`).
+- **Project Actions**: Supports in-place file/folder creation, renaming, deletion, **Export Project** (`archide.project.json` download), and **Import Project** (browser JSON upload).
 
-### 2. `CustomNode` ([`src/components/CustomNode.tsx`](../../src/components/CustomNode.tsx))
-- **Category Accent Strip**: Color-coded vertical indicator based on layer type.
-- **Dynamic Handles**: Renders `Position.Left` target handles for `inputs` and `Position.Right` source handles for `outputs`. Hovering over handles displays the handle name and propagated tensor shape.
-- **Error Badging**: If `shapeErrorNodeId === id`, highlights node with red border and renders an `AlertTriangle` "Shape mismatch" chip.
-- **Variable Identifier Display**: Shows `→ {effectiveVar}` (e.g., custom name or auto-generated PyTorch variable name).
-- **Hover Toolbar**: Quick duplicate and delete actions.
-- **Shape Tooltip**: On hover, displays an elevated card listing input and output tensor dimensions (e.g. `[1×16×112×112]`).
+### 2. `DnDCanvas` + `FileTabBar` + `CentralCodeEditor` ([`src/components/DnDCanvas.tsx`](../../src/components/DnDCanvas.tsx), [`src/components/CentralCodeEditor.tsx`](../../src/components/CentralCodeEditor.tsx))
+- **FileTabBar**: Multi-tab strip displaying open files, relative paths (e.g. `blocks/conv/res_block.json`), non-destructive close actions, and a dual-view mode switcher (`[ ☩ Graph | <> Python Code ]`).
+- **CentralCodeEditor**: Full-workspace code viewer and editor with line numbering gutter, syntax color styling, quick copy, and `.py` file download.
+- **Visual Canvas**: Renders the interactive grid canvas with `MiniMap`, `Controls`, and dot grid `Background`.
 
-### 3. `TensorEdge` ([`src/components/TensorEdge.tsx`](../../src/components/TensorEdge.tsx))
-- Renders a smooth bezier curve with an invisible 16px hover hit area.
-- Displays an `EdgeLabelRenderer` midpoint chip showing the active tensor shape flowing through the edge (retrieved from `useEditorStore((s) => s.nodeShapes)`).
+### 3. `CustomNode` & `TensorEdge` ([`src/components/CustomNode.tsx`](../../src/components/CustomNode.tsx), [`src/components/TensorEdge.tsx`](../../src/components/TensorEdge.tsx))
+- **Dynamic Handles & Accents**: Color-coded category accents, input/output connection handles, and hover shape tooltips.
+- **Shape Flow**: Tensor edges render smooth bezier curves with midpoint chips displaying propagating tensor dimensions.
 
-### 4. `PropertiesPanel` ([`src/components/PropertiesPanel.tsx`](../../src/components/PropertiesPanel.tsx))
-- **Node Identifier & VarName**: Allows editing node label and custom output variable name.
-- **Three-Section Property Inspector**:
-  1. *Tensor Shapes*: Displays read-only inferred port dimensions.
-  2. *Hyperparameters*: Editable inputs (`int`, `float`, `string`, `bool`) for primary layer properties.
-  3. *Advanced Properties*: Collapsible section for secondary settings (e.g. dilation, momentum, eps).
-- **Dynamic Port Resizing**: When modifying `num_inputs` (on `AddBlock`) or `chunks` (on `SplitBlock`), dynamically updates node `inputs`/`outputs` arrays so the canvas immediately adds/removes connection handles.
-- Falls back to `ModelSummaryDashboard` (graph stats + quick-start ConvNet loader) when no node is selected.
-
-### 5. `Header` ([`src/components/Header.tsx`](../../src/components/Header.tsx))
-- Houses all backend API logic: `buildPayload()` (constructs multi-graph JSON), `handleExport()` (`POST /api/compile`), `handleCheck()` (`POST /api/check`), `handleReset()`.
-- Back-fills inferred shapes and auto-resolved params onto React Flow nodes after a successful `/api/check` response.
-- Broadcasts request/response payloads via `BroadcastChannel` for the `/dev/payloads` inspector.
-
-### 6. `BlockLibrary` ([`src/components/BlockLibrary.tsx`](../../src/components/BlockLibrary.tsx))
-- Fetches live registry from `GET /api/blocks` on mount; falls back to `FALLBACK_BLOCKS` from `src/lib/constants.ts`.
-- Derives **Custom Module** blocks on the fly from non-active open files in the Zustand store.
-- Right-clicking a block (`BlockItem`) fetches `GET /api/blocks/{id}/docs` and opens `DocContextMenu`.
-
-### 7. `DocContextMenu` & `DocDetailsPanel` ([`src/components/DocPanels.tsx`](../../src/components/DocPanels.tsx))
-- Right-clicking any block in the sidebar fetches documentation from `GET /api/blocks/{id}/docs` and presents a popup summary or full slide-out documentation panel.
-
-### 8. `RightPanel` ([`src/components/RightPanel.tsx`](../../src/components/RightPanel.tsx))
-- Owns `rightTab` and `rightOpen` local state. Switches between `<PropertiesPanel />` and `<CodePanel />`.
-
-### 9. `CodePanel` ([`src/components/CodePanel.tsx`](../../src/components/CodePanel.tsx))
-- Reads `generatedCode` from Zustand store; provides copy-to-clipboard and download-as-`model.py` actions.
+### 4. `RightPanel` & `PropertiesPanel` ([`src/components/RightPanel.tsx`](../../src/components/RightPanel.tsx), [`src/components/PropertiesPanel.tsx`](../../src/components/PropertiesPanel.tsx))
+- **Dedicated Inspector**: Single-purpose right panel dedicated to node configuration, custom output variable names, dynamic hyperparameters, shape analysis, and layer documentation.
 
 ---
 
@@ -99,23 +70,24 @@ flowchart LR
 
 | State Field | Type | Description |
 |---|---|---|
-| `files` | `GraphFile[]` | List of all open files/graphs in the project |
-| `activeFileId` | `string` | ID of the currently active tab/file |
-| `generatedCode` | `string` | Current PyTorch module code string |
+| `folders` | `Folder[]` | List of virtual directory folders (`id`, `name`, `parentId`, `isExpanded`) |
+| `files` | `GraphFile[]` | List of project files with `nodes`, `edges`, `parameters`, `fileType`, and coordinates |
+| `openTabIds` | `string[]` | IDs of currently open tabs in the editor strip |
+| `activeFileId` | `string` | ID of the currently active file |
+| `activeViewMode` | `'graph' \| 'code'` | Main workspace mode (visual canvas vs Python code editor) |
+| `generatedCode` | `string` | Compiled PyTorch code for the active module / model |
 | `shapeErrorNodeId` | `string \| null` | Node ID with an active shape mismatch (highlights node red) |
 | `nodeShapes` | `Record<string, Record<string, number[]>>` | Maps `node_id -> { port_id: shape_array }` returned by `/api/check` |
-| `docMenuInfo` | `object \| null` | Coordinates and content for the right-click block documentation tooltip |
-| `docPanelInfo` | `object \| null` | State for the slide-out full block documentation drawer |
 
 ---
 
 ## 4. Backend Communication Pipeline
 
-1. **Palette Loading**: `GET /api/blocks` initializes the sidebar palette. The frontend also scans all `files` (except the active one) to generate "Custom Modules" on the fly based on their `Input` and `Output` nodes.
-2. **Static Shape Check ("Run Static Tensor Check")**:
-   - Sends recursive multi-graph payload `{ main_graph_id, graphs }` to `POST /api/check`.
+1. **Static Shape Check ("Check Shapes")**:
+   - Sends recursive multi-graph payload `{ main_graph_id, graphs }` with declared parameters to `POST /api/check`.
    - On success (`200 OK`): Updates `nodeShapes` in store; shape chips appear on edges and nodes.
-   - On error (`422 Unprocessable Content`): Reads `detail.node_id`, sets `shapeErrorNodeId`, and displays toast with error details.
-3. **PyTorch Export ("Export PyTorch")**:
-   - Sends `{ main_graph_id, graphs }` to `POST /api/compile`. Node `data` for custom modules includes `custom_module_id`.
-   - On success: Stores compiled code in `generatedCode` and opens code viewer modal.
+   - On error (`422 Unprocessable Content`): Highlights error node and reports shape mismatch details.
+2. **PyTorch Export ("Export PyTorch")**:
+   - Sends `{ main_graph_id, graphs }` to `POST /api/compile`.
+   - On success: Stores compiled code, clears shape errors, and automatically switches `activeViewMode` to `'code'`.
+

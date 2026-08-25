@@ -12,6 +12,7 @@ A unified, actionable tracking document for the ArchiDE visual deep learning arc
 | **Compiler & Shape Inference** | `COMPLETED` | Kahn's topo-sort, 3-stage compile pipeline, and `/api/check` 422 static shape validation. |
 | **Visual Canvas & Properties** | `COMPLETED` | React Flow uncontrolled mode, 3-section inspector, custom variable names, and connection rules. |
 | **Variadic Ports & Multi-Outputs**| `COMPLETED` | Variadic ports (`Add`, `Mul`, `Concat`, `Output`) and orphan edge resilience. |
+| **Custom Modules & Multi-Graph Compilation** | `DESIGNED` | Full spec in [`custom_modules_architecture.md`](backend/custom_modules_architecture.md); dual-target codegen, module registry, and cycle detection. |
 | **Automated Testing Suite** | `IN PROGRESS` | 16 backend unit/compiler tests active; frontend and full 28-block coverage pending. |
 | **Save/Load & Model Export** | `PLANNED` | JSON graph serialization, project save/load, and direct `.py`/ONNX export. |
 
@@ -95,7 +96,27 @@ A unified, actionable tracking document for the ArchiDE visual deep learning arc
 
 ---
 
-## 4. 🚀 Future Roadmap & Scalability
+## 4. 📦 Custom Submodules & Multi-Graph Compilation
+
+> [!NOTE]
+> Detailed technical design and pipeline specification: [`docs/backend/custom_modules_architecture.md`](backend/custom_modules_architecture.md)
+
+- [x] **Compiler-Linker Architectural Specification**: Detailed analysis of monolithic single-file vs. modular Python package generation with concrete dual-target codegen pipeline.
+- [ ] **Module Registry & Interface Extraction**: Automatic extraction of port signatures and parameter contracts from custom module tabs/files.
+- [ ] **Project DAG & Cycle Detection**: Tarjan/Kahn's inter-module dependency resolution with formatted cyclic path error reporting.
+- [ ] **Two-Tier Shape Inference**: Inter-module shape propagation across custom module boundaries via interface contracts.
+- [ ] **Dual-Target Codegen Pipeline**:
+  - [ ] Target A (Default): Modular Python package emitter with clean relative imports and `__init__.py`.
+  - [ ] Target B (Export): Monolithic linker inlining all submodule classes in topological order into a single `model.py`.
+- [ ] **Visual IDE Integration**:
+  - [ ] Dynamic "My Modules" palette population from project tabs/XML files.
+  - [ ] Export modal offering "Export as Single File" and "Export as Python Package".
+  - [ ] Source mapping (`.py.map`) linking generated code errors to visual node IDs.
+- [ ] **Incremental Build Engine**: Interface vs. body hashing (`.arch_cache/`) for sub-second re-compilation on canvas edits.
+
+---
+
+## 5. 🚀 Future Roadmap & Scalability
 
 - [ ] **Project Persistence (Save & Load)**:
   - Serialize full graph state (nodes, edges, viewport, parameter overrides) to `.archide.json`.

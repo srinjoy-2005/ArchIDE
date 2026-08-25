@@ -4,6 +4,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 
 ## 🏗 Architecture & Overview
 *   **[Architecture Overview](architecture_overview.md)**: High-level overview of the Next.js frontend and Python FastAPI backend architecture.
+*   **[Custom Modules Architecture](backend/custom_modules_architecture.md)**: Technical specification for custom module resolution, project structure, dual-target codegen, and incremental compilation.
 *   **[Frontend Architecture](frontend/architecture.md)**: Technical guidelines for React Flow uncontrolled canvas, custom node/edge components, and Zustand store.
 *   **[Compiler Design](backend/compiler_design.md)**: Details on Kahn's topological sort algorithm, static shape inference pass, and PyTorch AST code generation.
 *   **[Backend Testing](backend/testing.md)**: Specifications for automated backend unit and integration test suites.
@@ -19,6 +20,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[August 26, 2026](changelog/2026_08_26.md)**: Transformed ArchiDE into a developer IDE with OneCompiler-style VFS & Activity Bar, submodule constructor parameter forwarding & exact shape propagation in compiler, headless testing harness (`project_loader.py`), central workspace Python code viewer (`CentralCodeEditor`), dedicated Inspector panel, and unified schema persistence with node coordinates.
 *   **[August 25, 2026](changelog/2026_08_25.md)**: Refactored monolithic `page.tsx` (1255 lines) into 8 modular component files (`DnDCanvas`, `Header`, `BlockLibrary`, `PropertiesPanel`, `RightPanel`, `CodePanel`, `DocPanels`) plus `src/lib/constants.ts`. Updated `docs/frontend/architecture.md` to reflect new structure.
 *   **[August 22, 2026](changelog/2026_08_22.md)**: Added source file comments across frontend modules, fixed `LinearBlock` silent 4D→Linear shape pass-through bug, and corrected the `loadStarter` demo pipeline by inserting a required Flatten node.
 *   **[August 20, 2026](changelog/2026_08_20.md)**: Implemented multi-file custom modules with double-pass Kahn's topological sort for deep nesting support, integrated dynamic sidebar UI, and upgraded compiler payloads.

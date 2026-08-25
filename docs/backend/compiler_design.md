@@ -15,9 +15,16 @@ This document details the architecture and execution pipeline of the ArchIDE PyT
 The compiler receives graph representations from the frontend as `CompileRequest` or `CheckRequest` payloads:
 
 ```python
+class GraphParamDef(BaseModel):
+    name: str
+    type: str = "int"
+    default: Any = None
+    description: Optional[str] = None
+
 class Node(BaseModel):
     id: str
-    data: NodeData  # block_id, label, is_functional, paramValues, varName
+    position: Optional[Dict[str, float]] = None
+    data: NodeData  # block_id, label, is_functional, paramValues, varName, custom_module_id
 
 class Edge(BaseModel):
     id: str
@@ -28,13 +35,13 @@ class Edge(BaseModel):
 
 class GraphData(BaseModel):
     name: str = "Model"
+    parameters: Optional[List[GraphParamDef]] = []
     nodes: List[Node]
     edges: List[Edge]
 
 class CompileRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
-
 ```
 
 ---
@@ -69,22 +76,39 @@ The `shape_inference_pass` traverses the topologically sorted nodes to validate 
 ### Stage 3: PyTorch AST Code Generation (`backend/compiler.py:L154-L333`)
 The code generator synthesizes a clean, standard PyTorch `nn.Module`:
 
-1. **Input Signature Resolution** ([`backend/compiler.py`](../../backend/compiler.py#L154-L192)):
+1. **Constructor & Parameter Signatures**:
+   - For submodules with declared `GraphData.parameters`, synthesizes parameterized signatures: `def __init__(self, in_channels=64, out_channels=128, ...):`.
+   - Parent graphs instantiate submodules with forwarded parameters: `self.res_block = ResBlock(in_channels=64, out_channels=128)`.
+2. **Input Signature Resolution** ([`backend/compiler.py`](../../backend/compiler.py#L154-L192)):
    - Identifies `input` nodes and creates disambiguated argument names: `def forward(self, x_input, x_input_2, ...):`.
-2. **Variable Naming Priority** ([`backend/compiler.py`](../../backend/compiler.py#L194-L220)):
+3. **Variable Naming Priority** ([`backend/compiler.py`](../../backend/compiler.py#L194-L220)):
    - User override in `paramValues["_output_aliases"][port.id]`
    - User-defined `varName` on the node
    - Port default `var_hint` (e.g. `fc_out`, `conv_feat`, `sum`)
    - Sequential fallback: `x_{node_id}`
-3. **`__init__()` Emission**:
+4. **`__init__()` Emission**:
    - Iterates non-functional nodes and calls `block.emit_init(node.id, params)` to create layers (e.g. `self.layer_n2 = nn.Linear(128, 64, bias=True)`).
-4. **`forward()` Emission**:
+5. **`forward()` Emission**:
    - Calls `block.emit_forward(node.id, input_vars, output_vars, params)` to produce assignment lines.
    - Collects outputs from `output` blocks to construct the final `return <vars>` statement.
 
 ---
 
-## 3. Compiler API Endpoints (`backend/main.py`)
+## 3. Headless Testing & Batch Compilation (`backend/project_loader.py`)
+
+ArchiDE includes a headless project loader (`backend/project_loader.py`) allowing CLI, CI, or test suites to load, validate, and compile complex multi-graph architectures directly:
+
+```python
+from backend.project_loader import load_project, compile_project
+
+# Load project directory containing archide.project.json & blocks/
+project_data = load_project("path/to/project_dir")
+code = compile_project(project_data)
+```
+
+---
+
+## 4. Compiler API Endpoints (`backend/main.py`)
 
 | Endpoint | Method | Request Payload | Response Schema | Purpose |
 |---|---|---|---|---|
