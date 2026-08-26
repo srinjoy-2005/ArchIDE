@@ -104,6 +104,12 @@ interface EditorState {
   // Entry Point Architecture
   entryFileId: string;
   setEntryFileId: (id: string) => void;
+
+  // Clipboard & Canvas Modes
+  clipboard: { nodes: Node[], edges: Edge[] } | null;
+  setClipboard: (data: { nodes: Node[], edges: Edge[] } | null) => void;
+  canvasMode: 'pan' | 'select';
+  setCanvasMode: (mode: 'pan' | 'select') => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -145,6 +151,12 @@ class Model(nn.Module):
   // Entry Point
   entryFileId: 'main',
   setEntryFileId: (id) => set({ entryFileId: id }),
+
+  // Clipboard & Canvas Modes
+  clipboard: null,
+  setClipboard: (data) => set({ clipboard: data }),
+  canvasMode: 'pan',
+  setCanvasMode: (mode) => set({ canvasMode: mode }),
 
   // Initial Virtual File System with standard clean structure
   folders: [
