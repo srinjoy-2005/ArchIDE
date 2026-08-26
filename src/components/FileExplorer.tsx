@@ -62,6 +62,7 @@ export function FileExplorer() {
     updateFileState,
     exportProjectJson,
     importProjectJson,
+    entryFileId,
   } = useEditorStore();
 
   const { getNodes, getEdges } = useReactFlow();
@@ -339,7 +340,14 @@ export function FileExplorer() {
                     className="bg-[#141414] border border-[#2d8cf0] rounded px-1 text-[11px] text-[#e2e2e2] outline-none w-full"
                   />
                 ) : (
-                  <span className="truncate">{file.name}</span>
+                  <span className="truncate">
+                    {file.name}
+                    {file.id === entryFileId && (
+                      <span className="ml-2 text-[10px] text-[#eab308] border border-[#eab308]/30 bg-[#eab308]/10 px-1 py-0 rounded">
+                        Main
+                      </span>
+                    )}
+                  </span>
                 )}
               </div>
 
@@ -357,7 +365,7 @@ export function FileExplorer() {
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
-                  {files.length > 1 && (
+                  {files.length > 1 && file.id !== entryFileId && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

@@ -100,6 +100,10 @@ interface EditorState {
   // Project Import / Export Serialization
   exportProjectJson: () => string;
   importProjectJson: (jsonStr: string) => boolean;
+
+  // Entry Point Architecture
+  entryFileId: string;
+  setEntryFileId: (id: string) => void;
 }
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -137,6 +141,10 @@ class Model(nn.Module):
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+  // Entry Point
+  entryFileId: 'main',
+  setEntryFileId: (id) => set({ entryFileId: id }),
 
   // Initial Virtual File System with standard clean structure
   folders: [
@@ -332,8 +340,22 @@ class Model(nn.Module):
 
       const folderIdsToDelete = new Set(getDescendantFolderIds(id));
       const remainingFolders = state.folders.filter(f => !folderIdsToDelete.has(f.id));
-      const remainingFiles = state.files.filter(f => !f.parentId || !folderIdsToDelete.has(f.parentId));
-      const remainingDeletedFileIds = new Set(state.files.filter(f => f.parentId && folderIdsToDelete.has(f.parentId)).map(f => f.id));
+      
+      // Prevent deletion of files by moving entry point to root if its folder is deleted
+      const entryFile = state.files.find(f => f.id === state.entryFileId);
+      const isEntryInDeletedFolder = entryFile && entryFile.parentId && folderIdsToDelete.has(entryFile.parentId);
+
+      let remainingFiles = state.files.filter(f => !f.parentId || !folderIdsToDelete.has(f.parentId));
+      
+      if (isEntryInDeletedFolder && entryFile) {
+        // Keep the entry file but move it to root
+        const movedEntry = { ...entryFile, parentId: null };
+        remainingFiles.push(movedEntry);
+      }
+
+      const remainingDeletedFileIds = new Set(
+        state.files.filter(f => f.parentId && folderIdsToDelete.has(f.parentId) && f.id !== state.entryFileId).map(f => f.id)
+      );
       const remainingOpenTabs = state.openTabIds.filter(tabId => !remainingDeletedFileIds.has(tabId));
 
       if (remainingFiles.length === 0) {
@@ -410,9 +432,13 @@ class Model(nn.Module):
 
   deleteFile: (id) => {
     set((state) => {
+      // The entry point cannot be deleted
+      if (id === state.entryFileId) return state;
+
       const newFiles = state.files.filter(f => f.id !== id);
       const newOpenTabs = state.openTabIds.filter(tabId => tabId !== id);
 
+      // (In practice newFiles.length will never be 0 since entry point is undeletable, but keeping for safety)
       if (newFiles.length === 0) {
         const fallbackId = generateId();
         return {
@@ -456,7 +482,7 @@ class Model(nn.Module):
     const manifest: ArchIDEProject = {
       name: 'ArchIDE_Project',
       version: '1.0.0',
-      entry_point: state.files.find(f => f.id === state.activeFileId)?.name || 'main.json',
+      entry_point: state.entryFileId,
       folders: state.folders,
       files: state.files.map(f => ({
         id: f.id,
@@ -529,6 +555,7 @@ class Model(nn.Module):
       set({
         folders,
         files,
+        entryFileId: validEntryId,
         openTabIds: [validEntryId],
         activeFileId: validEntryId,
         shapeErrorNodeId: null,

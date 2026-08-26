@@ -74,6 +74,7 @@ flowchart LR
 | `files` | `GraphFile[]` | List of project files with `nodes`, `edges`, `parameters`, `fileType`, and coordinates |
 | `openTabIds` | `string[]` | IDs of currently open tabs in the editor strip |
 | `activeFileId` | `string` | ID of the currently active file |
+| `entryFileId` | `string` | ID of the designated root entry point file (undeletable main graph) |
 | `activeViewMode` | `'graph' \| 'code'` | Main workspace mode (visual canvas vs Python code editor) |
 | `generatedCode` | `string` | Compiled PyTorch code for the active module / model |
 | `shapeErrorNodeId` | `string \| null` | Node ID with an active shape mismatch (highlights node red) |

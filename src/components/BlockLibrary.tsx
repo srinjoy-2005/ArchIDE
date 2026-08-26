@@ -91,9 +91,13 @@ export function BlockLibrary() {
       .catch(() => {});
   }, []);
 
-  // Derive custom module entries from other open files (non-active tabs)
+  const entryFileId = useEditorStore((s) => s.entryFileId);
+
+  // Derive custom module entries from other files
+  // Exclude the entry point (it's the root model, never a sub-module)
+  // Exclude the active file (to prevent immediate self-recursion)
   const customBlocks = files
-    .filter((f) => f.id !== activeFileId)
+    .filter((f) => f.id !== activeFileId && f.id !== entryFileId)
     .map((f) => {
       const inputs  = f.nodes.filter((n) => n.data.block_id === 'input').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
       const outputs = f.nodes.filter((n) => n.data.block_id === 'output').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));

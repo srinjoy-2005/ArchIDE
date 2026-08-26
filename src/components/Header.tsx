@@ -33,6 +33,7 @@ export function Header() {
   const setActiveViewMode = useEditorStore((s) => s.setActiveViewMode);
   const files             = useEditorStore((s) => s.files);
   const activeFileId      = useEditorStore((s) => s.activeFileId);
+  const entryFileId       = useEditorStore((s) => s.entryFileId);
 
   const [compiling,    setCompiling]    = useState(false);
   const [checkStatus,  setCheckStatus]  = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
@@ -72,7 +73,7 @@ export function Header() {
         })),
       };
     }
-    return { main_graph_id: activeFileId, graphs };
+    return { main_graph_id: entryFileId, graphs };
   };
 
   /** Broadcast payload to the dev tools panel (/dev/payloads) via BroadcastChannel */
