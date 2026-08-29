@@ -15,11 +15,12 @@
  *   node/edge change propagation, and orphan edge pruning on node delete.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   MiniMap,
   Controls,
+  ControlButton,
   Background,
   BackgroundVariant,
   addEdge,
@@ -30,6 +31,7 @@ import {
   type Node,
   type NodeChange,
   type EdgeChange,
+  SelectionMode,
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -37,7 +39,7 @@ import CustomNode from './CustomNode';
 import TensorEdge from './TensorEdge';
 import { CentralCodeEditor } from './CentralCodeEditor';
 import { useEditorStore } from '../lib/store';
-import { Plus, X, FileCode, Network, Code2 } from 'lucide-react';
+import { Plus, X, FileCode, Network, Code2, Hand, MousePointer2 } from 'lucide-react';
 import { getId, initialNodes, initialEdges } from '../lib/constants';
 
 // Defined at module level to avoid re-creating objects on every render,
@@ -172,14 +174,68 @@ function FileTabBar() {
 
 export function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
+  const { screenToFlowPosition, setNodes, setEdges, getNode, getNodes, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const activeFileId = useEditorStore((s) => s.activeFileId);
   const activeViewMode = useEditorStore((s) => s.activeViewMode);
   const files = useEditorStore((s) => s.files);
-  const activeFile = files.find((f) => f.id === activeFileId);
+  const clipboard = useEditorStore((s) => s.clipboard);
+  const setClipboard = useEditorStore((s) => s.setClipboard);
+  const canvasMode = useEditorStore((s) => s.canvasMode);
+  const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
 
+  const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeViewMode === 'code' || activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py');
+
+  // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdKey && (e.key === 'c' || e.key === 'C')) {
+        const selectedNodes = getNodes().filter((n: Node) => n.selected);
+        if (selectedNodes.length === 0) return;
+        
+        const selectedIds = new Set(selectedNodes.map((n: Node) => n.id));
+        const innerEdges = getEdges().filter((edge: Edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
+        
+        setClipboard({ nodes: selectedNodes, edges: innerEdges });
+      }
+
+      if (cmdKey && (e.key === 'v' || e.key === 'V')) {
+        if (!clipboard || clipboard.nodes.length === 0) return;
+
+        // Create ID mapping from old to new
+        const idMap: Record<string, string> = {};
+        clipboard.nodes.forEach((n: Node) => { idMap[n.id] = getId(); });
+
+        const pastedNodes = clipboard.nodes.map((n: Node) => ({
+          ...n,
+          id: idMap[n.id],
+          selected: true,
+          position: { x: n.position.x + 40, y: n.position.y + 40 }
+        }));
+
+        const pastedEdges = clipboard.edges.map((e: Edge) => ({
+          ...e,
+          id: getId(),
+          source: idMap[e.source],
+          target: idMap[e.target]
+        }));
+
+        // Deselect current nodes
+        setNodes((nds: Node[]) => nds.map((n) => ({ ...n, selected: false } as Node)).concat(pastedNodes as Node[]));
+        setEdges((eds: Edge[]) => eds.map((e) => ({ ...e, selected: false } as Edge)).concat(pastedEdges as Edge[]));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [getNodes, getEdges, setNodes, setEdges, clipboard, setClipboard]);
 
   // Prevent connecting a single-input port that already has an incoming edge
   const isValidConnection = useCallback(
@@ -298,9 +354,29 @@ export function DnDCanvas() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             deleteKeyCode={['Backspace', 'Delete']}
+            panOnDrag={canvasMode === 'pan'}
+            selectionOnDrag={canvasMode === 'select'}
+            selectionMode={SelectionMode.Partial}
             fitView
           >
-            <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }} />
+            <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }}>
+              <ControlButton
+                onClick={() => setCanvasMode('pan')}
+                title="Pan Tool (Hand)"
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: canvasMode === 'pan' ? '#333' : 'transparent', color: canvasMode === 'pan' ? '#38bdf8' : '#777' }}
+              >
+                <Hand className="w-3.5 h-3.5" />
+              </ControlButton>
+              <ControlButton
+                onClick={() => setCanvasMode('select')}
+                title="Select Tool (Window)"
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: canvasMode === 'select' ? '#333' : 'transparent', color: canvasMode === 'select' ? '#38bdf8' : '#777' }}
+              >
+                <MousePointer2 className="w-3.5 h-3.5" />
+              </ControlButton>
+            </Controls>
             <MiniMap
               nodeColor={() => '#2d8cf0'}
               maskColor="rgba(18,18,18,0.8)"
