@@ -6,6 +6,7 @@ from models import BlockDef, CompileRequest, CheckRequest
 from blocks import get_all_block_defs
 from compiler import topological_sort, generate_pytorch_code, shape_inference_pass, ShapeError
 import json
+import os
 
 def print_payloads(req_model, resp_dict):
     print("\n\033[96m--- INCOMING PAYLOAD ---")
@@ -25,6 +26,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from vfs import router as vfs_router
+app.include_router(vfs_router)
+
 @app.get("/api/blocks", response_model=List[BlockDef])
 def get_blocks():
     return get_all_block_defs()
@@ -41,6 +45,17 @@ def get_block_docs(block_id: str):
 def compile_graph(request: CompileRequest):
     try:
         files = generate_pytorch_code(request.graphs, request.main_graph_id, request.file_paths)
+        
+        # Dump files to workspace/python
+        python_dir = os.path.join(os.path.dirname(__file__), '../workspace/python')
+        os.makedirs(python_dir, exist_ok=True)
+        for path_key, code_content in files.items():
+            # ensure directory for nested paths
+            out_file = os.path.join(python_dir, f"{path_key}.py")
+            os.makedirs(os.path.dirname(out_file), exist_ok=True)
+            with open(out_file, "w", encoding="utf-8") as f:
+                f.write(code_content)
+                
         resp = {"files": files}
         print_payloads(request, resp)
         return resp

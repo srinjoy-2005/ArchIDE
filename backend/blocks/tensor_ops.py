@@ -207,6 +207,54 @@ class PowBlock(BaseBlock):
         return f"{out_var} = torch.pow({a}, {exp})"
 
 
+class TransposeBlock(BaseBlock):
+    @property
+    def definition(self) -> BlockDef:
+        return BlockDef(
+            id="transpose",
+            name="Transpose",
+            category="Tensor Ops",
+            color="#8b5cf6",
+            is_functional=True,
+            inputs=[PortDef(id="in", name="Input Tensor")],
+            outputs=[PortDef(id="out", name="Output", var_hint="transposed")],
+            params=[
+                ParamDef(name="dim0", type="int", default=-2, section="basic", description="First dimension to transpose"),
+                ParamDef(name="dim1", type="int", default=-1, section="basic", description="Second dimension to transpose")
+            ]
+        )
+
+    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        in_shape = input_shapes.get("in", ("ANY",))
+        if in_shape == ("ANY",):
+            return {"out": ("ANY",)}
+            
+        dim0 = params.get("dim0", -2)
+        dim1 = params.get("dim1", -1)
+        
+        # Handle negative dims
+        if dim0 < 0:
+            dim0 += len(in_shape)
+        if dim1 < 0:
+            dim1 += len(in_shape)
+            
+        try:
+            out_shape = list(in_shape)
+            out_shape[dim0], out_shape[dim1] = out_shape[dim1], out_shape[dim0]
+            return {"out": tuple(out_shape)}
+        except Exception:
+            return {"out": ("ANY",)}
+
+    def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
+        return ""
+
+    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+        out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
+        in_var = input_vars.get("in", "None")
+        dim0 = params.get("dim0", -2)
+        dim1 = params.get("dim1", -1)
+        return f"{out_var} = {in_var}.transpose({dim0}, {dim1})"
+
 class MatMulBlock(BaseBlock):
     @property
     def definition(self) -> BlockDef:

@@ -17,6 +17,8 @@ def _sanitize(label: str) -> str:
 def _resolve_block_id(node: Node) -> str:
     """Get the canonical block_id from a node, falling back gracefully."""
     block_id = getattr(node.data, "block_id", "").lower().strip()
+    if block_id == "custom_module":
+        return "custom"
     return block_id or "unknown"
 
 def _to_pascal_case(name: str) -> str:
@@ -95,7 +97,7 @@ def topological_sort_graphs(graphs: Dict[str, Any]) -> List[str]:
     for gid, data in graphs.items():
         for node in data.nodes:
             block_id = _resolve_block_id(node)
-            if block_id == "custom_module":
+            if block_id == "custom":
                 dep_id = getattr(node.data, "custom_module_id", "")
                 if dep_id in graphs:
                     adj[dep_id].append(gid)
@@ -307,7 +309,7 @@ def shape_inference_pass(
     for node in sorted_nodes:
         block_id = _resolve_block_id(node)
         
-        if block_id == "custom_module":
+        if block_id == "custom":
             dep_id = getattr(node.data, "custom_module_id", "")
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
@@ -454,7 +456,7 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
         # Collect custom module dependencies for imports
         custom_deps = set()
         for node in sorted_nodes:
-            if _resolve_block_id(node) == "custom_module":
+            if _resolve_block_id(node) == "custom":
                 dep_id = getattr(node.data, "custom_module_id", "")
                 if dep_id and dep_id in graphs:
                     custom_deps.add(dep_id)
@@ -545,7 +547,7 @@ def _generate_single_graph_code(
         if block_id in INPUT_IDS:
             continue
 
-        if block_id == "custom_module":
+        if block_id == "custom":
             dep_id = getattr(node.data, "custom_module_id", "")
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
@@ -573,9 +575,10 @@ def _generate_single_graph_code(
         # 2. Fill any remaining -1 parameters from inferred_params
         if inferred_params and node.id in inferred_params:
             for k, v in inferred_params[node.id].items():
-                if params.get(k) == -1:
+                if params.get(k) in (-1, "?", ""):
                     params[k] = v
-
+                    
+        # 3. Handle inputs
         input_vars: Dict[str, Any] = {}
         for port in block.definition.inputs:
             matching_edges = [

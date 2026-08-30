@@ -17,7 +17,7 @@
  * multi-file Zustand store to construct the multi-graph payload.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { useEditorStore } from '../lib/store';
 import { Layers, Play, RotateCcw, Bug } from 'lucide-react';
@@ -35,10 +35,53 @@ export function Header() {
   const files             = useEditorStore((s) => s.files);
   const activeFileId      = useEditorStore((s) => s.activeFileId);
   const entryFileId       = useEditorStore((s) => s.entryFileId);
+  const isMirroring       = useEditorStore((s) => s.isMirroring);
+  const setIsMirroring    = useEditorStore((s) => s.setIsMirroring);
+  const overwriteFilesFromVFS = useEditorStore((s) => s.overwriteFilesFromVFS);
 
   const [compiling,    setCompiling]    = useState(false);
   const [checkStatus,  setCheckStatus]  = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [checkMsg,     setCheckMsg]     = useState('');
+
+  const handleMirrorLocal = async () => {
+    if (isMirroring) {
+      setIsMirroring(false);
+      return;
+    }
+    // Disk wins: fetch initial state
+    try {
+      const res = await fetch(`${API_BASE}/api/vfs/init`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.files) {
+          overwriteFilesFromVFS(data.files);
+        }
+      }
+      setIsMirroring(true);
+    } catch (e) {
+      console.error('Failed to init VFS', e);
+    }
+  };
+
+  // Setup SSE stream when mirroring is enabled
+  useEffect(() => {
+    if (!isMirroring) return;
+    const es = new EventSource(`${API_BASE}/api/vfs/stream`);
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.file_id && data.content) {
+          // Compare before overwriting? Let's just overwrite for now.
+          overwriteFilesFromVFS({ [data.file_id]: data.content });
+        }
+      } catch (e) {
+        console.error('SSE parse error', e);
+      }
+    };
+    return () => {
+      es.close();
+    };
+  }, [isMirroring, overwriteFilesFromVFS]);
 
   /** Build the multi-graph JSON payload for /api/compile and /api/check */
   const buildPayload = () => {
@@ -65,12 +108,13 @@ export function Header() {
       
       const fileNameWithoutExt = f.name.replace(/\.[^/.]+$/, "");
       pathParts.push(fileNameWithoutExt);
-      file_paths[f.id] = pathParts.join('/');
+      const fullPath = pathParts.join('/');
+      file_paths[fullPath] = fullPath;
 
       const isCurrent = f.id === activeFileId;
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
-      graphs[f.id] = {
+      graphs[fullPath] = {
         name: fileNameWithoutExt,
         parameters: f.parameters || [],
         nodes: nList.map((n) => ({
@@ -94,7 +138,25 @@ export function Header() {
         })),
       };
     }
-    return { main_graph_id: entryFileId, graphs, file_paths };
+    
+    // Resolve entryFileId to its full path
+    let mainGraphPath = entryFileId;
+    const entryFile = files.find(f => f.id === entryFileId);
+    if (entryFile) {
+      const pathParts: string[] = [];
+      let currFolderId = entryFile.parentId;
+      while (currFolderId) {
+        const folder = folders.find(fold => fold.id === currFolderId);
+        if (folder && folder.name !== 'graphs') {
+          pathParts.unshift(folder.name);
+          currFolderId = folder.parentId;
+        } else break;
+      }
+      pathParts.push(entryFile.name.replace(/\.[^/.]+$/, ""));
+      mainGraphPath = pathParts.join('/');
+    }
+
+    return { main_graph_id: mainGraphPath, graphs, file_paths };
   };
 
   /** Broadcast payload to the dev tools panel (/dev/payloads) via BroadcastChannel */
@@ -263,6 +325,19 @@ export function Header() {
           {compiling ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
           {compiling ? 'Compiling...' : 'Compile'}
         </button>
+
+        <button
+          onClick={handleMirrorLocal}
+          className={`flex items-center gap-1.5 text-[11px] transition-colors px-2 py-1.5 rounded-sm ml-1 border ${
+            isMirroring 
+              ? 'text-white bg-green-600 hover:bg-green-500 border-green-500' 
+              : 'text-[#888] hover:text-[#e2e2e2] hover:bg-[#2a2a2a] border-[#3a3a3a]'
+          }`}
+          title="Live sync with workspace/graphs/"
+        >
+          {isMirroring ? 'Mirroring' : 'Mirror Local'}
+        </button>
+
         {process.env.NODE_ENV === 'development' && (
           <button
             onClick={() => window.open('/dev/payloads', '_blank')}

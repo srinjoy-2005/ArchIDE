@@ -33,6 +33,8 @@ import {
   type EdgeChange,
   SelectionMode,
   useReactFlow,
+  useNodes,
+  useEdges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode';
@@ -146,16 +148,79 @@ function FileTabBar() {
 export function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, setNodes, setEdges, getNode, getNodes, getEdges } = useReactFlow();
+  const nodes = useNodes();
+  const edges = useEdges();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const activeFileId = useEditorStore((s) => s.activeFileId);
   const files = useEditorStore((s) => s.files);
+  const folders = useEditorStore((s) => s.folders);
   const clipboard = useEditorStore((s) => s.clipboard);
   const setClipboard = useEditorStore((s) => s.setClipboard);
   const canvasMode = useEditorStore((s) => s.canvasMode);
   const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
+  const isMirroring = useEditorStore((s) => s.isMirroring);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
+
+  // ─── Debounced Auto-Save (Live VFS Sync) ────────────────────────────────────
+  useEffect(() => {
+    if (!isMirroring || !activeFile || isCodeMode) return;
+
+    // Use a timeout to debounce saves after canvas interactions
+    const handler = setTimeout(() => {
+      // Ensure we don't save an empty graph if it hasn't hydrated properly
+      if (nodes.length === 0 && edges.length === 0 && activeFile.nodes.length > 0) return;
+
+      // Compute full path for file_id (e.g. "conv/res_block")
+      const pathParts: string[] = [];
+      let currFolderId = activeFile.parentId;
+      while (currFolderId) {
+        const folder = folders.find(f => f.id === currFolderId);
+        if (folder && folder.name !== 'graphs') {
+          pathParts.unshift(folder.name);
+          currFolderId = folder.parentId;
+        } else {
+          break;
+        }
+      }
+      const fileNameWithoutExt = activeFile.name.replace(/\.[^/.]+$/, "");
+      pathParts.push(fileNameWithoutExt);
+      const fullFileId = activeFile.id === 'main' ? 'main' : pathParts.join('/');
+
+      const payload = {
+        file_id: fullFileId,
+        content: {
+          name: fileNameWithoutExt,
+          nodes: nodes,
+          edges: edges,
+          parameters: activeFile.parameters || []
+        }
+      };
+
+      fetch('http://localhost:8001/api/vfs/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Auto-save failed:', err));
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode]);
+
+  // ─── Sync Disk Updates to Canvas ──────────────────────────────────────────────
+  // When activeFile changes (e.g. from SSE), we must push it into the uncontrolled ReactFlow.
+  // We use JSON stringify to check deep equality to prevent loop feedback.
+  useEffect(() => {
+    if (!isMirroring || !activeFile || isCodeMode) return;
+    const currentNodesStr = JSON.stringify(getNodes());
+    const incomingNodesStr = JSON.stringify(activeFile.nodes);
+    
+    if (currentNodesStr !== incomingNodesStr) {
+      setNodes(activeFile.nodes);
+      setEdges(activeFile.edges);
+    }
+  }, [activeFile, isMirroring, isCodeMode, getNodes, setNodes, setEdges]);
 
   // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
   useEffect(() => {

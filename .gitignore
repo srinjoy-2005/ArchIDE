@@ -239,4 +239,5 @@ ml_forge-main
 ParentProject/
 division_of_labor.md
 
-walkthroughs/
+walkthroughs/workspace/graphs/
+workspace/python/

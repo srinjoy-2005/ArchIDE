@@ -93,6 +93,9 @@ interface EditorState {
   updateFileState: (id: string, nodes: Node[], edges: Edge[]) => void;
   deleteFile: (id: string) => void;
   moveItem: (id: string, isFolder: boolean, targetParentId: string | null) => void;
+  overwriteFilesFromVFS: (filesMap: Record<string, any>) => void;
+  isMirroring: boolean;
+  setIsMirroring: (val: boolean) => void;
 
   // Project Import / Export Serialization
   exportProjectJson: () => string;
@@ -150,25 +153,10 @@ class Model(nn.Module):
       };
 
       for (const [gid, code] of Object.entries(compiledData)) {
-        // Find the graph file to mirror its path
-        const graphFile = state.files.find(f => f.id === gid);
-        if (!graphFile) continue;
-
-        // Reconstruct path from graphFile parent up to graphs dir
-        const pathParts: string[] = [];
-        let currFolderId = graphFile.parentId;
-        while (currFolderId) {
-          const f = state.folders.find(fold => fold.id === currFolderId);
-          if (f && f.name !== 'graphs') {
-            pathParts.unshift(f.name);
-            currFolderId = f.parentId;
-          } else {
-            break;
-          }
-        }
-        
+        const pathParts = gid.split('/');
+        const baseName = pathParts.pop();
+        const pyFileName = baseName + '.py';
         const pyParentId = getOrCreatePath(pyFolder.id, pathParts);
-        const pyFileName = graphFile.name.replace(/\.arch$/, '.py');
         
         let existingPyFile = newFiles.find(f => f.parentId === pyParentId && f.name === pyFileName);
         if (existingPyFile) {
@@ -207,6 +195,55 @@ class Model(nn.Module):
   setClipboard: (data) => set({ clipboard: data }),
   canvasMode: 'pan',
   setCanvasMode: (mode) => set({ canvasMode: mode }),
+
+  isMirroring: false,
+  setIsMirroring: (val) => set({ isMirroring: val }),
+  overwriteFilesFromVFS: (filesMap) => set((state) => {
+    const newFiles = [...state.files];
+    const newFolders = [...state.folders];
+    const graphsFolderId = newFolders.find(f => f.name === 'graphs' && f.parentId === null)?.id || null;
+    if (!graphsFolderId) return state;
+
+    const getOrCreatePath = (parentId: string | null, pathParts: string[]): string | null => {
+      if (pathParts.length === 0) return parentId;
+      const part = pathParts[0];
+      let folder = newFolders.find(f => f.parentId === parentId && f.name === part);
+      if (!folder) {
+        folder = { id: generateId(), name: part, parentId, isExpanded: true };
+        newFolders.push(folder);
+      }
+      return getOrCreatePath(folder.id, pathParts.slice(1));
+    };
+
+    for (const [fileId, content] of Object.entries(filesMap)) {
+      const parts = fileId.split('/');
+      const fileName = parts.pop() + '.arch';
+      const targetParentId = getOrCreatePath(graphsFolderId, parts);
+
+      // Check if file already exists in that specific folder
+      const existingIdx = newFiles.findIndex(f => f.name === fileName && f.parentId === targetParentId);
+      
+      if (existingIdx >= 0) {
+        newFiles[existingIdx] = {
+          ...newFiles[existingIdx],
+          nodes: content.nodes || [],
+          edges: content.edges || [],
+          parameters: content.parameters || []
+        };
+      } else {
+        newFiles.push({
+          id: fileId === 'main' ? 'main' : generateId(),
+          name: fileName,
+          parentId: targetParentId,
+          nodes: content.nodes || [],
+          edges: content.edges || [],
+          parameters: content.parameters || [],
+          fileType: 'graph'
+        });
+      }
+    }
+    return { files: newFiles, folders: newFolders };
+  }),
 
   // Initial Virtual File System with standard clean structure
   folders: [
