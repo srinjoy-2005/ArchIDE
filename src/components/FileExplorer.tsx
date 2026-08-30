@@ -49,7 +49,6 @@ export function FileExplorer() {
     folders,
     files,
     activeFileId,
-    setActiveViewMode,
     createFile,
     createFolder,
     renameFile,
@@ -123,10 +122,6 @@ export function FileExplorer() {
   const handleSelectFile = (fileId: string) => {
     updateFileState(activeFileId, getNodes(), getEdges());
     openTab(fileId);
-    const targetFile = files.find(f => f.id === fileId);
-    if (targetFile?.fileType === 'code' || targetFile?.name.endsWith('.py')) {
-      setActiveViewMode('code');
-    }
   };
 
   // Confirm creation of new item

@@ -42,6 +42,7 @@ class GraphData(BaseModel):
 class CompileRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
+    file_paths: Dict[str, str] = Field(default_factory=dict)
 ```
 
 ---
@@ -113,4 +114,4 @@ code = compile_project(project_data)
 | Endpoint | Method | Request Payload | Response Schema | Purpose |
 |---|---|---|---|---|
 | `/api/check` | `POST` | `CheckRequest` | `{"ok": True, "node_shapes": {...}, "node_params": {...}}` | Fast static shape validation & canvas badge updates without code generation |
-| `/api/compile` | `POST` | `CompileRequest` | `{"code": "import torch\n..."}` | Full static check followed by complete PyTorch module code synthesis |
+| `/api/compile` | `POST` | `CompileRequest` | `{"files": {"main": "import torch\n...", "res_block": "..."}}` | Full static check followed by complete multi-file PyTorch module code synthesis |

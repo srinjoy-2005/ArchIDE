@@ -30,7 +30,8 @@ export function Header() {
   const setGeneratedCode  = useEditorStore((s) => s.setGeneratedCode);
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const setNodeShapes     = useEditorStore((s) => s.setNodeShapes);
-  const setActiveViewMode = useEditorStore((s) => s.setActiveViewMode);
+  const folders           = useEditorStore((s) => s.folders);
+  const handleCompiledFiles = useEditorStore((s) => s.handleCompiledFiles);
   const files             = useEditorStore((s) => s.files);
   const activeFileId      = useEditorStore((s) => s.activeFileId);
   const entryFileId       = useEditorStore((s) => s.entryFileId);
@@ -44,13 +45,33 @@ export function Header() {
     const currentNodes = getNodes();
     const currentEdges = getEdges();
     const graphs: any = {};
+    const file_paths: any = {};
+
     for (const f of files) {
-      if (f.fileType === 'code' || f.name.endsWith('.py')) continue;
+      if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
+      
+      // Resolve path
+      const pathParts: string[] = [];
+      let currFolderId = f.parentId;
+      while (currFolderId) {
+        const folder = folders.find(fold => fold.id === currFolderId);
+        if (folder && folder.name !== 'graphs') {
+          pathParts.unshift(folder.name);
+          currFolderId = folder.parentId;
+        } else {
+          break;
+        }
+      }
+      
+      const fileNameWithoutExt = f.name.replace(/\.[^/.]+$/, "");
+      pathParts.push(fileNameWithoutExt);
+      file_paths[f.id] = pathParts.join('/');
+
       const isCurrent = f.id === activeFileId;
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
       graphs[f.id] = {
-        name: f.name.replace(/\.[^/.]+$/, ""),
+        name: fileNameWithoutExt,
         parameters: f.parameters || [],
         nodes: nList.map((n) => ({
           id: n.id,
@@ -73,7 +94,7 @@ export function Header() {
         })),
       };
     }
-    return { main_graph_id: entryFileId, graphs };
+    return { main_graph_id: entryFileId, graphs, file_paths };
   };
 
   /** Broadcast payload to the dev tools panel (/dev/payloads) via BroadcastChannel */
@@ -104,9 +125,9 @@ export function Header() {
       broadcastPayload('/api/compile', payload, data);
 
       if (response.ok) {
-        setGeneratedCode(data.code);
+        setGeneratedCode('# Compiled successfully. Check the python/ folder.');
         setShapeErrorNodeId(null);
-        setActiveViewMode('code');
+        handleCompiledFiles(data.files || {});
       } else {
         if (data.detail?.error === 'ShapeMismatch') {
           setShapeErrorNodeId(data.detail.node_id);
@@ -233,10 +254,14 @@ export function Header() {
           suppressHydrationWarning
           onClick={handleExport}
           disabled={compiling}
-          className="flex items-center gap-1.5 text-[11px] font-medium text-white bg-[#2d8cf0] hover:bg-[#3a97f5] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-1.5 rounded-sm"
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+            compiling
+              ? 'bg-[#2a2a2a] text-[#888]'
+              : 'bg-[#2d8cf0] hover:bg-[#3b9cff] text-white'
+          }`}
         >
-          <Play className="w-3 h-3 fill-white" />
-          {compiling ? 'Compiling…' : 'Export PyTorch'}
+          {compiling ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+          {compiling ? 'Compiling...' : 'Compile'}
         </button>
         {process.env.NODE_ENV === 'development' && (
           <button

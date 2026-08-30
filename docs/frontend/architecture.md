@@ -53,9 +53,9 @@ flowchart LR
 - **Project Actions**: Supports in-place file/folder creation, renaming, deletion, **Export Project** (`archide.project.json` download), and **Import Project** (browser JSON upload).
 
 ### 2. `DnDCanvas` + `FileTabBar` + `CentralCodeEditor` ([`src/components/DnDCanvas.tsx`](../../src/components/DnDCanvas.tsx), [`src/components/CentralCodeEditor.tsx`](../../src/components/CentralCodeEditor.tsx))
-- **FileTabBar**: Multi-tab strip displaying open files, relative paths (e.g. `blocks/conv/res_block.json`), non-destructive close actions, and a dual-view mode switcher (`[ ☩ Graph | <> Python Code ]`).
-- **CentralCodeEditor**: Full-workspace code viewer and editor with line numbering gutter, syntax color styling, quick copy, and `.py` file download.
-- **Visual Canvas**: Renders the interactive grid canvas with `MiniMap`, `Controls`, and dot grid `Background`.
+- **FileTabBar**: Multi-tab strip displaying open files, non-destructive close actions, and file extensions.
+- **CentralCodeEditor**: Full-workspace code viewer and editor. Displayed automatically when an active file with a `.py` or `.toml` extension is selected in the FileExplorer.
+- **Visual Canvas**: Renders the interactive grid canvas for `.arch` configuration files with `MiniMap`, `Controls`, and dot grid `Background`.
 
 ### 3. `CustomNode` & `TensorEdge` ([`src/components/CustomNode.tsx`](../../src/components/CustomNode.tsx), [`src/components/TensorEdge.tsx`](../../src/components/TensorEdge.tsx))
 - **Dynamic Handles & Accents**: Color-coded category accents, input/output connection handles, and hover shape tooltips.
@@ -75,7 +75,6 @@ flowchart LR
 | `openTabIds` | `string[]` | IDs of currently open tabs in the editor strip |
 | `activeFileId` | `string` | ID of the currently active file |
 | `entryFileId` | `string` | ID of the designated root entry point file (undeletable main graph) |
-| `activeViewMode` | `'graph' \| 'code'` | Main workspace mode (visual canvas vs Python code editor) |
 | `generatedCode` | `string` | Compiled PyTorch code for the active module / model |
 | `shapeErrorNodeId` | `string \| null` | Node ID with an active shape mismatch (highlights node red) |
 | `nodeShapes` | `Record<string, Record<string, number[]>>` | Maps `node_id -> { port_id: shape_array }` returned by `/api/check` |

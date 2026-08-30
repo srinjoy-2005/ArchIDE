@@ -38,10 +38,12 @@ class GraphData(BaseModel):
 class CompileRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
+    file_paths: Dict[str, str] = {}
 
 class CheckRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
+    file_paths: Dict[str, str] = {}
 
 class FolderData(BaseModel):
     id: str

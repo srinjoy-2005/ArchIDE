@@ -55,8 +55,6 @@ function FileTabBar() {
     folders,
     openTabIds,
     activeFileId,
-    activeViewMode,
-    setActiveViewMode,
     switchFile,
     createFile,
     closeTab,
@@ -139,33 +137,6 @@ function FileTabBar() {
         </button>
       </div>
 
-      {/* Dual View Mode Switcher: Graph vs Python Code */}
-      <div className="flex items-center bg-[#181818] p-0.5 rounded border border-[#2a2a2a] mx-2 flex-shrink-0">
-        <button
-          onClick={() => setActiveViewMode('graph')}
-          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
-            activeViewMode === 'graph'
-              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
-              : 'text-[#777] hover:text-[#bbb]'
-          }`}
-          title="Visual Node Graph Canvas"
-        >
-          <Network className="w-3 h-3 text-[#38bdf8]" />
-          <span>Graph</span>
-        </button>
-        <button
-          onClick={() => setActiveViewMode('code')}
-          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
-            activeViewMode === 'code'
-              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
-              : 'text-[#777] hover:text-[#bbb]'
-          }`}
-          title="Python Code Editor"
-        >
-          <Code2 className="w-3 h-3 text-[#eab308]" />
-          <span>Python Code</span>
-        </button>
-      </div>
     </div>
   );
 }
@@ -177,7 +148,6 @@ export function DnDCanvas() {
   const { screenToFlowPosition, setNodes, setEdges, getNode, getNodes, getEdges } = useReactFlow();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const activeFileId = useEditorStore((s) => s.activeFileId);
-  const activeViewMode = useEditorStore((s) => s.activeViewMode);
   const files = useEditorStore((s) => s.files);
   const clipboard = useEditorStore((s) => s.clipboard);
   const setClipboard = useEditorStore((s) => s.setClipboard);
@@ -185,7 +155,7 @@ export function DnDCanvas() {
   const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
 
   const activeFile = files.find((f) => f.id === activeFileId);
-  const isCodeMode = activeViewMode === 'code' || activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py');
+  const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
 
   // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
   useEffect(() => {

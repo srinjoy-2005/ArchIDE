@@ -430,17 +430,14 @@ def _build_output_var(
     return base if count == 1 else f"{base}_{count}"
 
 
-def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
-    sorted_gids = topological_sort_graphs(graphs)
+def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths: Dict[str, str] = None) -> Dict[str, str]:
+    if file_paths is None:
+        file_paths = {}
     
-    # Run shape inference pass across all graphs to catch mismatches early and get inferred params
+    sorted_gids = topological_sort_graphs(graphs)
     all_node_shapes, all_node_params = shape_inference_multi_graph(graphs, main_graph_id)
     
-    code = [
-        "import torch",
-        "import torch.nn as nn",
-        ""
-    ]
+    files = {}
     
     for gid in sorted_gids:
         graph_data = graphs[gid]
@@ -454,6 +451,37 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
         except ValueError as e:
             raise ValueError(f"Cycle detected in module {graph_data.name}: {e}")
             
+        # Collect custom module dependencies for imports
+        custom_deps = set()
+        for node in sorted_nodes:
+            if _resolve_block_id(node) == "custom_module":
+                dep_id = getattr(node.data, "custom_module_id", "")
+                if dep_id and dep_id in graphs:
+                    custom_deps.add(dep_id)
+                    
+        imports = [
+            "import torch",
+            "import torch.nn as nn",
+        ]
+        
+        for dep_id in custom_deps:
+            dep_path = file_paths.get(dep_id, "")
+            dep_graph = graphs[dep_id]
+            dep_class = _to_pascal_case(dep_graph.name)
+            if dep_path:
+                # e.g. "conv/res_block" -> "from python.conv.res_block import ResBlock"
+                # Wait, if we're in the python/ directory already, absolute import from the root of python/ might just be the path dot separated.
+                # Assuming `python` folder is in PYTHONPATH, or we just use relative imports or absolute imports from root.
+                # Let's use `from {dep_path.replace('/', '.')} import {dep_class}`
+                # Need to handle no folder, e.g., dep_path is "res_block"
+                mod_path = dep_path.replace('/', '.')
+                imports.append(f"from {mod_path} import {dep_class}")
+            else:
+                # Fallback if no path is given
+                imports.append(f"from {dep_id} import {dep_class}")
+
+        imports.append("")
+
         graph_code = _generate_single_graph_code(
             sorted_nodes,
             graph_data.edges,
@@ -462,10 +490,11 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str) -> str:
             graph_data=graph_data,
             inferred_params=all_node_params
         )
-        code.append(graph_code)
-        code.append("")
         
-    return "\n".join(code).strip()
+        file_code = "\n".join(imports) + "\n" + graph_code
+        files[gid] = file_code
+        
+    return files
 
 
 def _generate_single_graph_code(

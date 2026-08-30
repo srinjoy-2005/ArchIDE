@@ -85,5 +85,5 @@ async def test_compile_success():
         response = await client.post("/api/compile", json=payload)
         assert response.status_code == 200
         data = response.json()
-        assert "code" in data
-        assert "nn.Linear" in data["code"]
+        assert "files" in data
+        assert "nn.Linear" in data["files"]["main"]

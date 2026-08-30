@@ -40,8 +40,8 @@ def get_block_docs(block_id: str):
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
-        code = generate_pytorch_code(request.graphs, request.main_graph_id)
-        resp = {"code": code}
+        files = generate_pytorch_code(request.graphs, request.main_graph_id, request.file_paths)
+        resp = {"files": files}
         print_payloads(request, resp)
         return resp
     except ShapeError as e:

@@ -61,11 +61,8 @@ interface EditorState {
   docPanelInfo: { visible: boolean; blockId: string; name: string; intro: string; details: string } | null;
   setDocPanelInfo: (info: any) => void;
 
-  // Active Center View Mode ('graph' for visual node canvas, 'code' for full Python editor)
-  activeViewMode: 'graph' | 'code';
-  setActiveViewMode: (mode: 'graph' | 'code') => void;
-
   // Sidebar & Activity Bar
+  handleCompiledFiles: (compiledData: Record<string, string>) => void;
   activeSidebarView: SidebarView;
   setActiveSidebarView: (view: SidebarView) => void;
   sidebarOpen: boolean;
@@ -134,9 +131,62 @@ class Model(nn.Module):
   docPanelInfo: null,
   setDocPanelInfo: (info) => set({ docPanelInfo: info }),
 
-  // Center View Mode
-  activeViewMode: 'graph',
-  setActiveViewMode: (mode) => set({ activeViewMode: mode }),
+  handleCompiledFiles: (compiledData) => {
+    set((state) => {
+      const newFiles = [...state.files];
+      const newFolders = [...state.folders];
+      const pyFolder = newFolders.find(f => f.name === 'python' && f.parentId === null);
+      if (!pyFolder) return state; // Should exist from initial state
+      
+      const getOrCreatePath = (parentId: string | null, pathParts: string[]): string | null => {
+        if (pathParts.length === 0) return parentId;
+        const part = pathParts[0];
+        let folder = newFolders.find(f => f.parentId === parentId && f.name === part);
+        if (!folder) {
+          folder = { id: generateId(), name: part, parentId, isExpanded: true };
+          newFolders.push(folder);
+        }
+        return getOrCreatePath(folder.id, pathParts.slice(1));
+      };
+
+      for (const [gid, code] of Object.entries(compiledData)) {
+        // Find the graph file to mirror its path
+        const graphFile = state.files.find(f => f.id === gid);
+        if (!graphFile) continue;
+
+        // Reconstruct path from graphFile parent up to graphs dir
+        const pathParts: string[] = [];
+        let currFolderId = graphFile.parentId;
+        while (currFolderId) {
+          const f = state.folders.find(fold => fold.id === currFolderId);
+          if (f && f.name !== 'graphs') {
+            pathParts.unshift(f.name);
+            currFolderId = f.parentId;
+          } else {
+            break;
+          }
+        }
+        
+        const pyParentId = getOrCreatePath(pyFolder.id, pathParts);
+        const pyFileName = graphFile.name.replace(/\.arch$/, '.py');
+        
+        let existingPyFile = newFiles.find(f => f.parentId === pyParentId && f.name === pyFileName);
+        if (existingPyFile) {
+          existingPyFile.compiledCode = code;
+        } else {
+          newFiles.push({
+            id: generateId(),
+            name: pyFileName,
+            parentId: pyParentId,
+            nodes: [], edges: [],
+            fileType: 'code',
+            compiledCode: code
+          });
+        }
+      }
+      return { files: newFiles, folders: newFolders };
+    });
+  },
 
   // Sidebar state
   activeSidebarView: 'explorer',
@@ -160,49 +210,28 @@ class Model(nn.Module):
 
   // Initial Virtual File System with standard clean structure
   folders: [
-    {
-      id: 'fol_blocks',
-      name: 'blocks',
-      parentId: null,
-      isExpanded: true
-    },
-    {
-      id: 'fol_conv',
-      name: 'conv',
-      parentId: 'fol_blocks',
-      isExpanded: true
-    }
+    { id: 'fol_graphs', name: 'graphs', parentId: null, isExpanded: true },
+    { id: 'fol_python', name: 'python', parentId: null, isExpanded: true },
+    { id: 'fol_graphs_conv', name: 'conv', parentId: 'fol_graphs', isExpanded: true }
   ],
   files: [
     {
-      id: 'main',
-      name: 'main.json',
+      id: 'archide_toml',
+      name: 'archide.toml',
       parentId: null,
+      nodes: [], edges: [],
+      fileType: 'code',
+      compiledCode: '[directories]\ngraphs_dir = "graphs"\npython_dir = "python"'
+    },
+    {
+      id: 'main',
+      name: 'main.arch',
+      parentId: 'fol_graphs',
       nodes: [
-        {
-          id: 'node_in',
-          type: 'custom',
-          position: { x: 80, y: 150 },
-          data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 3, 224, 224)' } }
-        },
-        {
-          id: 'node_conv',
-          type: 'custom',
-          position: { x: 280, y: 150 },
-          data: { block_id: 'conv2d', label: 'Conv2D', paramValues: { in_channels: 3, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } }
-        },
-        {
-          id: 'node_relu',
-          type: 'custom',
-          position: { x: 480, y: 150 },
-          data: { block_id: 'relu', label: 'ReLU', paramValues: {} }
-        },
-        {
-          id: 'node_out',
-          type: 'custom',
-          position: { x: 680, y: 150 },
-          data: { block_id: 'output', label: 'out', paramValues: {} }
-        }
+        { id: 'node_in', type: 'custom', position: { x: 80, y: 150 }, data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 3, 224, 224)' } } },
+        { id: 'node_conv', type: 'custom', position: { x: 280, y: 150 }, data: { block_id: 'conv2d', label: 'Conv2D', paramValues: { in_channels: 3, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } } },
+        { id: 'node_relu', type: 'custom', position: { x: 480, y: 150 }, data: { block_id: 'relu', label: 'ReLU', paramValues: {} } },
+        { id: 'node_out', type: 'custom', position: { x: 680, y: 150 }, data: { block_id: 'output', label: 'out', paramValues: {} } }
       ],
       edges: [
         { id: 'e1', type: 'tensor', source: 'node_in', sourceHandle: 'out', target: 'node_conv', targetHandle: 'in' },
@@ -212,37 +241,17 @@ class Model(nn.Module):
     },
     {
       id: 'file_res_block',
-      name: 'res_block.json',
-      parentId: 'fol_conv',
+      name: 'res_block.arch',
+      parentId: 'fol_graphs_conv',
       parameters: [
         { name: 'in_channels', type: 'int', default: 32 },
         { name: 'out_channels', type: 'int', default: 32 }
       ],
       nodes: [
-        {
-          id: 'rb_in',
-          type: 'custom',
-          position: { x: 80, y: 120 },
-          data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 32, 224, 224)' } }
-        },
-        {
-          id: 'rb_conv',
-          type: 'custom',
-          position: { x: 280, y: 80 },
-          data: { block_id: 'conv2d', label: 'Conv 3x3', paramValues: { in_channels: 32, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } }
-        },
-        {
-          id: 'rb_add',
-          type: 'custom',
-          position: { x: 480, y: 120 },
-          data: { block_id: 'add', label: 'Residual Add', paramValues: {} }
-        },
-        {
-          id: 'rb_out',
-          type: 'custom',
-          position: { x: 680, y: 120 },
-          data: { block_id: 'output', label: 'out', paramValues: {} }
-        }
+        { id: 'rb_in', type: 'custom', position: { x: 80, y: 120 }, data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 32, 224, 224)' } } },
+        { id: 'rb_conv', type: 'custom', position: { x: 280, y: 80 }, data: { block_id: 'conv2d', label: 'Conv 3x3', paramValues: { in_channels: 32, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } } },
+        { id: 'rb_add', type: 'custom', position: { x: 480, y: 120 }, data: { block_id: 'add', label: 'Residual Add', paramValues: {} } },
+        { id: 'rb_out', type: 'custom', position: { x: 680, y: 120 }, data: { block_id: 'output', label: 'out', paramValues: {} } }
       ],
       edges: [
         { id: 're1', type: 'tensor', source: 'rb_in', sourceHandle: 'out', target: 'rb_conv', targetHandle: 'in' },
@@ -286,7 +295,7 @@ class Model(nn.Module):
         } else {
           const fallbackId = generateId();
           return {
-            files: [{ id: fallbackId, name: 'Main', parentId: null, nodes: [], edges: [] }],
+            files: [{ id: fallbackId, name: 'main.arch', parentId: null, nodes: [], edges: [] }],
             openTabIds: [fallbackId],
             activeFileId: fallbackId
           };
@@ -316,7 +325,7 @@ class Model(nn.Module):
       return {
         openTabIds: alreadyOpen ? state.openTabIds : [...state.openTabIds, id],
         activeFileId: id,
-        activeViewMode: isCodeFile ? 'code' : state.activeViewMode,
+
       };
     });
   },
@@ -374,7 +383,7 @@ class Model(nn.Module):
         const fallbackId = generateId();
         return {
           folders: remainingFolders,
-          files: [{ id: fallbackId, name: 'main.json', parentId: null, nodes: [], edges: [] }],
+          files: [{ id: fallbackId, name: 'main.arch', parentId: null, nodes: [], edges: [] }],
           openTabIds: [fallbackId],
           activeFileId: fallbackId
         };
@@ -424,7 +433,7 @@ class Model(nn.Module):
       files: [...state.files, newFile],
       openTabIds: state.openTabIds.includes(newFile.id) ? state.openTabIds : [...state.openTabIds, newFile.id],
       activeFileId: newFile.id,
-      activeViewMode: isCode ? 'code' : state.activeViewMode,
+
     }));
   },
 
@@ -454,7 +463,7 @@ class Model(nn.Module):
       if (newFiles.length === 0) {
         const fallbackId = generateId();
         return {
-          files: [{ id: fallbackId, name: 'main.json', parentId: null, nodes: [], edges: [] }],
+          files: [{ id: fallbackId, name: 'main.arch', parentId: null, nodes: [], edges: [] }],
           openTabIds: [fallbackId],
           activeFileId: fallbackId
         };
@@ -572,7 +581,6 @@ class Model(nn.Module):
         activeFileId: validEntryId,
         shapeErrorNodeId: null,
         nodeShapes: {},
-        activeViewMode: 'graph',
       });
       return true;
     } catch (err) {
