@@ -155,21 +155,27 @@ class CustomModuleBlock(BaseBlock):
     def emit_init(self, node_id: str, params: dict) -> str:
         var_name = f"self.custom_{node_id.replace('-', '_')[:8]}"
         kwargs = []
+        
+        def _format_val(k, v):
+            if isinstance(v, str):
+                v = v.strip()
+                # If wrapped in quotes, it's a string literal
+                if len(v) >= 2 and ((v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'"))):
+                    return f"{k}={v}"
+                else:
+                    # Treat as raw code / expression
+                    return f"{k}={v}"
+            return f"{k}={v}"
+
         if self.definition.params:
             for p in self.definition.params:
                 val = params.get(p.name, p.default)
-                if isinstance(val, str) and not val.isidentifier():
-                    kwargs.append(f"{p.name}={repr(val)}")
-                else:
-                    kwargs.append(f"{p.name}={val}")
+                kwargs.append(_format_val(p.name, val))
         elif params:
             for k, v in params.items():
                 if k.startswith("_"):
                     continue
-                if isinstance(v, str) and not v.isidentifier():
-                    kwargs.append(f"{k}={repr(v)}")
-                else:
-                    kwargs.append(f"{k}={v}")
+                kwargs.append(_format_val(k, v))
                     
         args_str = ", ".join(kwargs)
         return f"{var_name} = {self.class_name}({args_str})"
@@ -356,13 +362,20 @@ def shape_inference_pass(
         else:
             try:
                 out_shapes = block.infer_shapes(incoming, node.data.paramValues)
-            except ValueError as exc:
-                raise ShapeError(
-                    message=str(exc),
-                    node_id=node.id,
-                    node_label=node.data.label,
-                    edge_ids=incoming_edge_ids,
-                ) from exc
+            except Exception as exc:
+                # If any parameter is a symbolic expression (string with letters/operators), suppress the error and output ANY.
+                has_symbolic = any(isinstance(v, str) and not v.strip().lstrip('-').isdigit() for v in node.data.paramValues.values())
+                if has_symbolic:
+                    out_shapes = {port.id: ("ANY",) for port in block.definition.outputs}
+                elif isinstance(exc, ValueError):
+                    raise ShapeError(
+                        message=str(exc),
+                        node_id=node.id,
+                        node_label=node.data.label,
+                        edge_ids=incoming_edge_ids,
+                    ) from exc
+                else:
+                    out_shapes = {port.id: ("ANY",) for port in block.definition.outputs}
 
         for port_id, shape in out_shapes.items():
             tensor_shapes[f"{node.id}_{port_id}"] = shape
@@ -512,9 +525,19 @@ def _generate_single_graph_code(
     if params_decl:
         init_args = ["self"]
         for p in params_decl:
-            t_str = f": {p.type}" if p.type else ""
-            d_val = repr(p.default) if isinstance(p.default, str) else str(p.default)
-            init_args.append(f"{p.name}{t_str} = {d_val}")
+            t_str = f": {p.type}" if getattr(p, "type", "") else ""
+            d_val = getattr(p, "default", "")
+            
+            if isinstance(d_val, str):
+                d_val = d_val.strip()
+                if len(d_val) >= 2 and ((d_val.startswith('"') and d_val.endswith('"')) or (d_val.startswith("'") and d_val.endswith("'"))):
+                    d_val_str = d_val
+                else:
+                    d_val_str = d_val if d_val else "None"
+            else:
+                d_val_str = str(d_val)
+                
+            init_args.append(f"{p.name}{t_str} = {d_val_str}")
         init_sig = f"    def __init__({', '.join(init_args)}):"
     else:
         init_sig = "    def __init__(self):"

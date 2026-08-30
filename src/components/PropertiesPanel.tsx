@@ -15,7 +15,9 @@
 
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
-import { Brain, ChevronRight } from 'lucide-react';
+import { Brain, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { useEditorStore, type GraphParamDef } from '../lib/store';
+import { useState, useRef, useEffect } from 'react';
 
 // ─── ParamInput ───────────────────────────────────────────────────────────────
 
@@ -28,12 +30,48 @@ function ParamInput({
   value: any;
   onChange: (name: string, value: any) => void;
 }) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  const files = useEditorStore(s => s.files);
+  const activeFileId = useEditorStore(s => s.activeFileId);
+  const activeFile = files.find(f => f.id === activeFileId);
+  const fileParams = activeFile?.parameters || [];
+
   const inputClass = param.read_only
     ? 'w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed'
     : 'w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors';
 
+  const currentValue = value ?? param.default;
+  const currentStr = String(currentValue);
+
+  // Simple tokenization to suggest only the current typing word
+  const match = currentStr.match(/[a-zA-Z0-9_]+$/);
+  const currentWord = match ? match[0] : '';
+  
+  const suggestions = fileParams.filter(p => 
+    p.name.toLowerCase().includes(currentWord.toLowerCase()) && p.name !== currentWord
+  );
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as any)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelect = (sugg: string) => {
+    if (!match) return;
+    const newValue = currentStr.slice(0, match.index) + sugg;
+    onChange(param.name, newValue);
+    setShowSuggestions(false);
+  };
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 relative" ref={containerRef}>
       <div className="flex items-center justify-between">
         <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
           {param.name.replace(/_/g, ' ')}
@@ -46,25 +84,103 @@ function ParamInput({
         <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
       </div>
       <input
-        type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
+        type="text"
         className={inputClass}
-        value={value ?? param.default}
+        value={currentStr}
         readOnly={param.read_only}
         disabled={param.read_only}
         title={param.description || ''}
+        onFocus={() => setShowSuggestions(true)}
         onChange={(e) => {
           if (!param.read_only) {
-            onChange(
-              param.name,
-              param.type === 'int'
-                ? parseInt(e.target.value)
-                : param.type === 'float'
-                ? parseFloat(e.target.value)
-                : e.target.value
-            );
+            onChange(param.name, e.target.value);
+            setShowSuggestions(true);
           }
         }}
       />
+      {showSuggestions && currentWord && suggestions.length > 0 && !param.read_only && (
+        <div className="absolute top-[100%] left-0 w-full z-10 bg-[#252525] border border-[#3a3a3a] rounded-[3px] mt-1 shadow-lg overflow-hidden">
+          {suggestions.map(s => (
+            <div
+              key={s.name}
+              className="px-2 py-1.5 text-[11px] font-mono text-[#e2e2e2] hover:bg-[#2d8cf0] cursor-pointer"
+              onClick={() => handleSelect(s.name)}
+            >
+              {s.name} <span className="text-[#aaa] ml-2">{s.type}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HyperparameterTable ────────────────────────────────────────────────────────
+
+function HyperparameterTable() {
+  const files = useEditorStore(s => s.files);
+  const activeFileId = useEditorStore(s => s.activeFileId);
+  const addFileParameter = useEditorStore(s => s.addFileParameter);
+  const updateFileParameter = useEditorStore(s => s.updateFileParameter);
+  const removeFileParameter = useEditorStore(s => s.removeFileParameter);
+
+  const activeFile = files.find(f => f.id === activeFileId);
+  const params = activeFile?.parameters || [];
+
+  const handleAdd = () => {
+    addFileParameter(activeFileId, {
+      name: 'new_param',
+      type: 'int',
+      default: 0,
+      description: ''
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between border-b border-[#363636] pb-2">
+        <span className="text-[10px] uppercase tracking-wider text-[#555]">Module Hyperparameters</span>
+        <button onClick={handleAdd} className="text-[#aaa] hover:text-[#e2e2e2] p-1 rounded hover:bg-[#2a2a2a] transition-colors">
+          <Plus className="w-3 h-3" />
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {params.map((p, i) => (
+          <div key={i} className="flex flex-col gap-2 p-2 bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px]">
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-transparent border-b border-[#333] focus:border-[#2d8cf0] text-[11px] text-[#e2e2e2] font-mono outline-none"
+                value={p.name}
+                onChange={(e) => updateFileParameter(activeFileId, p.name, { ...p, name: e.target.value })}
+                placeholder="Name"
+              />
+              <button onClick={() => removeFileParameter(activeFileId, p.name)} className="text-[#666] hover:text-[#f44336] transition-colors">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-[#151515] border border-[#333] rounded px-1.5 py-1 text-[10px] text-[#aaa] font-mono outline-none"
+                value={p.type || ''}
+                onChange={(e) => updateFileParameter(activeFileId, p.name, { ...p, type: e.target.value })}
+                placeholder="Type (e.g. int, tuple)"
+              />
+              <input
+                className="flex-1 bg-[#151515] border border-[#333] rounded px-1.5 py-1 text-[10px] text-[#aaa] font-mono outline-none"
+                value={p.default || ''}
+                onChange={(e) => updateFileParameter(activeFileId, p.name, { ...p, default: e.target.value })}
+                placeholder="Default"
+              />
+            </div>
+          </div>
+        ))}
+        {params.length === 0 && (
+          <div className="text-[10px] text-[#555] italic text-center py-4">
+            No hyperparameters defined.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -98,8 +214,11 @@ function ModelSummaryDashboard() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Hyperparameters Config */}
+      <HyperparameterTable />
+
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 mt-2">
         <div className="bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] p-3">
           <div className="text-[9px] uppercase tracking-wider text-[#666] mb-1">Layers</div>
           <div className="text-xl font-semibold text-[#e2e2e2] font-mono">{nodes.length}</div>

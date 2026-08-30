@@ -93,6 +93,11 @@ interface EditorState {
   updateFileState: (id: string, nodes: Node[], edges: Edge[]) => void;
   deleteFile: (id: string) => void;
   moveItem: (id: string, isFolder: boolean, targetParentId: string | null) => void;
+  
+  // Parameter Actions
+  addFileParameter: (fileId: string, param: GraphParamDef) => void;
+  updateFileParameter: (fileId: string, oldName: string, newParam: GraphParamDef) => void;
+  removeFileParameter: (fileId: string, name: string) => void;
 
   // Project Import / Export Serialization
   exportProjectJson: () => string;
@@ -495,6 +500,38 @@ class Model(nn.Module):
         };
       }
     });
+  },
+
+  // ─── Parameter Actions ───────────────────────────────────────────────────────
+  addFileParameter: (fileId, param) => {
+    set((state) => ({
+      files: state.files.map(f => f.id === fileId ? { ...f, parameters: [...(f.parameters || []), param] } : f)
+    }));
+  },
+
+  updateFileParameter: (fileId, oldName, newParam) => {
+    set((state) => ({
+      files: state.files.map(f => {
+        if (f.id !== fileId) return f;
+        const currentParams = f.parameters || [];
+        return {
+          ...f,
+          parameters: currentParams.map(p => p.name === oldName ? newParam : p)
+        };
+      })
+    }));
+  },
+
+  removeFileParameter: (fileId, name) => {
+    set((state) => ({
+      files: state.files.map(f => {
+        if (f.id !== fileId) return f;
+        return {
+          ...f,
+          parameters: (f.parameters || []).filter(p => p.name !== name)
+        };
+      })
+    }));
   },
 
   // ─── Project Serialization ───────────────────────────────────────────────────
