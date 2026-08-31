@@ -12,12 +12,12 @@
 
 import React, { useState } from 'react';
 import { Copy, Check, Download, FileCode, Play, Sparkles } from 'lucide-react';
-import { useEditorStore } from '../lib/store';
+import { useEditorStore, useVFSStore } from '../lib/store';
 
 export function CentralCodeEditor() {
   const generatedCode = useEditorStore((s) => s.generatedCode);
-  const activeFileId = useEditorStore((s) => s.activeFileId);
-  const files = useEditorStore((s) => s.files);
+  const activeFileId = useVFSStore((s) => s.activeFileId);
+  const files = useVFSStore((s) => s.files);
   const activeFile = files.find((f) => f.id === activeFileId);
 
   const [copied, setCopied] = useState(false);

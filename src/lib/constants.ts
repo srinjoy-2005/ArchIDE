@@ -15,9 +15,9 @@ export const API_BASE = 'http://localhost:8001';
 export const initialNodes: Node[] = [];
 export const initialEdges: Edge[] = [];
 
-let nodeCounter = 100;
-/** Returns a unique node ID, e.g. "node_101" */
-export const getId = () => `node_${nodeCounter++}`;
+/** Returns a collision-safe unique node ID, stable across page refreshes. */
+export const getId = () =>
+  `node_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
 /** Fallback block registry used when `/api/blocks` is unreachable */
 export const FALLBACK_BLOCKS: any[] = [

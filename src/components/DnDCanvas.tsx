@@ -40,9 +40,9 @@ import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode';
 import TensorEdge from './TensorEdge';
 import { CentralCodeEditor } from './CentralCodeEditor';
-import { useEditorStore } from '../lib/store';
+import { useEditorStore, useVFSStore } from '../lib/store';
 import { Plus, X, FileCode, Network, Code2, Hand, MousePointer2 } from 'lucide-react';
-import { getId, initialNodes, initialEdges } from '../lib/constants';
+import { getId, initialNodes, initialEdges, API_BASE } from '../lib/constants';
 
 // Defined at module level to avoid re-creating objects on every render,
 // which would cause React Flow to unmount and remount all nodes.
@@ -61,7 +61,7 @@ function FileTabBar() {
     createFile,
     closeTab,
     updateFileState
-  } = useEditorStore();
+  } = useVFSStore();
   const { getNodes, getEdges } = useReactFlow();
 
   const handleSwitch = (id: string) => {
@@ -151,14 +151,15 @@ export function DnDCanvas() {
   const nodes = useNodes();
   const edges = useEdges();
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
-  const activeFileId = useEditorStore((s) => s.activeFileId);
-  const files = useEditorStore((s) => s.files);
-  const folders = useEditorStore((s) => s.folders);
   const clipboard = useEditorStore((s) => s.clipboard);
   const setClipboard = useEditorStore((s) => s.setClipboard);
   const canvasMode = useEditorStore((s) => s.canvasMode);
   const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
-  const isMirroring = useEditorStore((s) => s.isMirroring);
+
+  const activeFileId = useVFSStore((s) => s.activeFileId);
+  const files = useVFSStore((s) => s.files);
+  const folders = useVFSStore((s) => s.folders);
+  const isMirroring = useVFSStore((s) => s.isMirroring);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
@@ -194,11 +195,11 @@ export function DnDCanvas() {
           name: fileNameWithoutExt,
           nodes: nodes,
           edges: edges,
-          parameters: activeFile.parameters || []
+          variables: activeFile.variables || []
         }
       };
 
-      fetch('http://localhost:8001/api/vfs/save', {
+      fetch(`${API_BASE}/api/vfs/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

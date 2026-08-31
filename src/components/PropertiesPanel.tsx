@@ -16,6 +16,7 @@
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Brain, ChevronRight } from 'lucide-react';
+import { PARAM_TYPE_HANDLERS, type ParamTypeName } from '../lib/paramTypes';
 
 // ─── ParamInput ───────────────────────────────────────────────────────────────
 
@@ -28,9 +29,39 @@ function ParamInput({
   value: any;
   onChange: (name: string, value: any) => void;
 }) {
-  const inputClass = param.read_only
+  const handler = PARAM_TYPE_HANDLERS[param.type as ParamTypeName] || PARAM_TYPE_HANDLERS.string;
+  
+  const isAutoInferEnabled = param.auto_infer;
+  const isChecked = isAutoInferEnabled && (value === -1 || value === "?" || value === -1.0);
+  const isReadOnly = param.read_only || isChecked;
+
+  const inputClass = isReadOnly
     ? 'w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed'
     : 'w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors';
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
+    const rawVal = handler.inputType === 'checkbox' ? e.target.checked : e.target.value;
+    
+    if (isAutoInferEnabled && String(rawVal) === '-1') {
+      onChange(param.name, -1);
+      return;
+    }
+    
+    if (handler.isValid(rawVal as any)) {
+      onChange(param.name, handler.coerce(rawVal as any));
+    } else {
+      onChange(param.name, rawVal); 
+    }
+  };
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      onChange(param.name, param.type === 'string' ? '?' : -1);
+    } else {
+      onChange(param.name, param.default ?? 1);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -43,28 +74,39 @@ function ParamInput({
             </span>
           )}
         </label>
-        <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
+        <div className="flex items-center gap-2">
+          {isAutoInferEnabled && (
+            <label className="flex items-center gap-1 text-[9px] text-[#888] cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={isChecked} 
+                onChange={handleCheckboxChange}
+                className="w-2.5 h-2.5 accent-[#2d8cf0]"
+              />
+              Auto-Infer
+            </label>
+          )}
+          <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
+        </div>
       </div>
-      <input
-        type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
-        className={inputClass}
-        value={value ?? param.default}
-        readOnly={param.read_only}
-        disabled={param.read_only}
-        title={param.description || ''}
-        onChange={(e) => {
-          if (!param.read_only) {
-            onChange(
-              param.name,
-              param.type === 'int'
-                ? parseInt(e.target.value)
-                : param.type === 'float'
-                ? parseFloat(e.target.value)
-                : e.target.value
-            );
-          }
-        }}
-      />
+      
+      {handler.inputType === 'checkbox' ? (
+         <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]">
+           <input type="checkbox" checked={!!value} onChange={handleChange} disabled={isReadOnly} />
+           {value ? 'True' : 'False'}
+         </label>
+      ) : (
+        <input
+          type={handler.inputType}
+          step={handler.step}
+          className={inputClass}
+          value={value ?? param.default}
+          readOnly={isReadOnly}
+          disabled={isReadOnly}
+          title={param.description || ''}
+          onChange={handleChange}
+        />
+      )}
     </div>
   );
 }

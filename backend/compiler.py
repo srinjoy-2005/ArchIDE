@@ -432,7 +432,7 @@ def _build_output_var(
     return base if count == 1 else f"{base}_{count}"
 
 
-def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths: Dict[str, str] = None) -> Dict[str, str]:
+def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths: Dict[str, str] = None) -> Tuple[Dict[str, str], Dict, Dict]:
     if file_paths is None:
         file_paths = {}
     
@@ -496,7 +496,7 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
         file_code = "\n".join(imports) + "\n" + graph_code
         files[gid] = file_code
         
-    return files
+    return files, all_node_shapes, all_node_params
 
 
 def _generate_single_graph_code(

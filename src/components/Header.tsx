@@ -19,9 +19,10 @@
 
 import { useState, useEffect } from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
-import { useEditorStore } from '../lib/store';
+import { useEditorStore, useVFSStore } from '../lib/store';
 import { Layers, Play, RotateCcw, Bug } from 'lucide-react';
 import { API_BASE } from '../lib/constants';
+import { resolveFilePath } from '../lib/utils';
 
 export function Header() {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -30,14 +31,15 @@ export function Header() {
   const setGeneratedCode  = useEditorStore((s) => s.setGeneratedCode);
   const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
   const setNodeShapes     = useEditorStore((s) => s.setNodeShapes);
-  const folders           = useEditorStore((s) => s.folders);
-  const handleCompiledFiles = useEditorStore((s) => s.handleCompiledFiles);
-  const files             = useEditorStore((s) => s.files);
-  const activeFileId      = useEditorStore((s) => s.activeFileId);
-  const entryFileId       = useEditorStore((s) => s.entryFileId);
-  const isMirroring       = useEditorStore((s) => s.isMirroring);
-  const setIsMirroring    = useEditorStore((s) => s.setIsMirroring);
-  const overwriteFilesFromVFS = useEditorStore((s) => s.overwriteFilesFromVFS);
+
+  const folders           = useVFSStore((s) => s.folders);
+  const handleCompiledFiles = useVFSStore((s) => s.handleCompiledFiles);
+  const files             = useVFSStore((s) => s.files);
+  const activeFileId      = useVFSStore((s) => s.activeFileId);
+  const entryFileId       = useVFSStore((s) => s.entryFileId);
+  const isMirroring       = useVFSStore((s) => s.isMirroring);
+  const setIsMirroring    = useVFSStore((s) => s.setIsMirroring);
+  const overwriteFilesFromVFS = useVFSStore((s) => s.overwriteFilesFromVFS);
 
   const [compiling,    setCompiling]    = useState(false);
   const [checkStatus,  setCheckStatus]  = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
@@ -92,31 +94,22 @@ export function Header() {
 
     for (const f of files) {
       if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
-      
-      // Resolve path
-      const pathParts: string[] = [];
-      let currFolderId = f.parentId;
-      while (currFolderId) {
-        const folder = folders.find(fold => fold.id === currFolderId);
-        if (folder && folder.name !== 'graphs') {
-          pathParts.unshift(folder.name);
-          currFolderId = folder.parentId;
-        } else {
-          break;
-        }
-      }
-      
-      const fileNameWithoutExt = f.name.replace(/\.[^/.]+$/, "");
-      pathParts.push(fileNameWithoutExt);
-      const fullPath = pathParts.join('/');
+
+      const fullPath = resolveFilePath(f, folders);
       file_paths[fullPath] = fullPath;
 
       const isCurrent = f.id === activeFileId;
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
+
+      // Only 'init_param' variables become the __init__ signature of a custom module.
+      const initParams = (f.variables || [])
+        .filter((v) => v.scope === 'init_param')
+        .map((v) => ({ name: v.name, type: v.type, default: v.default, description: v.description || '' }));
+
       graphs[fullPath] = {
-        name: fileNameWithoutExt,
-        parameters: f.parameters || [],
+        name: f.name.replace(/\.[^/.]+$/, ''),
+        parameters: initParams,
         nodes: nList.map((n) => ({
           id: n.id,
           position: n.position || { x: 100, y: 100 },
@@ -138,23 +131,9 @@ export function Header() {
         })),
       };
     }
-    
-    // Resolve entryFileId to its full path
-    let mainGraphPath = entryFileId;
-    const entryFile = files.find(f => f.id === entryFileId);
-    if (entryFile) {
-      const pathParts: string[] = [];
-      let currFolderId = entryFile.parentId;
-      while (currFolderId) {
-        const folder = folders.find(fold => fold.id === currFolderId);
-        if (folder && folder.name !== 'graphs') {
-          pathParts.unshift(folder.name);
-          currFolderId = folder.parentId;
-        } else break;
-      }
-      pathParts.push(entryFile.name.replace(/\.[^/.]+$/, ""));
-      mainGraphPath = pathParts.join('/');
-    }
+
+    const entryFile = files.find((f) => f.id === entryFileId);
+    const mainGraphPath = entryFile ? resolveFilePath(entryFile, folders) : entryFileId;
 
     return { main_graph_id: mainGraphPath, graphs, file_paths };
   };
@@ -190,6 +169,27 @@ export function Header() {
         setGeneratedCode('# Compiled successfully. Check the python/ folder.');
         setShapeErrorNodeId(null);
         handleCompiledFiles(data.files || {});
+        
+        setNodeShapes(data.node_shapes ?? {});
+        setNodes((nds) =>
+          nds.map((n) => {
+            const shapes    = data.node_shapes?.[n.id];
+            const newParams = data.node_params?.[n.id];
+            if (!shapes && !newParams) return n;
+
+            const params = (n.data.params as any[]) || [];
+            const updatedValues = { ...(n.data.paramValues as any) };
+            if (shapes) {
+              params.forEach((p: any) => {
+                if (p.section === 'shape') {
+                  if (p.name === 'output_shape' && shapes['out']) updatedValues['output_shape'] = JSON.stringify(shapes['out']);
+                  if (p.name === 'input_shape'  && shapes['in'])  updatedValues['input_shape']  = JSON.stringify(shapes['in']);
+                }
+              });
+            }
+            return { ...n, data: { ...n.data, paramValues: updatedValues, inferredShapes: shapes, inferredParams: newParams } };
+          })
+        );
       } else {
         if (data.detail?.error === 'ShapeMismatch') {
           setShapeErrorNodeId(data.detail.node_id);
@@ -239,8 +239,7 @@ export function Header() {
                 }
               });
             }
-            if (newParams) Object.assign(updatedValues, newParams);
-            return { ...n, data: { ...n.data, paramValues: updatedValues, inferredShapes: shapes } };
+            return { ...n, data: { ...n.data, paramValues: updatedValues, inferredShapes: shapes, inferredParams: newParams } };
           })
         );
       } else {

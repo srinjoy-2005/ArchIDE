@@ -81,7 +81,7 @@ class LinearBlock(BaseBlock):
             outputs=[PortDef(id="out", name="Output", var_hint="fc_out")],
             params=[
                 # Basic section
-                ParamDef(name="in_features",  type="int", default=128, section="basic", description="Size of each input sample"),
+                ParamDef(name="in_features",  type="int", default=128, auto_infer=True, section="basic", description="Size of each input sample"),
                 ParamDef(name="out_features", type="int", default=64,  section="basic", description="Size of each output sample"),
                 # Advanced section
                 ParamDef(name="bias",         type="bool", default=True, section="advanced", description="If True, adds a learnable bias to the output"),
@@ -150,7 +150,7 @@ class Conv2DBlock(BaseBlock):
             outputs=[PortDef(id="out", name="Output", var_hint="conv_feat")],
             params=[
                 # Basic section
-                ParamDef(name="in_channels",  type="int", default=3,  section="basic", description="Number of channels in the input image"),
+                ParamDef(name="in_channels",  type="int", default=3,  auto_infer=True, section="basic", description="Number of channels in the input image"),
                 ParamDef(name="out_channels", type="int", default=16, section="basic", description="Number of channels produced by the convolution"),
                 ParamDef(name="kernel_size",  type="int", default=3,  section="basic", description="Size of the convolving kernel"),
                 # Advanced section

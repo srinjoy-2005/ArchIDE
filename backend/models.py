@@ -26,6 +26,7 @@ class ParamDef(BaseModel):
     type: str                   # "int", "float", "string", "bool"
     default: Any
     read_only: bool = False     # If True, shown greyed-out in UI (e.g. inferred shapes)
+    auto_infer: bool = False    # If True, shown greyed-out in UI (e.g. inferred shapes)
     section: str = "basic"      # "shape" | "basic" | "advanced"
     description: str = ""       # Tooltip text shown in the UI
 

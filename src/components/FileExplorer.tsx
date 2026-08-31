@@ -14,7 +14,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useEditorStore, type Folder, type GraphFile } from '../lib/store';
+import { useVFSStore, type Folder, type GraphFile } from '../lib/store';
 import {
   ChevronDown,
   ChevronRight,
@@ -62,7 +62,7 @@ export function FileExplorer() {
     exportProjectJson,
     importProjectJson,
     entryFileId,
-  } = useEditorStore();
+  } = useVFSStore();
 
   const { getNodes, getEdges } = useReactFlow();
 

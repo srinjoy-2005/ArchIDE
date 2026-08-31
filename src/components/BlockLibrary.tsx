@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useEditorStore } from '../lib/store';
+import { useEditorStore, useVFSStore } from '../lib/store';
 import { Search, Box, Sparkles, ArrowRightLeft, Activity, Brain } from 'lucide-react';
 import { API_BASE, FALLBACK_BLOCKS } from '../lib/constants';
 
@@ -80,8 +80,8 @@ function BlockItem({ blockDef }: { blockDef: any }) {
 export function BlockLibrary() {
   const [registry, setRegistry] = useState<any[]>(FALLBACK_BLOCKS);
   const [search, setSearch] = useState('');
-  const files = useEditorStore((s) => s.files);
-  const activeFileId = useEditorStore((s) => s.activeFileId);
+  const files = useVFSStore((s) => s.files);
+  const activeFileId = useVFSStore((s) => s.activeFileId);
 
   // Fetch the live block registry from the backend; silently fall back on error
   useEffect(() => {
@@ -91,7 +91,7 @@ export function BlockLibrary() {
       .catch(() => {});
   }, []);
 
-  const entryFileId = useEditorStore((s) => s.entryFileId);
+  const entryFileId = useVFSStore((s) => s.entryFileId);
 
   // Derive custom module entries from other files
   // Exclude the entry point (it's the root model, never a sub-module)

@@ -44,7 +44,9 @@ def get_block_docs(block_id: str):
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
-        files = generate_pytorch_code(request.graphs, request.main_graph_id, request.file_paths)
+        files, node_shapes, node_params = generate_pytorch_code(
+            request.graphs, request.main_graph_id, request.file_paths
+        )
         
         # Dump files to workspace/python
         python_dir = os.path.join(os.path.dirname(__file__), '../workspace/python')
@@ -56,7 +58,13 @@ def compile_graph(request: CompileRequest):
             with open(out_file, "w", encoding="utf-8") as f:
                 f.write(code_content)
                 
-        resp = {"files": files}
+        # Convert tuples to lists for JSON serialisation
+        serialisable_shapes = {
+            node_id: {port: list(shape) for port, shape in ports.items()}
+            for node_id, ports in node_shapes.items()
+        }
+                
+        resp = {"files": files, "node_shapes": serialisable_shapes, "node_params": node_params}
         print_payloads(request, resp)
         return resp
     except ShapeError as e:

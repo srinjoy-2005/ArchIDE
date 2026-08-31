@@ -14,7 +14,7 @@ class BatchNorm2DBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="norm_out")],
             params=[
-                ParamDef(name="num_features", type="int", default=-1, section="basic", description="Number of features/channels in the input. Auto-inferred if -1."),
+                ParamDef(name="num_features", type="int", default=1, auto_infer=True, section="basic", description="Number of features/channels in the input. Auto-inferred if checked."),
                 ParamDef(name="eps", type="float", default=1e-05, section="advanced", description="Value added to the denominator for numerical stability"),
                 ParamDef(name="momentum", type="float", default=0.1, section="advanced", description="Value used for the running_mean and running_var computation")
             ]
@@ -63,7 +63,7 @@ class LayerNormBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="norm_out")],
             params=[
-                ParamDef(name="normalized_shape", type="string", default="?", section="basic", description="Input shape from an expected size, auto-inferred from input."),
+                ParamDef(name="normalized_shape", type="string", default="?", auto_infer=True, section="basic", description="Input shape from an expected size, auto-inferred from input."),
                 ParamDef(name="eps", type="float", default=1e-05, section="advanced", description="Value added to the denominator for numerical stability")
             ]
         )
