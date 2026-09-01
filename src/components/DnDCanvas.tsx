@@ -164,15 +164,36 @@ export function DnDCanvas() {
   const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
 
+  // Ref to track the last saved structural state to prevent infinite ping-pongs
+  const lastSavedState = useRef<string>("");
+
+  // Helper to strip transient React Flow state
+  const getStrippedGraph = useCallback((nodesToStrip: Node[], edgesToStrip: Edge[]) => {
+    return {
+      nodes: nodesToStrip.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+      edges: edgesToStrip.map(e => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, type: e.type, animated: e.animated })),
+    };
+  }, []);
+
   // ─── Debounced Auto-Save (Live VFS Sync) ────────────────────────────────────
   useEffect(() => {
     if (!isMirroring || !activeFile || isCodeMode) return;
 
+    // 1. Prevent saves while actively dragging nodes
+    if (nodes.some(n => n.dragging)) return;
+
+    // Ensure we don't save an empty graph if it hasn't hydrated properly
+    if (nodes.length === 0 && edges.length === 0 && activeFile.nodes.length > 0) return;
+
+    // 2. Strip transient UI state to isolate structural/semantic data
+    const strippedGraph = getStrippedGraph(nodes, edges);
+    const currentStateStr = JSON.stringify({ ...strippedGraph, variables: activeFile.variables || [] });
+
+    // 3. Deep equality check against the last saved state
+    if (currentStateStr === lastSavedState.current) return;
+
     // Use a timeout to debounce saves after canvas interactions
     const handler = setTimeout(() => {
-      // Ensure we don't save an empty graph if it hasn't hydrated properly
-      if (nodes.length === 0 && edges.length === 0 && activeFile.nodes.length > 0) return;
-
       // Compute full path for file_id (e.g. "conv/res_block")
       const pathParts: string[] = [];
       let currFolderId = activeFile.parentId;
@@ -193,11 +214,14 @@ export function DnDCanvas() {
         file_id: fullFileId,
         content: {
           name: fileNameWithoutExt,
-          nodes: nodes,
-          edges: edges,
+          nodes: strippedGraph.nodes,
+          edges: strippedGraph.edges,
           variables: activeFile.variables || []
         }
       };
+
+      // Mark as saved before fetching to immediately block incoming SSE ping-pongs
+      lastSavedState.current = currentStateStr;
 
       fetch(`${API_BASE}/api/vfs/save`, {
         method: 'POST',
@@ -207,21 +231,26 @@ export function DnDCanvas() {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode]);
+  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode, getStrippedGraph]);
 
   // ─── Sync Disk Updates to Canvas ──────────────────────────────────────────────
   // When activeFile changes (e.g. from SSE), we must push it into the uncontrolled ReactFlow.
-  // We use JSON stringify to check deep equality to prevent loop feedback.
   useEffect(() => {
     if (!isMirroring || !activeFile || isCodeMode) return;
-    const currentNodesStr = JSON.stringify(getNodes());
-    const incomingNodesStr = JSON.stringify(activeFile.nodes);
     
-    if (currentNodesStr !== incomingNodesStr) {
+    const strippedCurrent = getStrippedGraph(getNodes(), getEdges());
+    const currentStr = JSON.stringify({ ...strippedCurrent, variables: activeFile.variables || [] });
+    
+    const strippedIncoming = getStrippedGraph(activeFile.nodes, activeFile.edges);
+    const incomingStr = JSON.stringify({ ...strippedIncoming, variables: activeFile.variables || [] });
+    
+    // Only update if the semantic data differs from our canvas
+    if (currentStr !== incomingStr) {
       setNodes(activeFile.nodes);
       setEdges(activeFile.edges);
+      lastSavedState.current = incomingStr;
     }
-  }, [activeFile, isMirroring, isCodeMode, getNodes, setNodes, setEdges]);
+  }, [activeFile, isMirroring, isCodeMode, getNodes, setNodes, getEdges, setEdges, getStrippedGraph]);
 
   // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
   useEffect(() => {

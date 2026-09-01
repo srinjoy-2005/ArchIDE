@@ -20,6 +20,7 @@ Welcome to the ArchiDE documentation. This directory contains detailed technical
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
 ## 📝 Changelog
+*   **[September 2, 2026](changelog/2026_09_02.md)**: Extracted GraphStorage API, implemented deterministic drag-aware UI auto-saving, and prevented infinite SSE loops.
 *   **[August 31, 2026](changelog/2026_08_31.md)**: Frontend store refactoring into `vfsStore` and `editorStore`, implemented centralized type validation registry `paramTypes.ts`, added UI checkbox for automatic shape inference, and updated backend compiler to return inline shape topologies alongside code generation.
 *   **[August 30, 2026](changelog/2026_08_30.md)**: Updated Virtual File System to store visual `.arch` graph configs and output `.py` code into standard `graphs/` and `python/` folders; refactored the compiler engine to emit multi-file responses with relative absolute imports; removed manual dual-view UI toggle and updated testing suites to simulate live dynamic module loading.
 *   **[August 26, 2026](changelog/2026_08_26.md)**: Transformed ArchiDE into a developer IDE with OneCompiler-style VFS & Activity Bar, submodule constructor parameter forwarding & exact shape propagation in compiler, headless testing harness (`project_loader.py`), central workspace Python code viewer (`CentralCodeEditor`), dedicated Inspector panel, and unified schema persistence with node coordinates.

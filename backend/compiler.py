@@ -401,6 +401,7 @@ def _build_input_var_map(sorted_nodes: List[Node]) -> Dict[str, str]:
         label_counts[base] = count
 
         if count == 1:
+            # Enforce x_ prefix for valid Python identifiers and PyTorch tensor conventions
             var_name = base if base.startswith("x_") else f"x_{base}"
         else:
             base_clean = base[2:] if base.startswith("x_") else base
@@ -536,7 +537,11 @@ def _generate_single_graph_code(
         for n in sorted_nodes
         if _resolve_block_id(n) in INPUT_IDS
     ]
-    forward_lines: List[str] = [f"    def forward(self, {', '.join(forward_arg_names)}):"]
+    forward_lines: List[str] = [
+        f"    def forward(self, {', '.join(forward_arg_names)}):",
+        "        # Note: All input variables and un-aliased custom variables are prefixed with 'x_'",
+        "        # to ensure valid Python identifiers and adhere to PyTorch conventions."
+    ]
 
     hint_counts: Dict[str, int] = {}
     return_vars: List[str] = []

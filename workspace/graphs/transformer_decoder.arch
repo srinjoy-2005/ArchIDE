@@ -1,0 +1,2132 @@
+{
+  "name": "transformer_decoder",
+  "nodes": [
+    {
+      "id": "in_x",
+      "type": "custom",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "data": {
+        "block_id": "input",
+        "label": "Input",
+        "is_functional": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "params": [
+          {
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ],
+        "paramValues": {
+          "shape": "(-1, 10, 256)",
+          "var_name": "x"
+        },
+        "inferredShapes": {
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      },
+      "selected": false
+    },
+    {
+      "id": "in_mem",
+      "type": "custom",
+      "position": {
+        "x": 100,
+        "y": 500
+      },
+      "data": {
+        "block_id": "input",
+        "label": "Input",
+        "is_functional": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "params": [
+          {
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ],
+        "paramValues": {
+          "shape": "(-1, 10, 256)",
+          "var_name": "memory"
+        },
+        "inferredShapes": {
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      },
+      "selected": false
+    },
+    {
+      "id": "ln_1",
+      "type": "custom",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "block_id": "layernorm",
+        "label": "LayerNorm",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "norm_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "normalized_shape",
+            "type": "string",
+            "default": "?",
+            "read_only": false,
+            "section": "basic",
+            "description": "Input shape from an expected size, auto-inferred from input."
+          },
+          {
+            "name": "eps",
+            "type": "float",
+            "default": 1e-05,
+            "read_only": false,
+            "section": "advanced",
+            "description": "Value added to the denominator for numerical stability"
+          }
+        ],
+        "paramValues": {
+          "normalized_shape": "(256,)",
+          "eps": 1e-05
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "q1",
+      "type": "custom",
+      "position": {
+        "x": 500,
+        "y": -50
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      },
+      "selected": false
+    },
+    {
+      "id": "k1",
+      "type": "custom",
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      },
+      "selected": false
+    },
+    {
+      "id": "v1",
+      "type": "custom",
+      "position": {
+        "x": 500,
+        "y": 250
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "k1_t",
+      "type": "custom",
+      "position": {
+        "x": 700,
+        "y": 100
+      },
+      "data": {
+        "block_id": "transpose",
+        "label": "Transpose",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input Tensor",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "transposed"
+          }
+        ],
+        "params": [
+          {
+            "name": "dim0",
+            "type": "int",
+            "default": -2,
+            "read_only": false,
+            "section": "basic",
+            "description": "First dimension to transpose"
+          },
+          {
+            "name": "dim1",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "section": "basic",
+            "description": "Second dimension to transpose"
+          }
+        ],
+        "paramValues": {
+          "dim0": -2,
+          "dim1": -1
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            256,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      },
+      "selected": false
+    },
+    {
+      "id": "qk1",
+      "type": "custom",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "block_id": "matmul",
+        "label": "MatMul",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in_a",
+            "name": "A",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          },
+          {
+            "id": "in_b",
+            "name": "B",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "matmul_out"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_a": [
+            1,
+            10,
+            256
+          ],
+          "in_b": [
+            1,
+            256,
+            10
+          ],
+          "out": [
+            1,
+            10,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "soft1",
+      "type": "custom",
+      "position": {
+        "x": 1100,
+        "y": 0
+      },
+      "data": {
+        "block_id": "softmax",
+        "label": "Softmax",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "probs"
+          }
+        ],
+        "params": [
+          {
+            "name": "dim",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "section": "basic",
+            "description": "Dimension along which Softmax will be computed"
+          }
+        ],
+        "paramValues": {
+          "dim": -1
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            10
+          ],
+          "out": [
+            1,
+            10,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "attn1",
+      "type": "custom",
+      "position": {
+        "x": 1300,
+        "y": 150
+      },
+      "data": {
+        "block_id": "matmul",
+        "label": "MatMul",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in_a",
+            "name": "A",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          },
+          {
+            "id": "in_b",
+            "name": "B",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "matmul_out"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_a": [
+            1,
+            10,
+            10
+          ],
+          "in_b": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "out_proj1",
+      "type": "custom",
+      "position": {
+        "x": 1500,
+        "y": 150
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      },
+      "selected": true
+    },
+    {
+      "id": "add_1",
+      "type": "custom",
+      "position": {
+        "x": 1700,
+        "y": 50
+      },
+      "data": {
+        "block_id": "add",
+        "label": "Add",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              10,
+              256
+            ],
+            [
+              1,
+              10,
+              256
+            ]
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      },
+      "selected": false
+    },
+    {
+      "id": "ln_2",
+      "type": "custom",
+      "position": {
+        "x": 1900,
+        "y": 50
+      },
+      "data": {
+        "block_id": "layernorm",
+        "label": "LayerNorm",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "norm_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "normalized_shape",
+            "type": "string",
+            "default": "?",
+            "read_only": false,
+            "section": "basic",
+            "description": "Input shape from an expected size, auto-inferred from input."
+          },
+          {
+            "name": "eps",
+            "type": "float",
+            "default": 1e-05,
+            "read_only": false,
+            "section": "advanced",
+            "description": "Value added to the denominator for numerical stability"
+          }
+        ],
+        "paramValues": {
+          "normalized_shape": "(256,)",
+          "eps": 1e-05
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "q2",
+      "type": "custom",
+      "position": {
+        "x": 2100,
+        "y": 50
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      },
+      "selected": false
+    },
+    {
+      "id": "k2",
+      "type": "custom",
+      "position": {
+        "x": 2100,
+        "y": 500
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "v2",
+      "type": "custom",
+      "position": {
+        "x": 2100,
+        "y": 650
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "k2_t",
+      "type": "custom",
+      "position": {
+        "x": 2300,
+        "y": 500
+      },
+      "data": {
+        "block_id": "transpose",
+        "label": "Transpose",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input Tensor",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "transposed"
+          }
+        ],
+        "params": [
+          {
+            "name": "dim0",
+            "type": "int",
+            "default": -2,
+            "read_only": false,
+            "section": "basic",
+            "description": "First dimension to transpose"
+          },
+          {
+            "name": "dim1",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "section": "basic",
+            "description": "Second dimension to transpose"
+          }
+        ],
+        "paramValues": {
+          "dim0": -2,
+          "dim1": -1
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            256,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "qk2",
+      "type": "custom",
+      "position": {
+        "x": 2500,
+        "y": 250
+      },
+      "data": {
+        "block_id": "matmul",
+        "label": "MatMul",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in_a",
+            "name": "A",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          },
+          {
+            "id": "in_b",
+            "name": "B",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "matmul_out"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_a": [
+            1,
+            10,
+            256
+          ],
+          "in_b": [
+            1,
+            256,
+            10
+          ],
+          "out": [
+            1,
+            10,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "soft2",
+      "type": "custom",
+      "position": {
+        "x": 2700,
+        "y": 250
+      },
+      "data": {
+        "block_id": "softmax",
+        "label": "Softmax",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "probs"
+          }
+        ],
+        "params": [
+          {
+            "name": "dim",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "section": "basic",
+            "description": "Dimension along which Softmax will be computed"
+          }
+        ],
+        "paramValues": {
+          "dim": -1
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            10
+          ],
+          "out": [
+            1,
+            10,
+            10
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "attn2",
+      "type": "custom",
+      "position": {
+        "x": 2900,
+        "y": 450
+      },
+      "data": {
+        "block_id": "matmul",
+        "label": "MatMul",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in_a",
+            "name": "A",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          },
+          {
+            "id": "in_b",
+            "name": "B",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "matmul_out"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_a": [
+            1,
+            10,
+            10
+          ],
+          "in_b": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "out_proj2",
+      "type": "custom",
+      "position": {
+        "x": 3100,
+        "y": 450
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "add_2",
+      "type": "custom",
+      "position": {
+        "x": 3300,
+        "y": 250
+      },
+      "data": {
+        "block_id": "add",
+        "label": "Add",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              10,
+              256
+            ],
+            [
+              1,
+              10,
+              256
+            ]
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "ln_3",
+      "type": "custom",
+      "position": {
+        "x": 3500,
+        "y": 250
+      },
+      "data": {
+        "block_id": "layernorm",
+        "label": "LayerNorm",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "norm_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "normalized_shape",
+            "type": "string",
+            "default": "?",
+            "read_only": false,
+            "section": "basic",
+            "description": "Input shape from an expected size, auto-inferred from input."
+          },
+          {
+            "name": "eps",
+            "type": "float",
+            "default": 1e-05,
+            "read_only": false,
+            "section": "advanced",
+            "description": "Value added to the denominator for numerical stability"
+          }
+        ],
+        "paramValues": {
+          "normalized_shape": "(256,)",
+          "eps": 1e-05
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "ffn_1",
+      "type": "custom",
+      "position": {
+        "x": 3700,
+        "y": 250
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 256,
+          "out_features": 1024,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            1024
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "relu",
+      "type": "custom",
+      "position": {
+        "x": 3900,
+        "y": 250
+      },
+      "data": {
+        "block_id": "relu",
+        "label": "ReLU",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "activated"
+          }
+        ],
+        "params": [
+          {
+            "name": "inplace",
+            "type": "bool",
+            "default": false,
+            "read_only": false,
+            "section": "advanced",
+            "description": "Modify input in-place"
+          }
+        ],
+        "paramValues": {
+          "inplace": false
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            1024
+          ],
+          "out": [
+            1,
+            10,
+            1024
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "ffn_2",
+      "type": "custom",
+      "position": {
+        "x": 4100,
+        "y": 250
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": 1024,
+          "out_features": 256,
+          "bias": true
+        },
+        "inferredShapes": {
+          "in": [
+            1,
+            10,
+            1024
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "add_3",
+      "type": "custom",
+      "position": {
+        "x": 4300,
+        "y": 150
+      },
+      "data": {
+        "block_id": "add",
+        "label": "Add",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              10,
+              256
+            ],
+            [
+              1,
+              10,
+              256
+            ]
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "out",
+      "type": "custom",
+      "position": {
+        "x": 4500,
+        "y": 150
+      },
+      "data": {
+        "block_id": "output",
+        "label": "Output",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Return Value",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              10,
+              256
+            ]
+          ]
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_in_x_ln_1_in",
+      "source": "in_x",
+      "sourceHandle": "out",
+      "target": "ln_1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ln_1_q1_in",
+      "source": "ln_1",
+      "sourceHandle": "out",
+      "target": "q1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ln_1_k1_in",
+      "source": "ln_1",
+      "sourceHandle": "out",
+      "target": "k1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ln_1_v1_in",
+      "source": "ln_1",
+      "sourceHandle": "out",
+      "target": "v1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_k1_k1_t_in",
+      "source": "k1",
+      "sourceHandle": "out",
+      "target": "k1_t",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_q1_qk1_in_a",
+      "source": "q1",
+      "sourceHandle": "out",
+      "target": "qk1",
+      "targetHandle": "in_a",
+      "type": "tensor"
+    },
+    {
+      "id": "e_k1_t_qk1_in_b",
+      "source": "k1_t",
+      "sourceHandle": "out",
+      "target": "qk1",
+      "targetHandle": "in_b",
+      "type": "tensor"
+    },
+    {
+      "id": "e_qk1_soft1_in",
+      "source": "qk1",
+      "sourceHandle": "out",
+      "target": "soft1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_soft1_attn1_in_a",
+      "source": "soft1",
+      "sourceHandle": "out",
+      "target": "attn1",
+      "targetHandle": "in_a",
+      "type": "tensor"
+    },
+    {
+      "id": "e_v1_attn1_in_b",
+      "source": "v1",
+      "sourceHandle": "out",
+      "target": "attn1",
+      "targetHandle": "in_b",
+      "type": "tensor",
+      "selected": false
+    },
+    {
+      "id": "e_attn1_out_proj1_in",
+      "source": "attn1",
+      "sourceHandle": "out",
+      "target": "out_proj1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_in_x_add_1_in",
+      "source": "in_x",
+      "sourceHandle": "out",
+      "target": "add_1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_out_proj1_add_1_in",
+      "source": "out_proj1",
+      "sourceHandle": "out",
+      "target": "add_1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_add_1_ln_2_in",
+      "source": "add_1",
+      "sourceHandle": "out",
+      "target": "ln_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ln_2_q2_in",
+      "source": "ln_2",
+      "sourceHandle": "out",
+      "target": "q2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_in_mem_k2_in",
+      "source": "in_mem",
+      "sourceHandle": "out",
+      "target": "k2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_in_mem_v2_in",
+      "source": "in_mem",
+      "sourceHandle": "out",
+      "target": "v2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_k2_k2_t_in",
+      "source": "k2",
+      "sourceHandle": "out",
+      "target": "k2_t",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_q2_qk2_in_a",
+      "source": "q2",
+      "sourceHandle": "out",
+      "target": "qk2",
+      "targetHandle": "in_a",
+      "type": "tensor"
+    },
+    {
+      "id": "e_k2_t_qk2_in_b",
+      "source": "k2_t",
+      "sourceHandle": "out",
+      "target": "qk2",
+      "targetHandle": "in_b",
+      "type": "tensor"
+    },
+    {
+      "id": "e_qk2_soft2_in",
+      "source": "qk2",
+      "sourceHandle": "out",
+      "target": "soft2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_soft2_attn2_in_a",
+      "source": "soft2",
+      "sourceHandle": "out",
+      "target": "attn2",
+      "targetHandle": "in_a",
+      "type": "tensor"
+    },
+    {
+      "id": "e_v2_attn2_in_b",
+      "source": "v2",
+      "sourceHandle": "out",
+      "target": "attn2",
+      "targetHandle": "in_b",
+      "type": "tensor"
+    },
+    {
+      "id": "e_attn2_out_proj2_in",
+      "source": "attn2",
+      "sourceHandle": "out",
+      "target": "out_proj2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_add_1_add_2_in",
+      "source": "add_1",
+      "sourceHandle": "out",
+      "target": "add_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_out_proj2_add_2_in",
+      "source": "out_proj2",
+      "sourceHandle": "out",
+      "target": "add_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_add_2_ln_3_in",
+      "source": "add_2",
+      "sourceHandle": "out",
+      "target": "ln_3",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ln_3_ffn_1_in",
+      "source": "ln_3",
+      "sourceHandle": "out",
+      "target": "ffn_1",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ffn_1_relu_in",
+      "source": "ffn_1",
+      "sourceHandle": "out",
+      "target": "relu",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_relu_ffn_2_in",
+      "source": "relu",
+      "sourceHandle": "out",
+      "target": "ffn_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_add_2_add_3_in",
+      "source": "add_2",
+      "sourceHandle": "out",
+      "target": "add_3",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_ffn_2_add_3_in",
+      "source": "ffn_2",
+      "sourceHandle": "out",
+      "target": "add_3",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_add_3_out_in",
+      "source": "add_3",
+      "sourceHandle": "out",
+      "target": "out",
+      "targetHandle": "in",
+      "type": "tensor"
+    }
+  ],
+  "variables": []
+}

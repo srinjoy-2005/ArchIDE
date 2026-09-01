@@ -1,0 +1,258 @@
+{
+  "name": "main",
+  "nodes": [
+    {
+      "id": "in_src",
+      "type": "custom",
+      "position": {
+        "x": 12.801033754606408,
+        "y": 130.6241606028501
+      },
+      "data": {
+        "block_id": "input",
+        "label": "hello",
+        "is_functional": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "params": [
+          {
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ],
+        "paramValues": {
+          "shape": "(-1, 10, 256)",
+          "var_name": "src"
+        },
+        "inferredShapes": {
+          "out": [
+            1,
+            10,
+            256
+          ]
+        },
+        "varName": ""
+      }
+    },
+    {
+      "id": "in_tgt",
+      "type": "custom",
+      "position": {
+        "x": 13.72305376793328,
+        "y": -59.404219159832266
+      },
+      "data": {
+        "block_id": "input",
+        "label": "tensor1",
+        "is_functional": true,
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "params": [
+          {
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ],
+        "paramValues": {
+          "shape": "(-1, 10, 256)",
+          "var_name": "tgt"
+        },
+        "inferredShapes": {
+          "out": [
+            1,
+            10,
+            256
+          ]
+        },
+        "varName": ""
+      }
+    },
+    {
+      "id": "encoder",
+      "type": "custom",
+      "position": {
+        "x": 318.4382000199536,
+        "y": 276.3180156617109
+      },
+      "data": {
+        "block_id": "custom",
+        "label": "Custom transformer_encoder",
+        "is_functional": false,
+        "custom_module_id": "transformer_encoder",
+        "inputs": [
+          {
+            "id": "in_x",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_x": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      }
+    },
+    {
+      "id": "decoder",
+      "type": "custom",
+      "position": {
+        "x": 609.5952246493879,
+        "y": 4.756836330219414
+      },
+      "data": {
+        "block_id": "custom",
+        "label": "Custom transformer_decoder",
+        "is_functional": false,
+        "custom_module_id": "transformer_decoder",
+        "inputs": [
+          {
+            "id": "in_x",
+            "name": "x",
+            "type": "tensor"
+          },
+          {
+            "id": "in_mem",
+            "name": "memory",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in_x": [
+            1,
+            10,
+            256
+          ],
+          "in_mem": [
+            1,
+            10,
+            256
+          ],
+          "out": [
+            1,
+            10,
+            256
+          ]
+        }
+      }
+    },
+    {
+      "id": "out",
+      "type": "custom",
+      "position": {
+        "x": 1000,
+        "y": 200
+      },
+      "data": {
+        "block_id": "output",
+        "label": "Output",
+        "is_functional": true,
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Return Value",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [],
+        "params": [],
+        "paramValues": {},
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              10,
+              256
+            ]
+          ]
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_in_src_encoder_in_x",
+      "source": "in_src",
+      "sourceHandle": "out",
+      "target": "encoder",
+      "targetHandle": "in_x",
+      "type": "tensor"
+    },
+    {
+      "id": "e_in_tgt_decoder_in_x",
+      "source": "in_tgt",
+      "sourceHandle": "out",
+      "target": "decoder",
+      "targetHandle": "in_x",
+      "type": "tensor"
+    },
+    {
+      "id": "e_encoder_decoder_in_mem",
+      "source": "encoder",
+      "sourceHandle": "out",
+      "target": "decoder",
+      "targetHandle": "in_mem",
+      "type": "tensor"
+    },
+    {
+      "id": "e_decoder_out_in",
+      "source": "decoder",
+      "sourceHandle": "out",
+      "target": "out",
+      "targetHandle": "in",
+      "type": "tensor"
+    }
+  ],
+  "variables": []
+}
