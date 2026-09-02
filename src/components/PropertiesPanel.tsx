@@ -9,7 +9,6 @@
  * - ModelSummaryDashboard: shown when no node is selected — displays graph stats,
  *   a canvas usage guide, and a "Load ConvNet Pipeline" quick-start button.
  * - PropertiesPanel: shown when a node is selected — renders its label, output
- *   variable name, connected input tensors, inferred shapes, and hyperparameters
  *   (split into basic and collapsible advanced sections).
  */
 
@@ -18,6 +17,8 @@ import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import { Brain, ChevronRight, X } from 'lucide-react';
 import { PARAM_TYPE_HANDLERS, type ParamTypeName } from '../lib/paramTypes';
+import { useVFSStore } from '../lib/vfsStore';
+import { ExpressionInput } from './ExpressionInput';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,34 +107,20 @@ function ParamInput({
         </div>
       </div>
 
-      {/* Bound variable pill */}
-      {isBound ? (
-        <div className="flex items-center gap-1 bg-[#a855f7]/10 border border-[#a855f7]/40 rounded-[3px] px-2 py-1.5">
-          <span className="flex-1 text-[11px] font-mono text-[#c084fc] truncate">{getBoundName(value as string)}</span>
-          <button
-            onClick={() => onChange(param.name, param.default ?? (param.type === 'int' ? 0 : param.type === 'float' ? 0.0 : ''))}
-            className="text-[#555] hover:text-[#e2e2e2] transition-colors"
-            title="Unbind variable"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      ) : handler.inputType === 'checkbox' ? (
+      {handler.inputType === 'checkbox' ? (
         <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]"
           onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
           <input type="checkbox" checked={!!value} onChange={handleChange} disabled={isReadOnly} />
           {value ? 'True' : 'False'}
         </label>
       ) : (
-        <input
-          type={handler.inputType}
-          step={handler.step}
-          className={inputClass}
+        <ExpressionInput
           value={value ?? param.default}
-          readOnly={isReadOnly}
-          disabled={isReadOnly}
+          onChange={(v) => onChange(param.name, v)}
+          expectedType={param.type}
+          isReadOnly={isReadOnly}
+          inputClass={inputClass}
           title={param.description || ''}
-          onChange={handleChange}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}

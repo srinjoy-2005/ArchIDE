@@ -89,38 +89,51 @@ export function Header() {
   const buildPayload = () => {
     const currentNodes = getNodes();
     const currentEdges = getEdges();
-    const graphs: any = {};
-    const file_paths: any = {};
+    const graphs: Record<string, any> = {};
+    const file_paths: Record<string, string> = {};
+    
+    // Pass 1: Build ID to Path mapping
+    const idToPath: Record<string, string> = {};
+    for (const f of files) {
+      if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
+      idToPath[f.id] = resolveFilePath(f, folders);
+    }
 
+    // Pass 2: Build Graphs payload
     for (const f of files) {
       if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
 
-      const fullPath = resolveFilePath(f, folders);
+      const fullPath = idToPath[f.id];
       file_paths[fullPath] = fullPath;
 
       const isCurrent = f.id === activeFileId;
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
 
-      // Send the full variables array — the compiler resolves scope itself
       const variables = f.variables || [];
 
       graphs[fullPath] = {
         name: f.name.replace(/\.[^/.]+$/, ''),
         variables,
-        parameters: [],   // legacy field kept empty; compiler prefers variables
-        nodes: nList.map((n) => ({
-          id: n.id,
-          position: n.position || { x: 100, y: 100 },
-          data: {
-            block_id: n.data.block_id || '',
-            label: n.data.label,
-            is_functional: n.data.is_functional || false,
-            paramValues: n.data.paramValues || {},
-            varName: (n.data.varName as string) || '',
-            custom_module_id: (n.data.custom_module_id as string) || '',
-          },
-        })),
+        parameters: [],
+        nodes: nList.map((n) => {
+          let cid = (n.data.custom_module_id as string) || '';
+          if (cid && idToPath[cid]) {
+            cid = idToPath[cid];
+          }
+          return {
+            id: n.id,
+            position: n.position || { x: 100, y: 100 },
+            data: {
+              block_id: n.data.block_id || '',
+              label: n.data.label,
+              is_functional: n.data.is_functional || false,
+              paramValues: n.data.paramValues || {},
+              varName: (n.data.varName as string) || '',
+              custom_module_id: cid,
+            },
+          };
+        }),
         edges: eList.map((e) => ({
           id: e.id,
           source: e.source,
@@ -170,10 +183,9 @@ export function Header() {
       }
       if (danglingNodes.length > 0) {
         setGeneratedCode(
-          `# ⛔ Compile blocked: ${danglingNodes.length} node(s) have unresolved parameters.\n` +
-          `# Please rebind or reset the following nodes:\n` +
-          danglingNodes.map((n) => `#   • ${n}`).join('\n') +
-          '\n\n# Open the Variables panel to reassign the missing bindings.'
+          `# ⛔ Compile blocked: ${danglingNodes.length} node(s) have unresolved parameters or 'Not Set' fields.\n` +
+          `# Please rebind, fill in, or reset the following nodes:\n` +
+          danglingNodes.map((n) => `#   • ${n}`).join('\n')
         );
         setCompiling(false);
         return;

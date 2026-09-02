@@ -101,7 +101,10 @@ export function BlockLibrary() {
     .map((f) => {
       const inputs  = f.nodes.filter((n) => n.data.block_id === 'input').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
       const outputs = f.nodes.filter((n) => n.data.block_id === 'output').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
-      return { id: 'custom_module', custom_module_id: f.id, name: f.name, category: 'Custom Modules', color: '#eab308', is_functional: false, inputs, outputs, params: [] };
+      const params  = (f.variables || [])
+        .filter((v) => v.scope === 'init_param')
+        .map((v) => ({ name: v.name, type: v.type, default: v.default, section: 'basic' }));
+      return { id: 'custom_module', custom_module_id: f.id, name: f.name, category: 'Custom Modules', color: '#eab308', is_functional: false, inputs, outputs, params };
     });
 
   // Group filtered blocks by category

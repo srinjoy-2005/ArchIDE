@@ -48,7 +48,7 @@ def test_pytorch_execution():
     ]
     
     graphs = {"main": GraphData(name="Main", nodes=nodes, edges=edges)}
-    files = generate_pytorch_code(graphs, "main")
+    files, _, _ = generate_pytorch_code(graphs, "main")
     code = files["main"]
     
     # 1. Syntax Check (Ensures it is valid Python code)
@@ -77,7 +77,7 @@ def test_orphan_edges_handled_gracefully():
     ]
     sorted_nodes = topological_sort(nodes, edges)
     graphs = {"main": GraphData(name="Main", nodes=nodes, edges=edges)}
-    files = generate_pytorch_code(graphs, "main")
+    files, _, _ = generate_pytorch_code(graphs, "main")
     code = files["main"]
     assert "def forward(self, x_input):" in code
     assert "return x_input" in code
@@ -99,7 +99,7 @@ def test_variadic_add_multi_input():
         Edge(id="e4", source="add1", sourceHandle="out", target="out1", targetHandle="in"),
     ]
     graphs = {"main": GraphData(name="Main", nodes=nodes, edges=edges)}
-    files = generate_pytorch_code(graphs, "main")
+    files, _, _ = generate_pytorch_code(graphs, "main")
     code = files["main"]
     assert "x_input_1 + x_input_2 + x_input_3" in code
     assert "return sum" in code
@@ -117,7 +117,7 @@ def test_multi_output_aggregation():
         Edge(id="e2", source="in2", sourceHandle="out", target="out1", targetHandle="in"),
     ]
     graphs = {"main": GraphData(name="Main", nodes=nodes, edges=edges)}
-    files = generate_pytorch_code(graphs, "main")
+    files, _, _ = generate_pytorch_code(graphs, "main")
     code = files["main"]
     assert "return x_input_1, x_input_2" in code
 

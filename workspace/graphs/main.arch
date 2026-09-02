@@ -2,200 +2,105 @@
   "name": "main",
   "nodes": [
     {
-      "id": "in_src",
+      "id": "node_mtkbqi83_hfksc",
       "type": "custom",
       "position": {
-        "x": 12.801033754606408,
-        "y": 130.6241606028501
+        "x": 709.4924769098177,
+        "y": -3.8315485875780873
       },
       "data": {
-        "block_id": "input",
-        "label": "hello",
-        "is_functional": true,
-        "inputs": [],
-        "outputs": [
-          {
-            "id": "out",
-            "name": "Output",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": null
-          }
-        ],
+        "block_id": "custom_module",
+        "label": "res_block.arch",
+        "description": "A res_block.arch layer",
         "params": [
           {
-            "name": "shape",
-            "type": "string",
-            "default": "(1, 3, 224, 224)",
-            "read_only": false,
-            "section": "basic",
-            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+            "name": "in_channels",
+            "type": "int",
+            "default": 32,
+            "section": "basic"
+          },
+          {
+            "name": "out_channels",
+            "type": "int",
+            "default": 32,
+            "section": "basic"
           }
         ],
         "paramValues": {
-          "shape": "(-1, 10, 256)",
-          "var_name": "src"
+          "in_channels": 32,
+          "out_channels": 32
         },
-        "inferredShapes": {
-          "out": [
-            1,
-            10,
-            256
-          ]
-        },
-        "varName": ""
-      }
-    },
-    {
-      "id": "in_tgt",
-      "type": "custom",
-      "position": {
-        "x": 13.72305376793328,
-        "y": -59.404219159832266
-      },
-      "data": {
-        "block_id": "input",
-        "label": "tensor1",
-        "is_functional": true,
-        "inputs": [],
-        "outputs": [
-          {
-            "id": "out",
-            "name": "Output",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": null
-          }
-        ],
-        "params": [
-          {
-            "name": "shape",
-            "type": "string",
-            "default": "(1, 3, 224, 224)",
-            "read_only": false,
-            "section": "basic",
-            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
-          }
-        ],
-        "paramValues": {
-          "shape": "(-1, 10, 256)",
-          "var_name": "tgt"
-        },
-        "inferredShapes": {
-          "out": [
-            1,
-            10,
-            256
-          ]
-        },
-        "varName": ""
-      }
-    },
-    {
-      "id": "encoder",
-      "type": "custom",
-      "position": {
-        "x": 318.4382000199536,
-        "y": 276.3180156617109
-      },
-      "data": {
-        "block_id": "custom",
-        "label": "Custom transformer_encoder",
-        "is_functional": false,
-        "custom_module_id": "transformer_encoder",
         "inputs": [
           {
-            "id": "in_x",
+            "id": "node_mtkborz8_72yqu",
             "name": "Input",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "out",
+            "id": "node_mtkbp4ie_244fm",
             "name": "Output",
             "type": "tensor"
           }
         ],
-        "params": [],
-        "paramValues": {},
-        "inferredShapes": {
-          "in_x": [
-            1,
-            10,
-            256
-          ],
-          "out": [
-            1,
-            10,
-            256
-          ]
-        }
+        "is_functional": false,
+        "varName": "",
+        "custom_module_id": "file_res_block"
       }
     },
     {
-      "id": "decoder",
+      "id": "node_mtkbqw0h_eo1wf",
       "type": "custom",
       "position": {
-        "x": 609.5952246493879,
-        "y": 4.756836330219414
+        "x": 487.4665268497249,
+        "y": 62.404283783372634
       },
       "data": {
-        "block_id": "custom",
-        "label": "Custom transformer_decoder",
-        "is_functional": false,
-        "custom_module_id": "transformer_decoder",
-        "inputs": [
+        "block_id": "input",
+        "label": "Input",
+        "description": "A Input layer",
+        "params": [
           {
-            "id": "in_x",
-            "name": "x",
-            "type": "tensor"
-          },
-          {
-            "id": "in_mem",
-            "name": "memory",
-            "type": "tensor"
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
           }
         ],
+        "paramValues": {
+          "shape": "(1, 3, 224, 224)"
+        },
+        "inputs": [],
         "outputs": [
           {
             "id": "out",
             "name": "Output",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
           }
         ],
-        "params": [],
-        "paramValues": {},
-        "inferredShapes": {
-          "in_x": [
-            1,
-            10,
-            256
-          ],
-          "in_mem": [
-            1,
-            10,
-            256
-          ],
-          "out": [
-            1,
-            10,
-            256
-          ]
-        }
+        "is_functional": true,
+        "varName": ""
       }
     },
     {
-      "id": "out",
+      "id": "node_mtkbrdnt_viass",
       "type": "custom",
       "position": {
-        "x": 1000,
-        "y": 200
+        "x": 1016.2450992129609,
+        "y": 37.553404030887606
       },
       "data": {
         "block_id": "output",
         "label": "Output",
-        "is_functional": true,
+        "description": "A Output layer",
+        "params": [],
+        "paramValues": {},
         "inputs": [
           {
             "id": "in",
@@ -206,52 +111,25 @@
           }
         ],
         "outputs": [],
-        "params": [],
-        "paramValues": {},
-        "inferredShapes": {
-          "in": [
-            [
-              1,
-              10,
-              256
-            ]
-          ]
-        }
+        "is_functional": true,
+        "varName": ""
       }
     }
   ],
   "edges": [
     {
-      "id": "e_in_src_encoder_in_x",
-      "source": "in_src",
+      "id": "xy-edge__node_mtkbqw0h_eo1wfout-node_mtkbqi83_hfkscnode_mtkborz8_72yqu",
+      "source": "node_mtkbqw0h_eo1wf",
       "sourceHandle": "out",
-      "target": "encoder",
-      "targetHandle": "in_x",
-      "type": "tensor"
+      "target": "node_mtkbqi83_hfksc",
+      "targetHandle": "node_mtkborz8_72yqu"
     },
     {
-      "id": "e_in_tgt_decoder_in_x",
-      "source": "in_tgt",
-      "sourceHandle": "out",
-      "target": "decoder",
-      "targetHandle": "in_x",
-      "type": "tensor"
-    },
-    {
-      "id": "e_encoder_decoder_in_mem",
-      "source": "encoder",
-      "sourceHandle": "out",
-      "target": "decoder",
-      "targetHandle": "in_mem",
-      "type": "tensor"
-    },
-    {
-      "id": "e_decoder_out_in",
-      "source": "decoder",
-      "sourceHandle": "out",
-      "target": "out",
-      "targetHandle": "in",
-      "type": "tensor"
+      "id": "xy-edge__node_mtkbqi83_hfkscnode_mtkbp4ie_244fm-node_mtkbrdnt_viassin",
+      "source": "node_mtkbqi83_hfksc",
+      "sourceHandle": "node_mtkbp4ie_244fm",
+      "target": "node_mtkbrdnt_viass",
+      "targetHandle": "in"
     }
   ],
   "variables": []

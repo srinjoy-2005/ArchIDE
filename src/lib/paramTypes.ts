@@ -9,15 +9,13 @@ export interface ParamTypeHandler {
 
 export const PARAM_TYPE_HANDLERS: Record<ParamTypeName, ParamTypeHandler> = {
   int: {
-    inputType: 'number',
-    step: 1,
-    isValid: (v) => Number.isInteger(Number(v)) && !isNaN(Number(v)),
+    inputType: 'text',
+    isValid: (v) => String(v).trim() !== '' && Number.isInteger(Number(v)) && !isNaN(Number(v)),
     coerce: (v) => parseInt(String(v), 10),
   },
   float: {
-    inputType: 'number',
-    step: 'any',
-    isValid: (v) => !isNaN(parseFloat(String(v))),
+    inputType: 'text',
+    isValid: (v) => String(v).trim() !== '' && !isNaN(parseFloat(String(v))),
     coerce: (v) => parseFloat(String(v)),
   },
   bool: {

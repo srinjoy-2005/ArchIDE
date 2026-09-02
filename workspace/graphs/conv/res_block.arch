@@ -2,126 +2,368 @@
   "name": "res_block",
   "nodes": [
     {
-      "id": "rb_in",
+      "id": "node_mtkborz8_72yqu",
       "type": "custom",
       "position": {
-        "x": 80,
-        "y": 120
+        "x": 24.6854967294219,
+        "y": 59.402898399839046
       },
       "data": {
         "block_id": "input",
-        "label": "x",
+        "label": "Input",
+        "description": "A Input layer",
+        "params": [
+          {
+            "name": "shape",
+            "type": "string",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ],
         "paramValues": {
-          "shape": "(1, 32, 224, 224)"
+          "shape": "(1, 3, 224, 224)"
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "is_functional": true,
+        "varName": "",
+        "inferredShapes": {
+          "out": [
+            1,
+            3,
+            224,
+            224
+          ]
         }
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
       }
     },
     {
-      "id": "rb_conv",
+      "id": "node_mtkbotjg_4habo",
       "type": "custom",
       "position": {
-        "x": 280,
-        "y": 80
+        "x": 275.23637025856607,
+        "y": -35.88744174607416
       },
       "data": {
-        "block_id": "conv2d",
-        "label": "Conv 3x3",
+        "block_id": "linear",
+        "label": "Linear",
+        "description": "A Linear layer",
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
         "paramValues": {
-          "in_channels": 32,
-          "out_channels": 32,
-          "kernel_size": 3,
-          "padding": 1,
-          "stride": 1
+          "in_features": -1,
+          "out_features": "@var:out_channels * 2",
+          "bias": true
+        },
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "is_functional": false,
+        "varName": "",
+        "inferredShapes": {
+          "in": [
+            1,
+            3,
+            224,
+            224
+          ],
+          "out": [
+            1,
+            3,
+            224,
+            64
+          ]
+        },
+        "inferredParams": {
+          "in_features": 224
         }
-      },
-      "measured": {
-        "width": 164,
-        "height": 59
       }
     },
     {
-      "id": "rb_add",
+      "id": "node_mtkbow0c_0ex1m",
       "type": "custom",
       "position": {
-        "x": 480,
-        "y": 120
+        "x": 267.92547039635974,
+        "y": 149.42431825522007
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "description": "A Linear layer",
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ],
+        "paramValues": {
+          "in_features": -1,
+          "out_features": 64,
+          "bias": true
+        },
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "is_functional": false,
+        "varName": "",
+        "inferredShapes": {
+          "in": [
+            1,
+            3,
+            224,
+            224
+          ],
+          "out": [
+            1,
+            3,
+            224,
+            64
+          ]
+        },
+        "inferredParams": {
+          "in_features": 224
+        }
+      }
+    },
+    {
+      "id": "node_mtkboz4q_bhwcb",
+      "type": "custom",
+      "position": {
+        "x": 542.3693187628473,
+        "y": 38.05285928361518
       },
       "data": {
         "block_id": "add",
-        "label": "Residual Add",
-        "paramValues": {}
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
+        "label": "Add",
+        "description": "A Add layer",
+        "params": [],
+        "paramValues": {},
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum"
+          }
+        ],
+        "is_functional": true,
+        "varName": "",
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              3,
+              224,
+              64
+            ],
+            [
+              1,
+              3,
+              224,
+              64
+            ]
+          ],
+          "out": [
+            1,
+            3,
+            224,
+            64
+          ]
+        }
       }
     },
     {
-      "id": "rb_out",
+      "id": "node_mtkbp4ie_244fm",
       "type": "custom",
       "position": {
-        "x": 680,
-        "y": 120
+        "x": 771.0686707139402,
+        "y": 33.42936908643445
       },
       "data": {
         "block_id": "output",
-        "label": "out",
-        "paramValues": {}
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
+        "label": "Output",
+        "description": "A Output layer",
+        "params": [],
+        "paramValues": {},
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Return Value",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [],
+        "is_functional": true,
+        "varName": "",
+        "inferredShapes": {
+          "in": [
+            [
+              1,
+              3,
+              224,
+              64
+            ]
+          ]
+        }
       }
     }
   ],
   "edges": [
     {
-      "id": "re1",
-      "type": "tensor",
-      "source": "rb_in",
+      "id": "xy-edge__node_mtkbotjg_4haboout-node_mtkboz4q_bhwcbin",
+      "source": "node_mtkbotjg_4habo",
       "sourceHandle": "out",
-      "target": "rb_conv",
+      "target": "node_mtkboz4q_bhwcb",
       "targetHandle": "in"
     },
     {
-      "id": "re2",
-      "type": "tensor",
-      "source": "rb_conv",
+      "id": "xy-edge__node_mtkbow0c_0ex1mout-node_mtkboz4q_bhwcbin",
+      "source": "node_mtkbow0c_0ex1m",
       "sourceHandle": "out",
-      "target": "rb_add",
+      "target": "node_mtkboz4q_bhwcb",
       "targetHandle": "in"
     },
     {
-      "id": "re3",
-      "type": "tensor",
-      "source": "rb_in",
+      "id": "xy-edge__node_mtkboz4q_bhwcbout-node_mtkbp4ie_244fmin",
+      "source": "node_mtkboz4q_bhwcb",
       "sourceHandle": "out",
-      "target": "rb_add",
+      "target": "node_mtkbp4ie_244fm",
       "targetHandle": "in"
     },
     {
-      "id": "re4",
-      "type": "tensor",
-      "source": "rb_add",
+      "id": "xy-edge__node_mtkborz8_72yquout-node_mtkbotjg_4haboin",
+      "source": "node_mtkborz8_72yqu",
       "sourceHandle": "out",
-      "target": "rb_out",
+      "target": "node_mtkbotjg_4habo",
+      "targetHandle": "in"
+    },
+    {
+      "id": "xy-edge__node_mtkborz8_72yquout-node_mtkbow0c_0ex1min",
+      "source": "node_mtkborz8_72yqu",
+      "sourceHandle": "out",
+      "target": "node_mtkbow0c_0ex1m",
       "targetHandle": "in"
     }
   ],
-  "parameters": [
+  "variables": [
     {
+      "id": "atvcuow",
       "name": "in_channels",
       "type": "int",
-      "default": 32
+      "default": 32,
+      "description": "",
+      "scope": "init_param"
     },
     {
+      "id": "7452r10",
       "name": "out_channels",
       "type": "int",
-      "default": 32
+      "default": 32,
+      "description": "",
+      "scope": "init_param"
     }
   ]
 }

@@ -26,7 +26,7 @@ def test_load_and_run_resnet_project(tmp_path):
     assert "node_shapes" in check_result
     
     # 3. Compile to PyTorch code
-    files = compile_project(project_path)
+    files, _, _ = compile_project(project_path)
     code = "\n".join(files.values())
     assert "class ConvBnRelu(nn.Module):" in code
     assert "class ResBlock(nn.Module):" in code
@@ -63,7 +63,7 @@ def test_load_and_run_transformer_project(tmp_path):
     assert "mlp_block" in req.graphs
     
     # 2. Compile to PyTorch code
-    files = compile_project(project_path)
+    files, _, _ = compile_project(project_path)
     code = "\n".join(files.values())
     assert "class MlpBlock(nn.Module):" in code
     assert "def __init__(self, d_model: int = 64, d_ff: int = 128):" in code
@@ -108,7 +108,7 @@ def test_single_file_project_loader(tmp_path):
     
     req = load_project(graph_json)
     assert "simple_model" in req.graphs
-    files = compile_project(graph_json)
+    files, _, _ = compile_project(graph_json)
     code = "\n".join(files.values())
     
     namespace = {}

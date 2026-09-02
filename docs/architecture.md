@@ -52,7 +52,7 @@ The Python backend acts as the authoritative source for what blocks exist. The r
 **PyTorch Compiler (`compiler.py`)**
 Translates the JSON Graph IR into a functional PyTorch script:
 1. **Topological Sorting (Kahn's Algorithm)**: Sorts nodes from inputs to outputs. Detects cycles and returns `400 Bad Request`. Handles sub-graph passes for custom modules.
-2. **Static Shape Inference**: Passes actual tensor shapes through blocks before codegen, ensuring validity.
+2. **Static Shape Inference**: Passes actual tensor shapes through blocks before codegen, ensuring validity. Features a **Dual-Evaluation Pass**: variables in mathematical expressions are temporarily substituted with their default integer values and evaluated to resolve dynamic shapes (e.g. `dim * 2`) during inference.
 3. **Code Construction**:
    - `init_param` variables and stateful layers are injected into `__init__`.
    - `local_const` variables are emitted as module-level constants.

@@ -130,7 +130,17 @@ def _get_custom_block_def(gid: str, graphs: Dict[str, Any]) -> BlockDef:
     
     inputs = [PortDef(id=n.id, name=n.data.label) for n in input_nodes]
     outputs = [PortDef(id=n.id, name=n.data.label) for n in output_nodes]
-    params = getattr(graph_data, "parameters", []) or []
+    
+    # Map init_param variables to ParamDefs
+    variables = getattr(graph_data, "variables", []) or []
+    params = [
+        ParamDef(name=v.name, type=v.type, default=v.default, section="basic")
+        for v in variables if v.scope == "init_param"
+    ]
+    
+    # Fallback to legacy parameters if no variables exist
+    if not params:
+        params = getattr(graph_data, "parameters", []) or []
     
     return BlockDef(
         id=f"custom_module_{gid}",
@@ -280,7 +290,8 @@ def shape_inference_multi_graph(graphs: Dict[str, Any], main_graph_id: str):
             for n in graph_data.nodes
         ]
         sorted_nodes = topological_sort(working_nodes, graph_data.edges)
-        ns, np = shape_inference_pass(sorted_nodes, graph_data.edges, graphs)
+        variables = getattr(graph_data, "variables", []) or []
+        ns, np = shape_inference_pass(sorted_nodes, graph_data.edges, graphs, variables=variables)
         all_node_shapes.update(ns)
         all_node_params.update(np)
         
@@ -296,7 +307,8 @@ def shape_inference_pass(
     sorted_nodes: List[Node],
     edges: List[Edge],
     graphs: Dict[str, Any] | None = None,
-    initial_input_shapes: Dict[str, Tuple] | None = None
+    initial_input_shapes: Dict[str, Tuple] | None = None,
+    variables: List[Any] | None = None
 ) -> Tuple[Dict[str, Dict[str, Tuple]], Dict[str, Dict[str, Any]]]:
     graphs = graphs or {}
     node_ids = {node.id for node in sorted_nodes}
@@ -314,10 +326,20 @@ def shape_inference_pass(
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
                 class_name = _to_pascal_case(dep_graph.name)
-                block_def = _get_custom_block_def(dep_id, graphs)
-                block = CustomModuleBlock(block_def, class_name, dep_graph=dep_graph, graphs=graphs)
             else:
-                continue
+                fallback_found = False
+                for g_path, g_data in graphs.items():
+                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id:
+                        dep_id = g_path
+                        dep_graph = g_data
+                        class_name = _to_pascal_case(dep_graph.name)
+                        fallback_found = True
+                        break
+                
+                if not fallback_found:
+                    continue
+            block_def = _get_custom_block_def(dep_id, graphs)
+            block = CustomModuleBlock(block_def, class_name, dep_graph=dep_graph, graphs=graphs)
         else:
             block = get_block_by_id(block_id)
             
@@ -348,16 +370,32 @@ def shape_inference_pass(
 
         original_params = dict(node.data.paramValues)
 
+        # Dual-Evaluation: substitute variable defaults to compute shapes
+        params_for_inference = dict(node.data.paramValues)
+        if variables:
+            var_defaults = {v.name: v.default for v in variables}
+            for k, v in list(params_for_inference.items()):
+                if isinstance(v, str) and "@var:" in v:
+                    try:
+                        parsed = v
+                        for v_name, v_def in var_defaults.items():
+                            parsed = re.sub(fr'@var:{v_name}\b', str(v_def), parsed)
+                        # Evaluate basic math
+                        if re.match(r'^[0-9+\-*/().\s]+$', parsed):
+                            params_for_inference[k] = eval(parsed, {"__builtins__": None}, {})
+                    except Exception:
+                        pass # Ignore and pass raw string if it fails
+        
         # Handle input node override if provided via initial_input_shapes
         if block_id in {"input", "gourav"} and initial_input_shapes and node.id in initial_input_shapes:
             override_shape = initial_input_shapes[node.id]
             if override_shape and override_shape != ("ANY",):
                 out_shapes = {"out": override_shape}
             else:
-                out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+                out_shapes = block.infer_shapes(incoming, params_for_inference)
         else:
             try:
-                out_shapes = block.infer_shapes(incoming, node.data.paramValues)
+                out_shapes = block.infer_shapes(incoming, params_for_inference)
             except ValueError as exc:
                 raise ShapeError(
                     message=str(exc),
@@ -369,8 +407,8 @@ def shape_inference_pass(
         for port_id, shape in out_shapes.items():
             tensor_shapes[f"{node.id}_{port_id}"] = shape
 
-        for k, v in node.data.paramValues.items():
-            if k not in original_params or original_params[k] != v:
+        for k, v in params_for_inference.items():
+            if k in original_params and original_params[k] in (-1, "?", "") and v not in (-1, "?", ""):
                 if node.id not in updated_node_params:
                     updated_node_params[node.id] = {}
                 updated_node_params[node.id][k] = v
@@ -578,11 +616,21 @@ def _generate_single_graph_code(
             if dep_id in graphs:
                 dep_graph = graphs[dep_id]
                 custom_class_name = _to_pascal_case(dep_graph.name)
-                block_def = _get_custom_block_def(dep_id, graphs)
-                block = CustomModuleBlock(block_def, custom_class_name, dep_graph=dep_graph, graphs=graphs)
             else:
-                forward_lines.append(f"        # WARNING: unknown custom module '{dep_id}' — skipped")
-                continue
+                fallback_found = False
+                for g_path, g_data in graphs.items():
+                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id:
+                        dep_id = g_path
+                        dep_graph = g_data
+                        custom_class_name = _to_pascal_case(dep_graph.name)
+                        fallback_found = True
+                        break
+                
+                if not fallback_found:
+                    forward_lines.append(f"        # WARNING: unknown custom module '{dep_id}' — skipped")
+                    continue
+            block_def = _get_custom_block_def(dep_id, graphs)
+            block = CustomModuleBlock(block_def, custom_class_name, dep_graph=dep_graph, graphs=graphs)
         else:
             block = get_block_by_id(block_id)
             
@@ -592,26 +640,30 @@ def _generate_single_graph_code(
 
         params = dict(node.data.paramValues)
 
-        # 1. Resolve @var: bindings — replace with self.<name> for init_params
-        #    or <NAME> constant for local_consts.
-        var_name_to_scope = {v.name: v.scope for v in variables}
-        for k, val in list(params.items()):
-            if isinstance(val, str) and val.startswith("@var:"):
-                var_name = val[len("@var:"):]
-                scope = var_name_to_scope.get(var_name, "init_param")
-                params[k] = f"self.{var_name}" if scope == "init_param" else var_name.upper()
-
-        # 2. Legacy: substitute constructor argument names if parameter is in graph_data.parameters
+        # 1. Legacy: substitute constructor argument names if parameter is in graph_data.parameters
         if graph_data and getattr(graph_data, "parameters", []):
             for p in graph_data.parameters:
                 if params.get(p.name) in (-1, None, ""):
                     params[p.name] = p.name
 
-        # 3. Fill any remaining -1 parameters from inferred_params
+        # 2. Fill any remaining -1 parameters from inferred_params
         if inferred_params and node.id in inferred_params:
             for k, v in inferred_params[node.id].items():
                 if params.get(k) in (-1, "?", ""):
                     params[k] = v
+
+        # 3. Resolve @var: bindings — replace with self.<name> for init_params
+        #    or <NAME> constant for local_consts.
+        var_name_to_scope = {v.name: v.scope for v in variables}
+        
+        def replace_var(match):
+            var_name = match.group(1)
+            scope = var_name_to_scope.get(var_name, "init_param")
+            return f"self.{var_name}" if scope == "init_param" else var_name.upper()
+            
+        for k, val in list(params.items()):
+            if isinstance(val, str) and "@var:" in val:
+                params[k] = re.sub(r'@var:([a-zA-Z0-9_]+)', replace_var, val)
                     
         # 3. Handle inputs
         input_vars: Dict[str, Any] = {}
