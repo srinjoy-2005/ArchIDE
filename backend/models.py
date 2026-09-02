@@ -30,8 +30,19 @@ class ParamDef(BaseModel):
     section: str = "basic"      # "shape" | "basic" | "advanced"
     description: str = ""       # Tooltip text shown in the UI
 
+class ArchVariableModel(BaseModel):
+    """Mirrors the frontend ArchVariable type."""
+    id: str = ""
+    name: str
+    type: str = "int"           # "int" | "float" | "bool" | "string"
+    default: Any = None
+    description: str = ""
+    scope: str = "init_param"   # "init_param" | "local_const"
+
 class GraphData(BaseModel):
     name: str = "Model"
+    variables: List[ArchVariableModel] = []
+    # Legacy alias — still accepted in old payloads, migrated on load
     parameters: List[ParamDef] = []
     nodes: List[Node]
     edges: List[Edge]

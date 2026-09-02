@@ -13,10 +13,17 @@
  *   (split into basic and collapsible advanced sections).
  */
 
+import React from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
-import { Brain, ChevronRight } from 'lucide-react';
+import { Brain, ChevronRight, X } from 'lucide-react';
 import { PARAM_TYPE_HANDLERS, type ParamTypeName } from '../lib/paramTypes';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const VAR_PREFIX = '@var:';
+const isVarBound = (v: any): boolean => typeof v === 'string' && v.startsWith(VAR_PREFIX);
+const getBoundName = (v: string): string => v.slice(VAR_PREFIX.length);
 
 // ─── ParamInput ───────────────────────────────────────────────────────────────
 
@@ -30,37 +37,53 @@ function ParamInput({
   onChange: (name: string, value: any) => void;
 }) {
   const handler = PARAM_TYPE_HANDLERS[param.type as ParamTypeName] || PARAM_TYPE_HANDLERS.string;
-  
+
   const isAutoInferEnabled = param.auto_infer;
-  const isChecked = isAutoInferEnabled && (value === -1 || value === "?" || value === -1.0);
+  const isChecked = isAutoInferEnabled && (value === -1 || value === '?' || value === -1.0);
+  const isBound = isVarBound(value);
   const isReadOnly = param.read_only || isChecked;
+
+  const [isDragOver, setIsDragOver] = React.useState(false);
 
   const inputClass = isReadOnly
     ? 'w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed'
-    : 'w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors';
+    : `w-full bg-[#1e1e1e] border ${isDragOver ? 'border-[#a855f7]' : 'border-[#3a3a3a]'} focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors`;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (isReadOnly) return;
     const rawVal = handler.inputType === 'checkbox' ? e.target.checked : e.target.value;
-    
-    if (isAutoInferEnabled && String(rawVal) === '-1') {
-      onChange(param.name, -1);
-      return;
-    }
-    
+
+    if (isAutoInferEnabled && String(rawVal) === '-1') { onChange(param.name, -1); return; }
+
     if (handler.isValid(rawVal as any)) {
       onChange(param.name, handler.coerce(rawVal as any));
     } else {
-      onChange(param.name, rawVal); 
+      onChange(param.name, rawVal);
     }
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      onChange(param.name, param.type === 'string' ? '?' : -1);
-    } else {
-      onChange(param.name, param.default ?? 1);
+    onChange(param.name, e.target.checked ? (param.type === 'string' ? '?' : -1) : (param.default ?? 1));
+  };
+
+  // ── Drag-and-drop variable binding ──────────────────────────────────────────
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/archide-variable')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDragOver(true);
     }
+  };
+  const handleDragLeave = () => setIsDragOver(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const raw = e.dataTransfer.getData('application/archide-variable');
+    if (!raw) return;
+    try {
+      const variable = JSON.parse(raw);
+      onChange(param.name, `${VAR_PREFIX}${variable.name}`);
+    } catch {}
   };
 
   return (
@@ -69,32 +92,38 @@ function ParamInput({
         <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
           {param.name.replace(/_/g, ' ')}
           {param.read_only && (
-            <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">
-              inferred
-            </span>
+            <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">inferred</span>
           )}
         </label>
         <div className="flex items-center gap-2">
           {isAutoInferEnabled && (
             <label className="flex items-center gap-1 text-[9px] text-[#888] cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={isChecked} 
-                onChange={handleCheckboxChange}
-                className="w-2.5 h-2.5 accent-[#2d8cf0]"
-              />
+              <input type="checkbox" checked={isChecked} onChange={handleCheckboxChange} className="w-2.5 h-2.5 accent-[#2d8cf0]" />
               Auto-Infer
             </label>
           )}
           <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
         </div>
       </div>
-      
-      {handler.inputType === 'checkbox' ? (
-         <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]">
-           <input type="checkbox" checked={!!value} onChange={handleChange} disabled={isReadOnly} />
-           {value ? 'True' : 'False'}
-         </label>
+
+      {/* Bound variable pill */}
+      {isBound ? (
+        <div className="flex items-center gap-1 bg-[#a855f7]/10 border border-[#a855f7]/40 rounded-[3px] px-2 py-1.5">
+          <span className="flex-1 text-[11px] font-mono text-[#c084fc] truncate">{getBoundName(value as string)}</span>
+          <button
+            onClick={() => onChange(param.name, param.default ?? (param.type === 'int' ? 0 : param.type === 'float' ? 0.0 : ''))}
+            className="text-[#555] hover:text-[#e2e2e2] transition-colors"
+            title="Unbind variable"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ) : handler.inputType === 'checkbox' ? (
+        <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]"
+          onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+          <input type="checkbox" checked={!!value} onChange={handleChange} disabled={isReadOnly} />
+          {value ? 'True' : 'False'}
+        </label>
       ) : (
         <input
           type={handler.inputType}
@@ -105,6 +134,9 @@ function ParamInput({
           disabled={isReadOnly}
           title={param.description || ''}
           onChange={handleChange}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         />
       )}
     </div>

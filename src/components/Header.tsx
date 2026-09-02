@@ -102,14 +102,13 @@ export function Header() {
       const nList = isCurrent ? currentNodes : f.nodes;
       const eList = isCurrent ? currentEdges : f.edges;
 
-      // Only 'init_param' variables become the __init__ signature of a custom module.
-      const initParams = (f.variables || [])
-        .filter((v) => v.scope === 'init_param')
-        .map((v) => ({ name: v.name, type: v.type, default: v.default, description: v.description || '' }));
+      // Send the full variables array — the compiler resolves scope itself
+      const variables = f.variables || [];
 
       graphs[fullPath] = {
         name: f.name.replace(/\.[^/.]+$/, ''),
-        parameters: initParams,
+        variables,
+        parameters: [],   // legacy field kept empty; compiler prefers variables
         nodes: nList.map((n) => ({
           id: n.id,
           position: n.position || { x: 100, y: 100 },

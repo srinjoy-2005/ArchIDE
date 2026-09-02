@@ -4,12 +4,14 @@
  * src/components/RightPanel.tsx
  *
  * The collapsible right panel dedicated exclusively to block inspection & configuration.
- * Renders the <PropertiesPanel /> with node parameters, shapes, and layer docs.
+ * Renders the <PropertiesPanel /> with node parameters, shapes, and layer docs,
+ * and the <VariablesPanel /> for managing per-file variables.
  */
 
 import { useState } from 'react';
 import { Settings2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { PropertiesPanel } from './PropertiesPanel';
+import { VariablesPanel } from './VariablesPanel';
 
 export function RightPanel() {
   const [rightOpen, setRightOpen] = useState(true);
@@ -53,8 +55,9 @@ export function RightPanel() {
       </div>
 
       {/* Inspector Content */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-0">
         <PropertiesPanel />
+        <VariablesPanel />
       </div>
     </aside>
   );

@@ -493,8 +493,13 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
             graph_data=graph_data,
             inferred_params=all_node_params
         )
-        
-        file_code = "\n".join(imports) + "\n" + graph_code
+
+        # Emit local_const variables as module-level constants before the class
+        local_consts = [v for v in getattr(graph_data, "variables", []) if v.scope == "local_const"]
+        const_lines = [f"{v.name.upper()} = {repr(v.default) if isinstance(v.default, str) else v.default}" for v in local_consts]
+        const_block = "\n".join(const_lines) + "\n\n" if const_lines else ""
+
+        file_code = "\n".join(imports) + "\n" + const_block + graph_code
         files[gid] = file_code
         
     return files, all_node_shapes, all_node_params
@@ -511,13 +516,25 @@ def _generate_single_graph_code(
     node_ids = {node.id for node in sorted_nodes}
     valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]
 
+    # ── Variable resolution ──────────────────────────────────────────────────
+    # Prefer the new `variables` list; fall back to legacy `parameters` for old graphs.
+    variables = getattr(graph_data, "variables", []) if graph_data else []
     params_decl = getattr(graph_data, "parameters", []) if graph_data else []
-    if params_decl:
+
+    init_params  = [v for v in variables if v.scope == "init_param"]
+    local_consts = [v for v in variables if v.scope == "local_const"]
+
+    # If no new-style variables but legacy parameters exist, treat them as init_params
+    if not variables and params_decl:
+        init_params = params_decl   # ParamDef has same name/type/default shape
+
+    # Build __init__ signature
+    if init_params:
         init_args = ["self"]
-        for p in params_decl:
-            t_str = f": {p.type}" if p.type else ""
-            d_val = repr(p.default) if isinstance(p.default, str) else str(p.default)
-            init_args.append(f"{p.name}{t_str} = {d_val}")
+        for v in init_params:
+            t_str = f": {v.type}" if v.type else ""
+            d_val = repr(v.default) if isinstance(v.default, str) else str(v.default)
+            init_args.append(f"{v.name}{t_str} = {d_val}")
         init_sig = f"    def __init__({', '.join(init_args)}):"
     else:
         init_sig = "    def __init__(self):"
@@ -527,6 +544,10 @@ def _generate_single_graph_code(
         init_sig,
         "        super().__init__()",
     ]
+    # Store init_params as self.* so they can be used in forward()
+    for v in init_params:
+        code.append(f"        self.{v.name} = {v.name}")
+
     init_lines: List[str] = []
 
     var_map = _build_input_var_map(sorted_nodes)
@@ -570,14 +591,23 @@ def _generate_single_graph_code(
             continue
 
         params = dict(node.data.paramValues)
-        
-        # 1. Substitute constructor argument names if parameter is in graph_data.parameters
+
+        # 1. Resolve @var: bindings — replace with self.<name> for init_params
+        #    or <NAME> constant for local_consts.
+        var_name_to_scope = {v.name: v.scope for v in variables}
+        for k, val in list(params.items()):
+            if isinstance(val, str) and val.startswith("@var:"):
+                var_name = val[len("@var:"):]
+                scope = var_name_to_scope.get(var_name, "init_param")
+                params[k] = f"self.{var_name}" if scope == "init_param" else var_name.upper()
+
+        # 2. Legacy: substitute constructor argument names if parameter is in graph_data.parameters
         if graph_data and getattr(graph_data, "parameters", []):
             for p in graph_data.parameters:
                 if params.get(p.name) in (-1, None, ""):
                     params[p.name] = p.name
-                    
-        # 2. Fill any remaining -1 parameters from inferred_params
+
+        # 3. Fill any remaining -1 parameters from inferred_params
         if inferred_params and node.id in inferred_params:
             for k, v in inferred_params[node.id].items():
                 if params.get(k) in (-1, "?", ""):

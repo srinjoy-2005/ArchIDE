@@ -62,6 +62,11 @@ interface VFSState {
 
   exportProjectJson: () => string;
   importProjectJson: (jsonStr: string) => boolean;
+
+  // Variable management (per active file)
+  addVariable: (fileId: string, variable: Omit<ArchVariable, 'id'>) => void;
+  updateVariable: (fileId: string, varId: string, updates: Partial<ArchVariable>) => void;
+  deleteVariable: (fileId: string, varId: string) => void;
 }
 
 export const useVFSStore = create<VFSState>((set, get) => ({
@@ -507,5 +512,32 @@ export const useVFSStore = create<VFSState>((set, get) => ({
       console.error('Failed to parse ArchIDE project JSON:', err);
       return false;
     }
-  }
+  },
+
+  addVariable: (fileId, variable) => set((state) => ({
+    files: state.files.map((f) => {
+      if (f.id !== fileId) return f;
+      const newVar: ArchVariable = { ...variable, id: generateId() };
+      return { ...f, variables: [...(f.variables || []), newVar] };
+    }),
+  })),
+
+  updateVariable: (fileId, varId, updates) => set((state) => ({
+    files: state.files.map((f) => {
+      if (f.id !== fileId) return f;
+      return {
+        ...f,
+        variables: (f.variables || []).map((v) =>
+          v.id === varId ? { ...v, ...updates } : v
+        ),
+      };
+    }),
+  })),
+
+  deleteVariable: (fileId, varId) => set((state) => ({
+    files: state.files.map((f) => {
+      if (f.id !== fileId) return f;
+      return { ...f, variables: (f.variables || []).filter((v) => v.id !== varId) };
+    }),
+  })),
 }));
