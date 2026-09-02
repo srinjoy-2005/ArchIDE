@@ -39,4 +39,4 @@ export interface ArchIDEProject {
   files: GraphFile[];
 }
 
-export type SidebarView = 'explorer' | 'library' | 'search';
+export type SidebarView = 'explorer' | 'library' | 'variables';

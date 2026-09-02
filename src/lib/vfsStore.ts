@@ -67,6 +67,8 @@ interface VFSState {
   addVariable: (fileId: string, variable: Omit<ArchVariable, 'id'>) => void;
   updateVariable: (fileId: string, varId: string, updates: Partial<ArchVariable>) => void;
   deleteVariable: (fileId: string, varId: string) => void;
+  /** Clears all @var:<varName> bindings from node paramValues in the given file */
+  clearVariableBindings: (fileId: string, varName: string) => void;
 }
 
 export const useVFSStore = create<VFSState>((set, get) => ({
@@ -538,6 +540,26 @@ export const useVFSStore = create<VFSState>((set, get) => ({
     files: state.files.map((f) => {
       if (f.id !== fileId) return f;
       return { ...f, variables: (f.variables || []).filter((v) => v.id !== varId) };
+    }),
+  })),
+
+  clearVariableBindings: (fileId, varName) => set((state) => ({
+    files: state.files.map((f) => {
+      if (f.id !== fileId) return f;
+      const binding = `@var:${varName}`;
+      return {
+        ...f,
+        nodes: f.nodes.map((n) => {
+          const pv = (n.data?.paramValues as Record<string, any>) || {};
+          const hasBinding = Object.values(pv).some((v) => v === binding);
+          if (!hasBinding) return n;
+          const newPv: Record<string, any> = {};
+          for (const [k, v] of Object.entries(pv)) {
+            newPv[k] = v === binding ? null : v;
+          }
+          return { ...n, data: { ...n.data, paramValues: newPv } };
+        }),
+      };
     }),
   })),
 }));

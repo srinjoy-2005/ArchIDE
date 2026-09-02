@@ -11,7 +11,6 @@
 import { useState } from 'react';
 import { Settings2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { PropertiesPanel } from './PropertiesPanel';
-import { VariablesPanel } from './VariablesPanel';
 
 export function RightPanel() {
   const [rightOpen, setRightOpen] = useState(true);
@@ -55,9 +54,8 @@ export function RightPanel() {
       </div>
 
       {/* Inspector Content */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-0">
+      <div className="flex-1 overflow-y-auto p-3">
         <PropertiesPanel />
-        <VariablesPanel />
       </div>
     </aside>
   );

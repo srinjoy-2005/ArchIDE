@@ -13,7 +13,7 @@
 
 import React from 'react';
 import { useEditorStore, type SidebarView } from '../lib/store';
-import { FolderTree, Layers, Search, Settings, HelpCircle } from 'lucide-react';
+import { FolderTree, Layers, Variable, Settings } from 'lucide-react';
 
 interface ActivityTab {
   id: SidebarView;
@@ -22,9 +22,9 @@ interface ActivityTab {
 }
 
 const TOP_TABS: ActivityTab[] = [
-  { id: 'explorer', label: 'Explorer (Files & Folders)', icon: FolderTree },
-  { id: 'library',  label: 'Block Library (Layers & Ops)', icon: Layers },
-  { id: 'search',   label: 'Search', icon: Search },
+  { id: 'explorer',  label: 'Explorer (Files & Folders)',   icon: FolderTree },
+  { id: 'library',   label: 'Block Library (Layers & Ops)', icon: Layers },
+  { id: 'variables', label: 'Variables',                    icon: Variable },
 ];
 
 export function ActivityBar() {

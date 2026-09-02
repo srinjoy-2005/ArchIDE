@@ -156,6 +156,29 @@ export function Header() {
     setGeneratedCode('# Compiling via Python Backend Engine...');
     try {
       const payload = buildPayload();
+
+      // ── Guard: block compile if any param has a dangling @var: binding (null) ──
+      const danglingNodes: string[] = [];
+      for (const [graphId, graphData] of Object.entries(payload.graphs as any)) {
+        for (const node of (graphData as any).nodes || []) {
+          const pv = node.data?.paramValues || {};
+          const hasDangling = Object.values(pv).some((v) => v === null || v === undefined);
+          if (hasDangling) {
+            danglingNodes.push(`${node.data?.label || node.id} (in ${graphId})`);
+          }
+        }
+      }
+      if (danglingNodes.length > 0) {
+        setGeneratedCode(
+          `# ⛔ Compile blocked: ${danglingNodes.length} node(s) have unresolved parameters.\n` +
+          `# Please rebind or reset the following nodes:\n` +
+          danglingNodes.map((n) => `#   • ${n}`).join('\n') +
+          '\n\n# Open the Variables panel to reassign the missing bindings.'
+        );
+        setCompiling(false);
+        return;
+      }
+
       const response = await fetch(`${API_BASE}/api/compile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
