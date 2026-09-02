@@ -5,12 +5,12 @@
       "id": "in_src",
       "type": "custom",
       "position": {
-        "x": 11.435105265622497,
-        "y": 190.72501411814275
+        "x": 12.801033754606408,
+        "y": 130.6241606028501
       },
       "data": {
         "block_id": "input",
-        "label": "Input",
+        "label": "hello",
         "is_functional": true,
         "inputs": [],
         "outputs": [
@@ -42,25 +42,20 @@
             10,
             256
           ]
-        }
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
-      },
-      "selected": false,
-      "dragging": false
+        },
+        "varName": ""
+      }
     },
     {
       "id": "in_tgt",
       "type": "custom",
       "position": {
-        "x": 49.2371944815153,
-        "y": 11.624062267331773
+        "x": 13.72305376793328,
+        "y": -59.404219159832266
       },
       "data": {
         "block_id": "input",
-        "label": "Input",
+        "label": "tensor1",
         "is_functional": true,
         "inputs": [],
         "outputs": [
@@ -92,21 +87,16 @@
             10,
             256
           ]
-        }
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
-      },
-      "selected": false,
-      "dragging": false
+        },
+        "varName": ""
+      }
     },
     {
       "id": "encoder",
       "type": "custom",
       "position": {
-        "x": 300.63450834679594,
-        "y": 219.8866257989744
+        "x": 318.4382000199536,
+        "y": 276.3180156617109
       },
       "data": {
         "block_id": "custom",
@@ -141,20 +131,14 @@
             256
           ]
         }
-      },
-      "measured": {
-        "width": 222,
-        "height": 45
-      },
-      "selected": false,
-      "dragging": false
+      }
     },
     {
       "id": "decoder",
       "type": "custom",
       "position": {
-        "x": 613.5952246493879,
-        "y": 142.75683633021941
+        "x": 609.5952246493879,
+        "y": 4.756836330219414
       },
       "data": {
         "block_id": "custom",
@@ -199,13 +183,7 @@
             256
           ]
         }
-      },
-      "measured": {
-        "width": 222,
-        "height": 45
-      },
-      "selected": true,
-      "dragging": false
+      }
     },
     {
       "id": "out",
@@ -239,10 +217,6 @@
             ]
           ]
         }
-      },
-      "measured": {
-        "width": 164,
-        "height": 45
       }
     }
   ],

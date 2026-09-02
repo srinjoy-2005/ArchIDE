@@ -112,22 +112,16 @@
       "targetHandle": "in"
     }
   ],
-  "variables": [
+  "parameters": [
     {
-      "id": "4n3npyv",
       "name": "in_channels",
       "type": "int",
-      "default": 32,
-      "description": "",
-      "scope": "init_param"
+      "default": 32
     },
     {
-      "id": "2n4yd2z",
       "name": "out_channels",
       "type": "int",
-      "default": 32,
-      "description": "",
-      "scope": "init_param"
+      "default": 32
     }
   ]
 }

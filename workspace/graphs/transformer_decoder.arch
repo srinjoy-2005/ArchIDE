@@ -5,8 +5,8 @@
       "id": "in_x",
       "type": "custom",
       "position": {
-        "x": -57.19623398416691,
-        "y": 26.609644738164967
+        "x": 100,
+        "y": 100
       },
       "data": {
         "block_id": "input",
@@ -48,15 +48,14 @@
         "width": 164,
         "height": 45
       },
-      "selected": false,
-      "dragging": false
+      "selected": false
     },
     {
       "id": "in_mem",
       "type": "custom",
       "position": {
-        "x": -56,
-        "y": 344
+        "x": 100,
+        "y": 500
       },
       "data": {
         "block_id": "input",
@@ -98,15 +97,14 @@
         "width": 164,
         "height": 45
       },
-      "selected": true,
-      "dragging": false
+      "selected": false
     },
     {
       "id": "ln_1",
       "type": "custom",
       "position": {
-        "x": 178.8192667306289,
-        "y": 121.95952486177549
+        "x": 300,
+        "y": 100
       },
       "data": {
         "block_id": "layernorm",
@@ -168,16 +166,14 @@
       "measured": {
         "width": 164,
         "height": 45
-      },
-      "selected": false,
-      "dragging": false
+      }
     },
     {
       "id": "q1",
       "type": "custom",
       "position": {
-        "x": 501.32630020723286,
-        "y": -46.02109937830156
+        "x": 500,
+        "y": -50
       },
       "data": {
         "block_id": "linear",
@@ -249,15 +245,14 @@
         "width": 164,
         "height": 59
       },
-      "selected": false,
-      "dragging": false
+      "selected": false
     },
     {
       "id": "k1",
       "type": "custom",
       "position": {
-        "x": 448.98690504853164,
-        "y": 114.95211403749937
+        "x": 500,
+        "y": 100
       },
       "data": {
         "block_id": "linear",
@@ -329,8 +324,7 @@
         "width": 164,
         "height": 59
       },
-      "selected": false,
-      "dragging": false
+      "selected": false
     },
     {
       "id": "v1",
@@ -414,8 +408,8 @@
       "id": "k1_t",
       "type": "custom",
       "position": {
-        "x": 674.4934525242658,
-        "y": 175.64010630734964
+        "x": 700,
+        "y": 100
       },
       "data": {
         "block_id": "transpose",
@@ -478,15 +472,14 @@
         "width": 164,
         "height": 45
       },
-      "selected": false,
-      "dragging": false
+      "selected": false
     },
     {
       "id": "qk1",
       "type": "custom",
       "position": {
-        "x": 885.9274220823536,
-        "y": 60.687992269850284
+        "x": 900,
+        "y": 0
       },
       "data": {
         "block_id": "matmul",
@@ -540,9 +533,7 @@
       "measured": {
         "width": 164,
         "height": 45
-      },
-      "selected": false,
-      "dragging": false
+      }
     },
     {
       "id": "soft1",
@@ -742,7 +733,7 @@
         "width": 164,
         "height": 59
       },
-      "selected": false
+      "selected": true
     },
     {
       "id": "add_1",
@@ -1233,8 +1224,7 @@
       "measured": {
         "width": 164,
         "height": 45
-      },
-      "selected": false
+      }
     },
     {
       "id": "soft2",
@@ -2023,8 +2013,7 @@
       "sourceHandle": "out",
       "target": "qk2",
       "targetHandle": "in_a",
-      "type": "tensor",
-      "selected": false
+      "type": "tensor"
     },
     {
       "id": "e_k2_t_qk2_in_b",
@@ -2032,8 +2021,7 @@
       "sourceHandle": "out",
       "target": "qk2",
       "targetHandle": "in_b",
-      "type": "tensor",
-      "selected": false
+      "type": "tensor"
     },
     {
       "id": "e_qk2_soft2_in",
@@ -2041,8 +2029,7 @@
       "sourceHandle": "out",
       "target": "soft2",
       "targetHandle": "in",
-      "type": "tensor",
-      "selected": false
+      "type": "tensor"
     },
     {
       "id": "e_soft2_attn2_in_a",

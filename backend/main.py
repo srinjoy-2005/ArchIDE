@@ -26,7 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from vfs import router as vfs_router
+from graphVFS import router as vfs_router
 app.include_router(vfs_router)
 
 @app.get("/api/blocks", response_model=List[BlockDef])
