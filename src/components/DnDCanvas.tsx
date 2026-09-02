@@ -43,6 +43,7 @@ import { CentralCodeEditor } from './CentralCodeEditor';
 import { useEditorStore, useVFSStore } from '../lib/store';
 import { Plus, X, FileCode, Network, Code2, Hand, MousePointer2 } from 'lucide-react';
 import { getId, initialNodes, initialEdges, API_BASE } from '../lib/constants';
+import { resolveFilePath } from '../lib/utils';
 
 // Defined at module level to avoid re-creating objects on every render,
 // which would cause React Flow to unmount and remount all nodes.
@@ -160,12 +161,18 @@ export function DnDCanvas() {
   const files = useVFSStore((s) => s.files);
   const folders = useVFSStore((s) => s.folders);
   const isMirroring = useVFSStore((s) => s.isMirroring);
+  const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
 
   // Ref to track the last saved structural state to prevent infinite ping-pongs
   const lastSavedState = useRef<string>("");
+
+  // Reset the saved state tracker when switching files so the next render triggers a save check
+  useEffect(() => {
+    lastSavedState.current = "";
+  }, [activeFileId]);
 
   // Helper to strip transient React Flow state
   const getStrippedGraph = useCallback((nodesToStrip: Node[], edgesToStrip: Edge[]) => {
@@ -194,21 +201,9 @@ export function DnDCanvas() {
 
     // Use a timeout to debounce saves after canvas interactions
     const handler = setTimeout(() => {
-      // Compute full path for file_id (e.g. "conv/res_block")
-      const pathParts: string[] = [];
-      let currFolderId = activeFile.parentId;
-      while (currFolderId) {
-        const folder = folders.find(f => f.id === currFolderId);
-        if (folder && folder.name !== 'graphs') {
-          pathParts.unshift(folder.name);
-          currFolderId = folder.parentId;
-        } else {
-          break;
-        }
-      }
-      const fileNameWithoutExt = activeFile.name.replace(/\.[^/.]+$/, "");
-      pathParts.push(fileNameWithoutExt);
-      const fullFileId = activeFile.id === 'main' ? 'main' : pathParts.join('/');
+      // Use resolveFilePath to get the canonical file_id (handles folder renames correctly)
+      const fullFileId = resolveFilePath(activeFile, folders, graphsFolderId);
+      const fileNameWithoutExt = activeFile.name.replace(/\.[^/.]+$/, '');
 
       const payload = {
         file_id: fullFileId,
@@ -231,7 +226,7 @@ export function DnDCanvas() {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode, getStrippedGraph]);
+  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode, getStrippedGraph, graphsFolderId]);
 
   // ─── Sync Disk Updates to Canvas ──────────────────────────────────────────────
   // When activeFile changes (e.g. from SSE), we must push it into the uncontrolled ReactFlow.
@@ -327,10 +322,13 @@ export function DnDCanvas() {
     [setEdges]
   );
 
-  // Clear shape error highlight whenever the graph is edited
+  // Clear shape error highlight whenever the graph is structurally edited
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setShapeErrorNodeId(null);
+      const isStructuralEdit = changes.some(c => c.type === 'remove' || c.type === 'add');
+      if (isStructuralEdit) {
+        setShapeErrorNodeId(null);
+      }
       setNodes((nds) => applyNodeChanges(changes, nds));
     },
     [setNodes, setShapeErrorNodeId]
@@ -338,7 +336,10 @@ export function DnDCanvas() {
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
-      setShapeErrorNodeId(null);
+      const isStructuralEdit = changes.some(c => c.type === 'remove' || c.type === 'add');
+      if (isStructuralEdit) {
+        setShapeErrorNodeId(null);
+      }
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
     [setEdges, setShapeErrorNodeId]

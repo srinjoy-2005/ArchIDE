@@ -50,7 +50,13 @@ def compile_graph(request: CompileRequest):
         
         # Dump files to workspace/python
         python_dir = os.path.join(os.path.dirname(__file__), '../workspace/python')
+        
+        # Clean stale files from previous compilations
+        if os.path.exists(python_dir):
+            import shutil
+            shutil.rmtree(python_dir)
         os.makedirs(python_dir, exist_ok=True)
+        
         for path_key, code_content in files.items():
             # ensure directory for nested paths
             out_file = os.path.join(python_dir, f"{path_key}.py")

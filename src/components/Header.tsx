@@ -40,6 +40,7 @@ export function Header() {
   const isMirroring       = useVFSStore((s) => s.isMirroring);
   const setIsMirroring    = useVFSStore((s) => s.setIsMirroring);
   const overwriteFilesFromVFS = useVFSStore((s) => s.overwriteFilesFromVFS);
+  const graphsFolderId    = useVFSStore((s) => s.graphsFolderId);
 
   const [compiling,    setCompiling]    = useState(false);
   const [checkStatus,  setCheckStatus]  = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
@@ -50,13 +51,33 @@ export function Header() {
       setIsMirroring(false);
       return;
     }
-    // Disk wins: fetch initial state
     try {
+      // Disk wins: fetch initial state and overwrite in-memory
       const res = await fetch(`${API_BASE}/api/vfs/init`);
+      const diskFileIds = new Set<string>();
       if (res.ok) {
         const data = await res.json();
         if (data.files) {
           overwriteFilesFromVFS(data.files);
+          Object.keys(data.files).forEach((id) => diskFileIds.add(id));
+        }
+      }
+      // One-time push: save any in-memory graph files that are not yet on disk
+      const currentFiles = useVFSStore.getState().files;
+      const currentFolders = useVFSStore.getState().folders;
+      for (const f of currentFiles) {
+        if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
+        const fileId = resolveFilePath(f, currentFolders, graphsFolderId);
+        if (!diskFileIds.has(fileId)) {
+          const name = f.name.replace(/\.[^/.]+$/, '');
+          fetch(`${API_BASE}/api/vfs/save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              file_id: fileId,
+              content: { name, nodes: f.nodes, edges: f.edges, variables: f.variables || [] }
+            })
+          }).catch(() => {});
         }
       }
       setIsMirroring(true);
@@ -96,7 +117,7 @@ export function Header() {
     const idToPath: Record<string, string> = {};
     for (const f of files) {
       if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
-      idToPath[f.id] = resolveFilePath(f, folders);
+      idToPath[f.id] = resolveFilePath(f, folders, graphsFolderId);
     }
 
     // Pass 2: Build Graphs payload
@@ -145,7 +166,7 @@ export function Header() {
     }
 
     const entryFile = files.find((f) => f.id === entryFileId);
-    const mainGraphPath = entryFile ? resolveFilePath(entryFile, folders) : entryFileId;
+    const mainGraphPath = entryFile ? resolveFilePath(entryFile, folders, graphsFolderId) : entryFileId;
 
     return { main_graph_id: mainGraphPath, graphs, file_paths };
   };
@@ -166,6 +187,8 @@ export function Header() {
   const handleExport = async () => {
     setCompiling(true);
     setShapeErrorNodeId(null);
+    setCheckStatus('checking');
+    setCheckMsg('');
     setGeneratedCode('# Compiling via Python Backend Engine...');
     try {
       const payload = buildPayload();
@@ -200,6 +223,8 @@ export function Header() {
       broadcastPayload('/api/compile', payload, data);
 
       if (response.ok) {
+        setCheckStatus('ok');
+        setCheckMsg('Compatible ✓');
         setGeneratedCode('# Compiled successfully. Check the python/ folder.');
         setShapeErrorNodeId(null);
         handleCompiledFiles(data.files || {});
@@ -225,14 +250,47 @@ export function Header() {
           })
         );
       } else {
+        setCheckStatus('error');
+        // Clear all previous inferred shapes/params on error
+        setNodeShapes({});
+        setNodes((nds) =>
+          nds.map((n) => {
+            const updatedValues = { ...(n.data.paramValues as any) };
+            delete updatedValues['output_shape'];
+            delete updatedValues['input_shape'];
+            return {
+              ...n,
+              data: { ...n.data, paramValues: updatedValues, inferredShapes: undefined, inferredParams: undefined },
+            };
+          })
+        );
+
         if (data.detail?.error === 'ShapeMismatch') {
           setShapeErrorNodeId(data.detail.node_id);
-          setGeneratedCode(`# ❌ Shape Mismatch at "${data.detail.node_label}":\n# ${data.detail.message}`);
+          const msg = `# ❌ Shape Mismatch at "${data.detail.node_label}":\n# ${data.detail.message}`;
+          setGeneratedCode(msg);
+          setCheckMsg(data.detail.message);
         } else {
           setGeneratedCode(`# ❌ Compiler Error:\n# ${JSON.stringify(data.detail)}`);
+          setCheckMsg('Compiler Error');
         }
       }
     } catch (err: any) {
+      setCheckStatus('error');
+      setCheckMsg(`Cannot reach backend: ${err.message}`);
+      // Clear shapes on network error too
+      setNodeShapes({});
+      setNodes((nds) =>
+        nds.map((n) => {
+          const updatedValues = { ...(n.data.paramValues as any) };
+          delete updatedValues['output_shape'];
+          delete updatedValues['input_shape'];
+          return {
+            ...n,
+            data: { ...n.data, paramValues: updatedValues, inferredShapes: undefined, inferredParams: undefined },
+          };
+        })
+      );
       setGeneratedCode(`# ❌ Network Error:\n# Could not reach backend: ${err.message}`);
     } finally {
       setCompiling(false);
@@ -242,6 +300,7 @@ export function Header() {
   const handleCheck = async () => {
     setCheckStatus('checking');
     setCheckMsg('');
+    setShapeErrorNodeId(null);
     try {
       const payload = buildPayload();
       const response = await fetch(`${API_BASE}/api/check`, {
@@ -278,11 +337,42 @@ export function Header() {
         );
       } else {
         setCheckStatus('error');
-        const errMsg = typeof data.detail === 'string' ? data.detail : data.detail?.message;
-        setCheckMsg(errMsg || 'Shape mismatch detected.');
+        // Clear all previous inferred shapes/params on error
+        setNodeShapes({});
+        setNodes((nds) =>
+          nds.map((n) => {
+            const updatedValues = { ...(n.data.paramValues as any) };
+            delete updatedValues['output_shape'];
+            delete updatedValues['input_shape'];
+            return {
+              ...n,
+              data: { ...n.data, paramValues: updatedValues, inferredShapes: undefined, inferredParams: undefined },
+            };
+          })
+        );
+        if (data.detail?.error === 'ShapeMismatch') {
+          setShapeErrorNodeId(data.detail.node_id);
+          setCheckMsg(data.detail.message);
+        } else {
+          const errMsg = typeof data.detail === 'string' ? data.detail : data.detail?.message;
+          setCheckMsg(errMsg || 'Shape mismatch detected.');
+        }
       }
     } catch (err: any) {
       setCheckStatus('error');
+      // Clear shapes on network error too
+      setNodeShapes({});
+      setNodes((nds) =>
+        nds.map((n) => {
+          const updatedValues = { ...(n.data.paramValues as any) };
+          delete updatedValues['output_shape'];
+          delete updatedValues['input_shape'];
+          return {
+            ...n,
+            data: { ...n.data, paramValues: updatedValues, inferredShapes: undefined, inferredParams: undefined },
+          };
+        })
+      );
       setCheckMsg(`Cannot reach backend: ${err.message}`);
     }
   };

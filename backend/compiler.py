@@ -471,7 +471,7 @@ def _build_output_var(
     return base if count == 1 else f"{base}_{count}"
 
 
-def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths: Dict[str, str] = None) -> Tuple[Dict[str, str], Dict, Dict]:
+def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths: Dict[str, str]|None = None) -> Tuple[Dict[str, str], Dict, Dict]:
     if file_paths is None:
         file_paths = {}
     
@@ -549,7 +549,7 @@ def _generate_single_graph_code(
     class_name: str,
     graphs: Dict[str, Any],
     graph_data: Any = None,
-    inferred_params: Dict[str, Dict[str, Any]] = None
+    inferred_params: Dict[str, Dict[str, Any]]|None = None
 ) -> str:
     node_ids = {node.id for node in sorted_nodes}
     valid_edges = [e for e in edges if e.source in node_ids and e.target in node_ids]

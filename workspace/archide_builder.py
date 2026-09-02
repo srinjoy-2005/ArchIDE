@@ -12,7 +12,7 @@ class ArchIDEGraph:
         self.nodes = []
         self.edges = []
         
-    def add_node(self, block_id: str, x: float, y: float, params: Dict[str, Any] = None, custom_module_id: str = "") -> str:
+    def add_node(self, block_id: str, x: float, y: float, params: Dict[str, Any]|None = None, custom_module_id: str = "") -> str:
         """Adds a node and returns its generated ID. Automatically populates schemas if run in backend environment."""
         node_id = f"{block_id}_{generate_id()}"
         

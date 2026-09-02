@@ -31,6 +31,13 @@ class FlattenBlock(BaseBlock):
             end_dim += len(in_shape)
         if start_dim < 0:
             start_dim += len(in_shape)
+
+        if start_dim < 0 or start_dim >= len(in_shape):
+            raise ValueError(f"start_dim={start_dim} is out of bounds for tensor of {len(in_shape)} dimensions")
+        if end_dim < 0 or end_dim >= len(in_shape):
+            raise ValueError(f"end_dim={end_dim} is out of bounds for tensor of {len(in_shape)} dimensions")
+        if start_dim > end_dim:
+            raise ValueError(f"start_dim={start_dim} cannot be greater than end_dim={end_dim}")
             
         try:
             flat_size = 1

@@ -18,3 +18,4 @@ Welcome to the ArchiDE documentation.
 
 ## 📝 Historical Changelog
 *(See `docs/changelog/` for the day-to-day session wrap-ups)*
+

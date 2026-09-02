@@ -92,12 +92,53 @@ export function BlockLibrary() {
   }, []);
 
   const entryFileId = useVFSStore((s) => s.entryFileId);
+  const folders = useVFSStore((s) => s.folders);
+  const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
 
-  // Derive custom module entries from other files
-  // Exclude the entry point (it's the root model, never a sub-module)
-  // Exclude the active file (to prevent immediate self-recursion)
+  // Walk parentId chain to find the root folder UID
+  const getRootFolderId = (folderId: string | null): string | null => {
+    if (!folderId) return null;
+    let current = folders.find((f) => f.id === folderId);
+    while (current && current.parentId) {
+      current = folders.find((f) => f.id === current!.parentId);
+    }
+    return current?.id ?? null;
+  };
+
+  // DFS: collect the set of file IDs that the given file depends on (transitively)
+  const getTransitiveDeps = (fileId: string, visited = new Set<string>()): Set<string> => {
+    if (visited.has(fileId)) return visited;
+    visited.add(fileId);
+    const file = files.find((f) => f.id === fileId);
+    if (!file) return visited;
+    for (const node of file.nodes) {
+      const depId = (node.data as any)?.custom_module_id;
+      if (depId) getTransitiveDeps(depId, visited);
+    }
+    return visited;
+  };
+
+  // Files that directly or transitively depend on the active file (circular dep ancestors)
+  const circularAncestors = new Set(
+    files
+      .filter((f) => {
+        const deps = getTransitiveDeps(f.id);
+        return deps.has(activeFileId);
+      })
+      .map((f) => f.id)
+  );
+
+  // Derive custom module entries from other files in graphs/ only
   const customBlocks = files
-    .filter((f) => f.id !== activeFileId && f.id !== entryFileId)
+    .filter((f) => {
+      if (f.id === activeFileId) return false;      // no self-reference
+      if (f.id === entryFileId) return false;       // entry is never a sub-module
+      if (circularAncestors.has(f.id)) return false; // would create circular dep
+      if (f.fileType === 'code') return false;       // .py files excluded
+      // Only list files that live inside graphs/ tree (by stable UID)
+      const rootId = getRootFolderId(f.parentId ?? null);
+      return rootId === graphsFolderId;
+    })
     .map((f) => {
       const inputs  = f.nodes.filter((n) => n.data.block_id === 'input').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
       const outputs = f.nodes.filter((n) => n.data.block_id === 'output').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
