@@ -13,6 +13,7 @@
 
 import React, { useState } from "react";
 import { Plus, Trash2, GripVertical, Variable, AlertTriangle, X } from "lucide-react";
+import { useReactFlow } from "@xyflow/react";
 import { useVFSStore } from "../lib/store";
 import type { ArchVariable, ArchVariableType, ArchVariableScope } from "../lib/types";
 
@@ -123,11 +124,13 @@ export function VariablesPanel() {
   const [newVarScope, setNewVarScope] = useState<ArchVariableScope>("init_param");
   const [deleteTarget, setDeleteTarget] = useState<ArchVariable | null>(null);
 
-  // Find all nodes that bind a given variable name
+  const { getNodes, setNodes } = useReactFlow();
+
+  // Find all nodes that bind a given variable name using live canvas nodes
   const getUsages = (varName: string) => {
     const binding = `${VAR_PREFIX}${varName}`;
     const result: { id: string; label: string; params: string[] }[] = [];
-    for (const node of nodes) {
+    for (const node of getNodes()) {
       const pv = (node.data?.paramValues as Record<string, any>) || {};
       const bound = Object.entries(pv)
         .filter(([, v]) => v === binding)
@@ -161,6 +164,21 @@ export function VariablesPanel() {
 
   const handleConfirmDelete = () => {
     if (!deleteTarget) return;
+    const binding = `${VAR_PREFIX}${deleteTarget.name}`;
+    
+    // 1. Clear live React Flow state immediately
+    setNodes((nds) => nds.map(n => {
+      const pv = (n.data?.paramValues as Record<string, any>) || {};
+      const hasBinding = Object.values(pv).some(v => v === binding);
+      if (!hasBinding) return n;
+      const newPv: Record<string, any> = {};
+      for (const [k, v] of Object.entries(pv)) {
+        newPv[k] = v === binding ? null : v;
+      }
+      return { ...n, data: { ...n.data, paramValues: newPv } };
+    }));
+
+    // 2. Clear VFS store state
     clearVariableBindings(activeFileId, deleteTarget.name);
     deleteVariable(activeFileId, deleteTarget.id);
     setDeleteTarget(null);
