@@ -1,0 +1,133 @@
+{
+  "name": "res_block",
+  "nodes": [
+    {
+      "id": "rb_in",
+      "type": "custom",
+      "position": {
+        "x": 80,
+        "y": 120
+      },
+      "data": {
+        "block_id": "input",
+        "label": "x",
+        "paramValues": {
+          "shape": "(1, 32, 224, 224)"
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "rb_conv",
+      "type": "custom",
+      "position": {
+        "x": 280,
+        "y": 80
+      },
+      "data": {
+        "block_id": "conv2d",
+        "label": "Conv 3x3",
+        "paramValues": {
+          "in_channels": 32,
+          "out_channels": 32,
+          "kernel_size": 3,
+          "padding": 1,
+          "stride": 1
+        }
+      },
+      "measured": {
+        "width": 164,
+        "height": 59
+      }
+    },
+    {
+      "id": "rb_add",
+      "type": "custom",
+      "position": {
+        "x": 480,
+        "y": 120
+      },
+      "data": {
+        "block_id": "add",
+        "label": "Residual Add",
+        "paramValues": {}
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    },
+    {
+      "id": "rb_out",
+      "type": "custom",
+      "position": {
+        "x": 680,
+        "y": 120
+      },
+      "data": {
+        "block_id": "output",
+        "label": "out",
+        "paramValues": {}
+      },
+      "measured": {
+        "width": 164,
+        "height": 45
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "re1",
+      "type": "tensor",
+      "source": "rb_in",
+      "sourceHandle": "out",
+      "target": "rb_conv",
+      "targetHandle": "in"
+    },
+    {
+      "id": "re2",
+      "type": "tensor",
+      "source": "rb_conv",
+      "sourceHandle": "out",
+      "target": "rb_add",
+      "targetHandle": "in"
+    },
+    {
+      "id": "re3",
+      "type": "tensor",
+      "source": "rb_in",
+      "sourceHandle": "out",
+      "target": "rb_add",
+      "targetHandle": "in"
+    },
+    {
+      "id": "re4",
+      "type": "tensor",
+      "source": "rb_add",
+      "sourceHandle": "out",
+      "target": "rb_out",
+      "targetHandle": "in"
+    }
+  ],
+  "variables": [
+    {
+      "id": "4n3npyv",
+      "name": "in_channels",
+      "type": "int",
+      "default": 32,
+      "description": "",
+      "scope": "init_param"
+    },
+    {
+      "id": "2n4yd2z",
+      "name": "out_channels",
+      "type": "int",
+      "default": 32,
+      "description": "",
+      "scope": "init_param"
+    }
+  ]
+}
