@@ -58,10 +58,16 @@ function getParamSummary(paramValues: Record<string, any> = {}): string {
   return parts.join('  ');
 }
 
-// Format a shape array like [1, 64, 28, 28] → "1×64×28×28"
-function fmtShape(shape: number[] | undefined): string {
-  if (!shape || shape.length === 0) return '';
-  return shape.join('×');
+// Format a shape value:
+//   number[]   → "1×64×28×28"       (single tensor — used for output / single-input ports)
+//   number[][] → "[1×3×224×224] × [1×3×224×224]"  (multi-input port, one bracket per tensor)
+function fmtShape(shape: number[] | number[][] | undefined): string {
+  if (!shape || (shape as any[]).length === 0) return '';
+  // Detect nested array (list-input port stores an array of shapes)
+  if (Array.isArray((shape as any[])[0])) {
+    return (shape as number[][]).map((s) => `[${s.join('\u00d7')}]`).join(' \u00d7 ');
+  }
+  return (shape as number[]).join('\u00d7');
 }
 
 const CustomNode = ({ id, data, isConnectable }: any) => {
@@ -265,7 +271,10 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
                 {inputShapeLines.map(({ portName, shape }) => (
                   <div key={portName} className="flex items-center justify-between gap-3">
                     <span className="text-[9px] text-[#666]">{portName}</span>
-                    <span className="text-[11px] font-mono text-[#60a5fa]">[{shape}]</span>
+                    {/* Multi-input shapes already carry per-tensor brackets from fmtShape */}
+                    <span className="text-[11px] font-mono text-[#60a5fa]">
+                      {shape.startsWith('[') ? shape : `[${shape}]`}
+                    </span>
                   </div>
                 ))}
               </div>

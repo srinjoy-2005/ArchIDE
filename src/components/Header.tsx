@@ -17,12 +17,12 @@
  * multi-file Zustand store to construct the multi-graph payload.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { useEditorStore, useVFSStore } from '../lib/store';
-import { Layers, Play, RotateCcw, Bug } from 'lucide-react';
+import { Layers, Play, RotateCcw, Bug, Save, Upload, FolderOpen } from 'lucide-react';
 import { API_BASE } from '../lib/constants';
-import { resolveFilePath } from '../lib/utils';
+import { resolveFilePath, getVFSFilePath } from '../lib/utils';
 
 export function Header() {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
@@ -37,74 +37,114 @@ export function Header() {
   const files             = useVFSStore((s) => s.files);
   const activeFileId      = useVFSStore((s) => s.activeFileId);
   const entryFileId       = useVFSStore((s) => s.entryFileId);
-  const isMirroring       = useVFSStore((s) => s.isMirroring);
-  const setIsMirroring    = useVFSStore((s) => s.setIsMirroring);
+  const isSaving          = useVFSStore((s) => s.isSaving);
+  const setIsSaving       = useVFSStore((s) => s.setIsSaving);
   const overwriteFilesFromVFS = useVFSStore((s) => s.overwriteFilesFromVFS);
+  const restoreVFSFromFiles = useVFSStore((s) => s.restoreVFSFromFiles);
   const graphsFolderId    = useVFSStore((s) => s.graphsFolderId);
 
   const [compiling,    setCompiling]    = useState(false);
   const [checkStatus,  setCheckStatus]  = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [checkMsg,     setCheckMsg]     = useState('');
 
-  const handleMirrorLocal = async () => {
-    if (isMirroring) {
-      setIsMirroring(false);
-      return;
-    }
+  // Save State path — persisted in localStorage
+  const [savePath, setSavePath] = useState<string>(() =>
+    (typeof window !== 'undefined' && localStorage.getItem('archide_save_path')) || 'workspace'
+  );
+  const [savePathEditing, setSavePathEditing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'ok' | 'error'>('idle');
+
+  // Load State path — persisted in localStorage
+  const [loadPath, setLoadPath] = useState<string>(() =>
+    (typeof window !== 'undefined' && localStorage.getItem('archide_load_path')) || 'workspace'
+  );
+  const [loadPathEditing, setLoadPathEditing] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+
+  const savePathRef = useRef<HTMLInputElement>(null);
+  const loadPathRef = useRef<HTMLInputElement>(null);
+
+  /** Save State: mirror exact browser VFS files to disk at savePath, pruning redundant files */
+  const handleSaveState = async () => {
+    setSaveStatus('saving');
+    // Enable live auto-save from this point forward
+    setIsSaving(true);
     try {
-      // Disk wins: fetch initial state and overwrite in-memory
-      const res = await fetch(`${API_BASE}/api/vfs/init`);
-      const diskFileIds = new Set<string>();
-      if (res.ok) {
-        const data = await res.json();
-        if (data.files) {
-          overwriteFilesFromVFS(data.files);
-          Object.keys(data.files).forEach((id) => diskFileIds.add(id));
-        }
-      }
-      // One-time push: save any in-memory graph files that are not yet on disk
       const currentFiles = useVFSStore.getState().files;
       const currentFolders = useVFSStore.getState().folders;
+      const filesMap: Record<string, any> = {};
+
       for (const f of currentFiles) {
-        if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
-        const fileId = resolveFilePath(f, currentFolders, graphsFolderId);
-        if (!diskFileIds.has(fileId)) {
+        const vfsRelPath = getVFSFilePath(f, currentFolders);
+        if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) {
+          filesMap[vfsRelPath] = f.compiledCode || '';
+        } else {
+          const isCurrentActive = f.id === activeFileId;
           const name = f.name.replace(/\.[^/.]+$/, '');
-          fetch(`${API_BASE}/api/vfs/save`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              file_id: fileId,
-              content: { name, nodes: f.nodes, edges: f.edges, variables: f.variables || [] }
-            })
-          }).catch(() => {});
+          filesMap[vfsRelPath] = {
+            name,
+            nodes: isCurrentActive ? nodes : f.nodes,
+            edges: isCurrentActive ? edges : f.edges,
+            variables: f.variables || [],
+          };
         }
       }
-      setIsMirroring(true);
-    } catch (e) {
-      console.error('Failed to init VFS', e);
+
+      const res = await fetch(`${API_BASE}/api/state/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dir: savePath,
+          files: filesMap,
+        }),
+      });
+      if (res.ok) {
+        setSaveStatus('ok');
+        setTimeout(() => setSaveStatus('idle'), 2500);
+      } else {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     }
   };
 
-  // Setup SSE stream when mirroring is enabled
-  useEffect(() => {
-    if (!isMirroring) return;
-    const es = new EventSource(`${API_BASE}/api/vfs/stream`);
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.file_id && data.content) {
-          // Compare before overwriting? Let's just overwrite for now.
-          overwriteFilesFromVFS({ [data.file_id]: data.content });
-        }
-      } catch (e) {
-        console.error('SSE parse error', e);
+  /** Load State: read exact files from backend and mirror into browser VFS */
+  const handleLoadState = async () => {
+    setLoadStatus('loading');
+    try {
+      const res = await fetch(`${API_BASE}/api/state/load?dir=${encodeURIComponent(loadPath)}`);
+      if (!res.ok) {
+        setLoadStatus('error');
+        setTimeout(() => setLoadStatus('idle'), 3000);
+        return;
       }
-    };
-    return () => {
-      es.close();
-    };
-  }, [isMirroring, overwriteFilesFromVFS]);
+      const data = await res.json();
+      if (data.files && Object.keys(data.files).length > 0) {
+        restoreVFSFromFiles(data.files);
+      } else {
+        if (data.graphs) overwriteFilesFromVFS(data.graphs);
+        if (data.python) handleCompiledFiles(data.python);
+      }
+
+      // Sync active graph into uncontrolled React Flow canvas
+      const updatedActive = useVFSStore.getState().files.find(
+        (f) => f.id === useVFSStore.getState().activeFileId
+      );
+      if (updatedActive && updatedActive.fileType !== 'code') {
+        setNodes(updatedActive.nodes || []);
+        setEdges(updatedActive.edges || []);
+      }
+
+      setLoadStatus('ok');
+      setTimeout(() => setLoadStatus('idle'), 2500);
+    } catch {
+      setLoadStatus('error');
+      setTimeout(() => setLoadStatus('idle'), 3000);
+    }
+  };
 
   /** Build the multi-graph JSON payload for /api/compile and /api/check */
   const buildPayload = () => {
@@ -449,17 +489,99 @@ export function Header() {
           {compiling ? 'Compiling...' : 'Compile'}
         </button>
 
-        <button
-          onClick={handleMirrorLocal}
-          className={`flex items-center gap-1.5 text-[11px] transition-colors px-2 py-1.5 rounded-sm ml-1 border ${
-            isMirroring 
-              ? 'text-white bg-green-600 hover:bg-green-500 border-green-500' 
-              : 'text-[#888] hover:text-[#e2e2e2] hover:bg-[#2a2a2a] border-[#3a3a3a]'
-          }`}
-          title="Live sync with workspace/graphs/"
-        >
-          {isMirroring ? 'Mirroring' : 'Mirror Local'}
-        </button>
+        {/* Save State button + path input */}
+        <div className="relative flex items-center gap-0.5 ml-1">
+          {savePathEditing ? (
+            <input
+              ref={savePathRef}
+              autoFocus
+              value={savePath}
+              onChange={(e) => {
+                setSavePath(e.target.value);
+                localStorage.setItem('archide_save_path', e.target.value);
+              }}
+              onBlur={() => setSavePathEditing(false)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setSavePathEditing(false); }}
+              className="text-[10px] font-mono bg-[#1a1a1a] border border-[#505050] text-[#d4d4d4] rounded-sm px-1.5 py-1 w-44 outline-none"
+              placeholder="e.g. workspace or /abs/path"
+            />
+          ) : (
+            <>
+              <button
+                suppressHydrationWarning
+                onClick={handleSaveState}
+                disabled={saveStatus === 'saving'}
+                title={`Save to: ${savePath}`}
+                className={`flex items-center gap-1.5 text-[11px] transition-colors px-2 py-1.5 rounded-sm border ${
+                  saveStatus === 'ok'
+                    ? 'text-[#4ade80] border-[#4ade80]/50 bg-[#4ade80]/10'
+                    : saveStatus === 'error'
+                    ? 'text-[#e54545] border-[#e54545]/50 bg-[#e54545]/10'
+                    : saveStatus === 'saving'
+                    ? 'text-[#555] border-[#363636] bg-[#1e1e1e] cursor-not-allowed'
+                    : 'text-[#888] hover:text-[#e2e2e2] hover:bg-[#2a2a2a] border-[#3a3a3a]'
+                }`}
+              >
+                <Save className="w-3.5 h-3.5" />
+                {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'ok' ? 'Saved ✓' : 'Save State'}
+              </button>
+              <button
+                onClick={() => setSavePathEditing(true)}
+                title="Edit save path"
+                className="p-1 text-[#555] hover:text-[#888] transition-colors"
+              >
+                <FolderOpen className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Load State button + path input */}
+        <div className="relative flex items-center gap-0.5">
+          {loadPathEditing ? (
+            <input
+              ref={loadPathRef}
+              autoFocus
+              value={loadPath}
+              onChange={(e) => {
+                setLoadPath(e.target.value);
+                localStorage.setItem('archide_load_path', e.target.value);
+              }}
+              onBlur={() => setLoadPathEditing(false)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setLoadPathEditing(false); }}
+              className="text-[10px] font-mono bg-[#1a1a1a] border border-[#505050] text-[#d4d4d4] rounded-sm px-1.5 py-1 w-44 outline-none"
+              placeholder="e.g. workspace or /abs/path"
+            />
+          ) : (
+            <>
+              <button
+                suppressHydrationWarning
+                onClick={handleLoadState}
+                disabled={loadStatus === 'loading'}
+                title={`Load from: ${loadPath}`}
+                className={`flex items-center gap-1.5 text-[11px] transition-colors px-2 py-1.5 rounded-sm border ${
+                  loadStatus === 'ok'
+                    ? 'text-[#4ade80] border-[#4ade80]/50 bg-[#4ade80]/10'
+                    : loadStatus === 'error'
+                    ? 'text-[#e54545] border-[#e54545]/50 bg-[#e54545]/10'
+                    : loadStatus === 'loading'
+                    ? 'text-[#555] border-[#363636] bg-[#1e1e1e] cursor-not-allowed'
+                    : 'text-[#888] hover:text-[#e2e2e2] hover:bg-[#2a2a2a] border-[#3a3a3a]'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {loadStatus === 'loading' ? 'Loading…' : loadStatus === 'ok' ? 'Loaded ✓' : 'Load State'}
+              </button>
+              <button
+                onClick={() => setLoadPathEditing(true)}
+                title="Edit load path"
+                className="p-1 text-[#555] hover:text-[#888] transition-colors"
+              >
+                <FolderOpen className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
 
         {process.env.NODE_ENV === 'development' && (
           <button

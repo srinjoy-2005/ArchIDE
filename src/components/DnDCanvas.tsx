@@ -160,7 +160,7 @@ export function DnDCanvas() {
   const activeFileId = useVFSStore((s) => s.activeFileId);
   const files = useVFSStore((s) => s.files);
   const folders = useVFSStore((s) => s.folders);
-  const isMirroring = useVFSStore((s) => s.isMirroring);
+  const isSaving = useVFSStore((s) => s.isSaving);
   const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
 
   const activeFile = files.find((f) => f.id === activeFileId);
@@ -184,7 +184,7 @@ export function DnDCanvas() {
 
   // ─── Debounced Auto-Save (Live VFS Sync) ────────────────────────────────────
   useEffect(() => {
-    if (!isMirroring || !activeFile || isCodeMode) return;
+    if (!isSaving || !activeFile || isCodeMode) return;
 
     // 1. Prevent saves while actively dragging nodes
     if (nodes.some(n => n.dragging)) return;
@@ -215,7 +215,7 @@ export function DnDCanvas() {
         }
       };
 
-      // Mark as saved before fetching to immediately block incoming SSE ping-pongs
+      // Mark as saved before fetching to immediately block stale re-saves
       lastSavedState.current = currentStateStr;
 
       fetch(`${API_BASE}/api/vfs/save`, {
@@ -226,26 +226,9 @@ export function DnDCanvas() {
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [nodes, edges, activeFile, folders, isMirroring, isCodeMode, getStrippedGraph, graphsFolderId]);
+  }, [nodes, edges, activeFile, folders, isSaving, isCodeMode, getStrippedGraph, graphsFolderId]);
 
-  // ─── Sync Disk Updates to Canvas ──────────────────────────────────────────────
-  // When activeFile changes (e.g. from SSE), we must push it into the uncontrolled ReactFlow.
-  useEffect(() => {
-    if (!isMirroring || !activeFile || isCodeMode) return;
-    
-    const strippedCurrent = getStrippedGraph(getNodes(), getEdges());
-    const currentStr = JSON.stringify({ ...strippedCurrent, variables: activeFile.variables || [] });
-    
-    const strippedIncoming = getStrippedGraph(activeFile.nodes, activeFile.edges);
-    const incomingStr = JSON.stringify({ ...strippedIncoming, variables: activeFile.variables || [] });
-    
-    // Only update if the semantic data differs from our canvas
-    if (currentStr !== incomingStr) {
-      setNodes(activeFile.nodes);
-      setEdges(activeFile.edges);
-      lastSavedState.current = incomingStr;
-    }
-  }, [activeFile, isMirroring, isCodeMode, getNodes, setNodes, getEdges, setEdges, getStrippedGraph]);
+  // (SSE disk-to-canvas sync removed — no longer needed without Mirror Local)
 
   // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
   useEffect(() => {

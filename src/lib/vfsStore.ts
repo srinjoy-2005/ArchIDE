@@ -36,16 +36,18 @@ interface VFSState {
   openTabIds: string[];
   activeFileId: string;
   entryFileId: string;
-  isMirroring: boolean;
+  /** True when auto-save is active: every node/edge change is persisted to backend */
+  isSaving: boolean;
   /** Stable UIDs for the root graphs/ and python/ folders — unaffected by user renames */
   graphsFolderId: string;
   pythonFolderId: string;
 
   setEntryFileId: (id: string) => void;
-  setIsMirroring: (val: boolean) => void;
+  setIsSaving: (val: boolean) => void;
   
   handleCompiledFiles: (compiledData: Record<string, string>) => void;
   overwriteFilesFromVFS: (filesMap: Record<string, any>) => void;
+  restoreVFSFromFiles: (filesMap: Record<string, any>) => void;
 
   openTab: (id: string) => void;
   closeTab: (id: string) => void;
@@ -99,13 +101,13 @@ export const useVFSStore = create<VFSState>((set, get) => ({
   openTabIds: ['main'],
   activeFileId: 'main',
   entryFileId: 'main',
-  isMirroring: false,
+  isSaving: false,
   // Stable UIDs that persist even if the user renames graphs/ or python/
   graphsFolderId: 'fol_graphs',
   pythonFolderId: 'fol_python',
 
   setEntryFileId: (id) => set({ entryFileId: id }),
-  setIsMirroring: (val) => set({ isMirroring: val }),
+  setIsSaving: (val) => set({ isSaving: val }),
 
   handleCompiledFiles: (compiledData) => {
     set((state) => {
@@ -206,6 +208,70 @@ export const useVFSStore = create<VFSState>((set, get) => ({
       }
     }
     return { files: newFiles, folders: newFolders };
+  }),
+
+  restoreVFSFromFiles: (filesMap) => set((state) => {
+    // Preserve root graphs/ and python/ folders using stable UIDs
+    const newFolders: Folder[] = [
+      { id: state.graphsFolderId, name: 'graphs', parentId: null, isExpanded: true },
+      { id: state.pythonFolderId, name: 'python', parentId: null, isExpanded: true },
+    ];
+    const newFiles: GraphFile[] = [];
+
+    for (const [relPath, content] of Object.entries(filesMap)) {
+      const parts = relPath.split('/');
+      const fileName = parts.pop() || 'file';
+
+      let parentId: string | null = null;
+      if (parts.length > 0) {
+        if (parts[0] === 'graphs') {
+          parentId = getOrCreateFolderPath(newFolders, state.graphsFolderId, parts.slice(1));
+        } else if (parts[0] === 'python') {
+          parentId = getOrCreateFolderPath(newFolders, state.pythonFolderId, parts.slice(1));
+        } else {
+          parentId = getOrCreateFolderPath(newFolders, null, parts);
+        }
+      }
+
+      const isGraph = fileName.endsWith('.arch') || (typeof content === 'object' && content !== null && 'nodes' in content);
+      if (isGraph) {
+        const rawVars: any[] = content?.variables ?? content?.parameters ?? [];
+        const variables: ArchVariable[] = migrateParameters(rawVars);
+        const fileId = fileName === 'main.arch' && (parts[0] === 'graphs' || parts.length === 0) ? 'main' : generateId();
+        newFiles.push({
+          id: fileId,
+          name: fileName,
+          parentId,
+          nodes: content?.nodes || [],
+          edges: content?.edges || [],
+          variables,
+          fileType: 'graph',
+        });
+      } else {
+        const codeText = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+        newFiles.push({
+          id: generateId(),
+          name: fileName,
+          parentId,
+          nodes: [],
+          edges: [],
+          fileType: 'code',
+          compiledCode: codeText,
+        });
+      }
+    }
+
+    const entryFile = newFiles.find(f => f.name === 'main.arch') || newFiles.find(f => f.fileType === 'graph') || newFiles[0];
+    const activeFileId = entryFile?.id || (newFiles[0]?.id ?? 'main');
+    const entryFileId = entryFile?.id || (newFiles[0]?.id ?? 'main');
+
+    return {
+      folders: newFolders,
+      files: newFiles,
+      openTabIds: [activeFileId],
+      activeFileId,
+      entryFileId,
+    };
   }),
 
   openTab: (id) => {

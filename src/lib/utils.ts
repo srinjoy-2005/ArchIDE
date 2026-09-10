@@ -38,3 +38,27 @@ export function resolveFilePath(file: GraphFile, folders: Folder[], graphsFolder
   parts.push(file.name.replace(/\.[^/.]+$/, ''));
   return parts.join('/');
 }
+
+/**
+ * Computes the exact relative path of a file in the browser VFS.
+ * Includes all ancestor folder names and the exact file name with extension.
+ *
+ * Example:
+ * - File "main.arch" in folder "graphs" -> "graphs/main.arch"
+ * - File "res_block.arch" in folder "conv" in "graphs" -> "graphs/conv/res_block.arch"
+ * - File "archide.toml" at root -> "archide.toml"
+ */
+export function getVFSFilePath(file: GraphFile, folders: Folder[]): string {
+  const parts: string[] = [];
+  let currFolderId = file.parentId ?? null;
+
+  while (currFolderId) {
+    const folder = folders.find((f) => f.id === currFolderId);
+    if (!folder) break;
+    parts.unshift(folder.name);
+    currFolderId = folder.parentId ?? null;
+  }
+
+  parts.push(file.name);
+  return parts.join('/');
+}

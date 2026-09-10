@@ -18,4 +18,5 @@ Welcome to the ArchiDE documentation.
 
 ## 📝 Historical Changelog
 *(See `docs/changelog/` for the day-to-day session wrap-ups)*
+*   **[September 11, 2026](changelog/2026_09_11.md)**: True 1:1 VFS state mirroring, redundancy pruning, exact file paths, and decoupled Save/Load State actions.
 

@@ -1,10 +1,12 @@
-from fastapi import HTTPException, FastAPI
+from fastapi import HTTPException, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 
 from models import BlockDef, CompileRequest, CheckRequest
 from blocks import get_all_block_defs
 from compiler import topological_sort, generate_pytorch_code, shape_inference_pass, ShapeError
+from storage import storage
 import json
 import os
 
@@ -120,3 +122,62 @@ def check_shapes(request: CheckRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+
+
+# ─── State Save / Load ───────────────────────────────────────────────────────
+
+class StateSaveRequest(BaseModel):
+    dir: str  # Destination directory path
+    files: Optional[Dict[str, Any]] = None  # Full VFS files map: { rel_path: content }
+    graphs: Optional[Dict[str, Any]] = None  # Fallback for legacy calls
+    python: Optional[Dict[str, str]] = None  # Fallback for legacy calls
+    python_dir: Optional[str] = None  # Optional override for the python/ source dir
+
+
+@app.post("/api/state/save")
+def save_state(request: StateSaveRequest):
+    """
+    Mirrors the browser VFS state to the requested directory, pruning redundant files.
+    """
+    try:
+        if request.files is not None:
+            out_path = storage.mirror_vfs_state(dest_dir=request.dir, files=request.files)
+        else:
+            out_path = storage.save_state_bundle(
+                dest_dir=request.dir,
+                graphs=request.graphs,
+                python=request.python,
+                python_dir=request.python_dir,
+            )
+        return {"ok": True, "path": out_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/state/load")
+def load_state(dir: str = Query(..., description="Directory to load state from")):
+    """
+    Reads all files from the given directory and returns:
+    { ok: True, files: { [rel_path]: content }, graphs: {...}, python: {...} }
+    """
+    try:
+        data = storage.load_vfs_state(dir)
+        # Also populate graphs and python keys for backwards compatibility
+        graphs: Dict[str, Any] = {}
+        python: Dict[str, str] = {}
+        for rel_path, content in data.get("files", {}).items():
+            if rel_path.endswith(".arch"):
+                # Clean file_id relative to graphs/
+                file_id = rel_path[:-5]
+                if file_id.startswith("graphs/"):
+                    file_id = file_id[7:]
+                graphs[file_id] = content
+            elif rel_path.endswith(".py"):
+                python_rel = rel_path[7:] if rel_path.startswith("python/") else rel_path
+                python[python_rel] = content
+
+        return {"ok": True, "files": data.get("files", {}), "graphs": graphs, "python": python}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Directory not found or empty: {dir}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
