@@ -7,6 +7,27 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models import BlockDef
 
+def parse_int_or_tuple2d(val: Any, default: Tuple[int, int]) -> Tuple[int, int]:
+    if val is None or val == "" or val == "None":
+        return default
+    if isinstance(val, (int, float)):
+        v = int(val)
+        return (v, v)
+    if isinstance(val, (list, tuple)):
+        if len(val) == 1:
+            v = int(val[0])
+            return (v, v)
+        if len(val) >= 2:
+            return (int(val[0]), int(val[1]))
+    if isinstance(val, str):
+        clean = "".join(c for c in val if c.isdigit() or c in (',', '-'))
+        parts = [int(p) for p in clean.split(',') if p]
+        if len(parts) == 1:
+            return (parts[0], parts[0])
+        elif len(parts) >= 2:
+            return (parts[0], parts[1])
+    return default
+
 class BaseBlock(ABC):
     @property
     @abstractmethod

@@ -1,28 +1,7 @@
 import math
 from typing import Dict, Tuple, Any
-from .base import BaseBlock
+from .base import BaseBlock, parse_int_or_tuple2d
 from models import BlockDef, PortDef, ParamDef
-
-def _parse_int_or_tuple2d(val: Any, default: Tuple[int, int]) -> Tuple[int, int]:
-    if val is None or val == "" or val == "None":
-        return default
-    if isinstance(val, (int, float)):
-        v = int(val)
-        return (v, v)
-    if isinstance(val, (list, tuple)):
-        if len(val) == 1:
-            v = int(val[0])
-            return (v, v)
-        if len(val) >= 2:
-            return (int(val[0]), int(val[1]))
-    if isinstance(val, str):
-        clean = "".join(c for c in val if c.isdigit() or c in (',', '-'))
-        parts = [int(p) for p in clean.split(',') if p]
-        if len(parts) == 1:
-            return (parts[0], parts[0])
-        elif len(parts) >= 2:
-            return (parts[0], parts[1])
-    return default
 
 class MaxPool2DBlock(BaseBlock):
     @property
@@ -49,20 +28,24 @@ class MaxPool2DBlock(BaseBlock):
             return {"out": ("ANY",)}
 
         B, C, H, W = in_shape
-        kernel = _parse_int_or_tuple2d(params.get("kernel_size"), default=(2, 2))
-        stride = _parse_int_or_tuple2d(params.get("stride"), default=kernel)
-        padding = _parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
-        dilation = _parse_int_or_tuple2d(params.get("dilation"), default=(1, 1))
+        kernel = parse_int_or_tuple2d(params.get("kernel_size"), default=(2, 2))
+        stride = parse_int_or_tuple2d(params.get("stride"), default=kernel)
+        padding = parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
+        dilation = parse_int_or_tuple2d(params.get("dilation"), default=(1, 1))
 
         kh, kw = kernel
         sh, sw = stride
         ph, pw = padding
         dh, dw = dilation
 
-        if sh <= 0:
-            sh = kh if kh > 0 else 1
-        if sw <= 0:
-            sw = kw if kw > 0 else 1
+        if sh <= 0 or sw <= 0:
+            raise ValueError(f"MaxPool2D: stride must be greater than 0, got {params.get('stride')}")
+        if kh <= 0 or kw <= 0:
+            raise ValueError(f"MaxPool2D: kernel_size must be greater than 0, got {params.get('kernel_size')}")
+        if dh <= 0 or dw <= 0:
+            raise ValueError(f"MaxPool2D: dilation must be greater than 0, got {params.get('dilation')}")
+        if ph < 0 or pw < 0:
+            raise ValueError(f"MaxPool2D: padding must be non-negative, got {params.get('padding')}")
 
         if H != "ANY":
             try:
@@ -135,18 +118,20 @@ class AvgPool2DBlock(BaseBlock):
             return {"out": ("ANY",)}
 
         B, C, H, W = in_shape
-        kernel = _parse_int_or_tuple2d(params.get("kernel_size"), default=(2, 2))
-        stride = _parse_int_or_tuple2d(params.get("stride"), default=kernel)
-        padding = _parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
+        kernel = parse_int_or_tuple2d(params.get("kernel_size"), default=(2, 2))
+        stride = parse_int_or_tuple2d(params.get("stride"), default=kernel)
+        padding = parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
 
         kh, kw = kernel
         sh, sw = stride
         ph, pw = padding
 
-        if sh <= 0:
-            sh = kh if kh > 0 else 1
-        if sw <= 0:
-            sw = kw if kw > 0 else 1
+        if sh <= 0 or sw <= 0:
+            raise ValueError(f"AvgPool2D: stride must be greater than 0, got {params.get('stride')}")
+        if kh <= 0 or kw <= 0:
+            raise ValueError(f"AvgPool2D: kernel_size must be greater than 0, got {params.get('kernel_size')}")
+        if ph < 0 or pw < 0:
+            raise ValueError(f"AvgPool2D: padding must be non-negative, got {params.get('padding')}")
 
         if H != "ANY":
             try:

@@ -54,10 +54,21 @@ def test_conv2d_block_inference():
         
     # Boundary: invalid kernel size leading to negative spatial dimension
     params["kernel_size"] = 100
-    with pytest.raises(ValueError, match="Conv2D: Negative spatial dimensions"):
-        # We expect the formula to result in negative or ValueError depending on how Conv2DBlock is implemented
-        # Let's check how Conv2DBlock raises error. It calculates output shapes.
+    with pytest.raises(ValueError, match="Conv2D: Negative spatial dimension"):
         block.infer_shapes({"in": (4, 3, 32, 32)}, params)
+
+    # Edge values: divisor stride=0, kernel_size=0, dilation=0, groups=0
+    with pytest.raises(ValueError, match="Conv2D: stride must be greater than 0"):
+        block.infer_shapes({"in": (4, 3, 32, 32)}, {"kernel_size": 3, "stride": 0, "in_channels": 3, "out_channels": 16})
+
+    with pytest.raises(ValueError, match="Conv2D: kernel_size must be greater than 0"):
+        block.infer_shapes({"in": (4, 3, 32, 32)}, {"kernel_size": 0, "stride": 1, "in_channels": 3, "out_channels": 16})
+
+    with pytest.raises(ValueError, match="Conv2D: dilation must be greater than 0"):
+        block.infer_shapes({"in": (4, 3, 32, 32)}, {"kernel_size": 3, "stride": 1, "dilation": 0, "in_channels": 3, "out_channels": 16})
+
+    with pytest.raises(ValueError, match="Conv2D: groups must be greater than 0"):
+        block.infer_shapes({"in": (4, 3, 32, 32)}, {"kernel_size": 3, "stride": 1, "groups": 0, "in_channels": 3, "out_channels": 16})
 
 def test_input_block_inference():
     block = InputBlock()
@@ -100,6 +111,13 @@ def test_maxpool2d_block_inference():
     with pytest.raises(ValueError, match="MaxPool2D: Output height"):
         block.infer_shapes({"in": (1, 16, 2, 2)}, {"kernel_size": 10, "stride": 1})
 
+    # 7. Divisor stride=0 and kernel_size=0
+    with pytest.raises(ValueError, match="MaxPool2D: stride must be greater than 0"):
+        block.infer_shapes({"in": (1, 16, 224, 224)}, {"kernel_size": 2, "stride": 0})
+
+    with pytest.raises(ValueError, match="MaxPool2D: kernel_size must be greater than 0"):
+        block.infer_shapes({"in": (1, 16, 224, 224)}, {"kernel_size": 0, "stride": 1})
+
 
 def test_avgpool2d_block_inference():
     from blocks.pooling import AvgPool2DBlock
@@ -112,4 +130,32 @@ def test_avgpool2d_block_inference():
     # Missing stride defaults to kernel_size
     out = block.infer_shapes({"in": (1, 8, 32, 32)}, {"kernel_size": 2})
     assert out["out"] == (1, 8, 16, 16)
+
+    # Divisor stride=0 and kernel_size=0
+    with pytest.raises(ValueError, match="AvgPool2D: stride must be greater than 0"):
+        block.infer_shapes({"in": (1, 8, 32, 32)}, {"kernel_size": 2, "stride": 0})
+
+    with pytest.raises(ValueError, match="AvgPool2D: kernel_size must be greater than 0"):
+        block.infer_shapes({"in": (1, 8, 32, 32)}, {"kernel_size": 0, "stride": 1})
+
+
+def test_edge_zero_values_other_blocks():
+    from blocks.core import LinearBlock
+    from blocks.tensor_ops import SplitBlock
+    from blocks.generators import ArangeBlock
+
+    linear = LinearBlock()
+    with pytest.raises(ValueError, match="Linear: out_features must be greater than 0"):
+        linear.infer_shapes({"in": (1, 128)}, {"in_features": 128, "out_features": 0})
+
+    with pytest.raises(ValueError, match="Linear: in_features must be greater than 0"):
+        linear.infer_shapes({"in": (1, 128)}, {"in_features": 0, "out_features": 10})
+
+    split = SplitBlock()
+    with pytest.raises(ValueError, match="Split: chunks must be greater than 0"):
+        split.infer_shapes({"in": (1, 10)}, {"chunks": 0})
+
+    arange = ArangeBlock()
+    with pytest.raises(ValueError, match="Arange: step must not be 0"):
+        arange.infer_shapes({}, {"start": 0, "end": 10, "step": 0})
  

@@ -1,6 +1,6 @@
 import math
 from typing import Dict, Tuple, Any
-from .base import BaseBlock
+from .base import BaseBlock, parse_int_or_tuple2d
 from models import BlockDef, PortDef, ParamDef
 
 
@@ -97,12 +97,17 @@ class LinearBlock(BaseBlock):
         # It natively supports any number of leading dimensions, so no shape guard is needed.
         in_features = params.get("in_features", 128)
 
+        if in_features != -1 and isinstance(in_features, int) and in_features <= 0:
+            raise ValueError(f"Linear: in_features must be greater than 0, got {in_features}")
+
         # Auto-infer in_features if set to -1
         if in_features == -1 and len(in_shape) > 0 and in_shape[-1] != "ANY":
             in_features = in_shape[-1]
             params["in_features"] = in_features
 
         out_features = params.get("out_features", 64)
+        if isinstance(out_features, int) and out_features <= 0:
+            raise ValueError(f"Linear: out_features must be greater than 0, got {out_features}")
 
         if len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
             raise ValueError(
@@ -181,22 +186,76 @@ class Conv2DBlock(BaseBlock):
                 f"but input has {C} channels."
             )
 
-        kernel  = params.get("kernel_size", 3)
-        padding = params.get("padding", 0)
-        stride  = params.get("stride", 1)
-        dilation = params.get("dilation", 1)
+        kernel = parse_int_or_tuple2d(params.get("kernel_size"), default=(3, 3))
+        stride = parse_int_or_tuple2d(params.get("stride"), default=(1, 1))
+        padding = parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
+        dilation = parse_int_or_tuple2d(params.get("dilation"), default=(1, 1))
 
+        kh, kw = kernel
+        sh, sw = stride
+        ph, pw = padding
+        dh, dw = dilation
+
+        if sh <= 0 or sw <= 0:
+            raise ValueError(f"Conv2D: stride must be greater than 0, got {params.get('stride')}")
+        if kh <= 0 or kw <= 0:
+            raise ValueError(f"Conv2D: kernel_size must be greater than 0, got {params.get('kernel_size')}")
+        if dh <= 0 or dw <= 0:
+            raise ValueError(f"Conv2D: dilation must be greater than 0, got {params.get('dilation')}")
+        if ph < 0 or pw < 0:
+            raise ValueError(f"Conv2D: padding must be non-negative, got {params.get('padding')}")
+
+        groups = params.get("groups", 1)
         try:
-            out_h = math.floor((H + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
-            out_w = math.floor((W + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
-            if out_h <= 0 or out_w <= 0:
-                raise ValueError("Conv2D: Negative spatial dimensions")
-        except ValueError as e:
-            raise e
+            groups = int(groups)
         except Exception:
-            out_h, out_w = "ANY", "ANY"
+            groups = 1
+        if groups <= 0:
+            raise ValueError(f"Conv2D: groups must be greater than 0, got {params.get('groups')}")
 
-        return {"out": (B, params.get("out_channels", 16), out_h, out_w)}
+        if in_channels != "ANY" and in_channels != -1:
+            if in_channels <= 0:
+                raise ValueError(f"Conv2D: in_channels must be greater than 0, got {in_channels}")
+            if in_channels % groups != 0:
+                raise ValueError(f"Conv2D: in_channels ({in_channels}) must be divisible by groups ({groups})")
+
+        out_channels = params.get("out_channels", 16)
+        try:
+            out_channels = int(out_channels)
+        except Exception:
+            pass
+        if isinstance(out_channels, int) and out_channels <= 0:
+            raise ValueError(f"Conv2D: out_channels must be greater than 0, got {out_channels}")
+        if isinstance(out_channels, int) and out_channels % groups != 0:
+            raise ValueError(f"Conv2D: out_channels ({out_channels}) must be divisible by groups ({groups})")
+
+        if H != "ANY":
+            try:
+                h_val = int(H)
+                out_h = math.floor((h_val + 2 * ph - dh * (kh - 1) - 1) / sh + 1)
+                if out_h <= 0:
+                    raise ValueError(f"Conv2D: Negative spatial dimension height={out_h} with input H={H}, kernel={kh}, stride={sh}, padding={ph}, dilation={dh}")
+            except ValueError as e:
+                raise e
+            except Exception:
+                out_h = "ANY"
+        else:
+            out_h = "ANY"
+
+        if W != "ANY":
+            try:
+                w_val = int(W)
+                out_w = math.floor((w_val + 2 * pw - dw * (kw - 1) - 1) / sw + 1)
+                if out_w <= 0:
+                    raise ValueError(f"Conv2D: Negative spatial dimension width={out_w} with input W={W}, kernel={kw}, stride={sw}, padding={pw}, dilation={dw}")
+            except ValueError as e:
+                raise e
+            except Exception:
+                out_w = "ANY"
+        else:
+            out_w = "ANY"
+
+        return {"out": (B, out_channels, out_h, out_w)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         layer_name  = f"self.layer_{node_id.replace('-', '_')}"

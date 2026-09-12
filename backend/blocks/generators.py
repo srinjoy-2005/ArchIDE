@@ -24,7 +24,15 @@ class ArangeBlock(BaseBlock):
         start = params.get("start", 0)
         end = params.get("end", 10)
         step = params.get("step", 1)
-        length = max(0, (end - start + step - 1) // step) if step != 0 else 0
+        try:
+            start = int(start)
+            end = int(end)
+            step = int(step)
+        except Exception:
+            pass
+        if step == 0:
+            raise ValueError("Arange: step must not be 0")
+        length = max(0, (end - start + step - 1) // step)
         return {"out": (length,)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:

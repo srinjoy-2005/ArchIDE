@@ -392,6 +392,13 @@ class SplitBlock(BaseBlock):
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         chunks = params.get("chunks", 2)
+        try:
+            chunks = int(chunks)
+        except Exception:
+            chunks = 2
+        if chunks <= 0:
+            raise ValueError(f"Split: chunks must be greater than 0, got {params.get('chunks')}")
+
         in_shape = input_shapes.get("in", ("ANY",))
         
         out_shapes = {}
