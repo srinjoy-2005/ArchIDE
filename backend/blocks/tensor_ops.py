@@ -38,7 +38,7 @@ class AddBlock(BaseBlock):
             inputs=[
                 PortDef(id="in", name="Inputs", is_list=True)
             ],
-            outputs=[PortDef(id="out", name="Out", var_hint="sum")],
+            outputs=[PortDef(id="out", name="Out", var_hint="sum_out")],
             params=[]
         )
 

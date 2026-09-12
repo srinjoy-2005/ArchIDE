@@ -27,14 +27,25 @@ class InputBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        shape_str = params.get("shape", "(1, 3, 224, 224)")
-        try:
-            # Very robust parsing: strip everything that's not a digit or comma
-            clean = "".join(c for c in str(shape_str) if c.isdigit() or c == ',')
-            shape = tuple(int(s) for s in clean.split(",") if s)
-            return {"out": shape if shape else (1, 3, 224, 224)}
-        except Exception:
-            return {"out": (1, 3, 224, 224)}
+        shape_val = params.get("shape", "(1, 3, 224, 224)")
+        if isinstance(shape_val, (int, float)):
+            shape = (int(shape_val),)
+        elif isinstance(shape_val, (list, tuple)):
+            shape = tuple(int(s) for s in shape_val)
+        else:
+            try:
+                clean = "".join(c for c in str(shape_val) if c.isdigit() or c in (',', '-'))
+                shape = tuple(int(s) for s in clean.split(",") if s)
+            except Exception:
+                shape = (1, 3, 224, 224)
+
+        if not shape:
+            shape = (1, 3, 224, 224)
+
+        if any(d <= 0 for d in shape):
+            raise ValueError(f"Input: tensor dimensions must be greater than 0, got {shape}")
+
+        return {"out": shape}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
@@ -169,8 +180,14 @@ class Conv2DBlock(BaseBlock):
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         in_shape = input_shapes.get("in")
-        if not in_shape or len(in_shape) != 4:
+        if not in_shape or in_shape == ("ANY",):
             return {"out": ("ANY",)}
+
+        if len(in_shape) != 4:
+            raise ValueError(
+                f"Conv2D expects a 4D tensor (Batch, Channels, Height, Width), "
+                f"but received {len(in_shape)}D tensor with shape {in_shape}."
+            )
 
         B, C, H, W = in_shape
         in_channels = params.get("in_channels", 3)

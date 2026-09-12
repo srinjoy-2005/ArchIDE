@@ -158,4 +158,22 @@ def test_edge_zero_values_other_blocks():
     arange = ArangeBlock()
     with pytest.raises(ValueError, match="Arange: step must not be 0"):
         arange.infer_shapes({}, {"start": 0, "end": 10, "step": 0})
- 
+
+
+def test_pooling_returns_any_for_non_4d():
+    """Pooling blocks should silently return ANY for non-4D tensors (dynamic pipelines are valid)."""
+    from blocks.pooling import MaxPool2DBlock, AvgPool2DBlock, AdaptiveAvgPool2DBlock
+    from blocks.normalization import BatchNorm2DBlock
+
+    maxpool = MaxPool2DBlock()
+    assert maxpool.infer_shapes({"in": (64,)}, {"kernel_size": 2}) == {"out": ("ANY",)}
+    assert maxpool.infer_shapes({"in": (1, 64)}, {"kernel_size": 2}) == {"out": ("ANY",)}
+
+    avgpool = AvgPool2DBlock()
+    assert avgpool.infer_shapes({"in": (1, 64)}, {"kernel_size": 2}) == {"out": ("ANY",)}
+
+    adaptive = AdaptiveAvgPool2DBlock()
+    assert adaptive.infer_shapes({"in": (64,)}, {"output_size": "(1, 1)"}) == {"out": ("ANY",)}
+
+    bn = BatchNorm2DBlock()
+    assert bn.infer_shapes({"in": (1, 64)}, {}) == {"out": ("ANY",)}

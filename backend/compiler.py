@@ -373,16 +373,38 @@ def shape_inference_pass(
         # Dual-Evaluation: substitute variable defaults to compute shapes
         params_for_inference = dict(node.data.paramValues)
         if variables:
+            var_map = {v.name: v for v in variables}
             var_defaults = {v.name: v.default for v in variables}
+            # Build a param-type lookup from the block definition
+            param_type_map = {p.name: p.type for p in block.definition.params}
             for k, v in list(params_for_inference.items()):
                 if isinstance(v, str) and "@var:" in v:
+                    # Extract all variable names referenced in this expression
+                    referenced_var_names = re.findall(r'@var:([a-zA-Z0-9_]+)', v)
+                    param_expected_type = param_type_map.get(k)
+                    for ref_name in referenced_var_names:
+                        ref_var = var_map.get(ref_name)
+                        if ref_var and param_expected_type == "string" and ref_var.type in ("int", "float", "bool"):
+                            raise ShapeError(
+                                message=(
+                                    f"Type mismatch: parameter '{k}' expects a string/tuple value (e.g. shape), "
+                                    f"but variable '{ref_name}' has type '{ref_var.type}'. "
+                                    f"Use a string variable or write the value directly (e.g. '(1, {ref_var.default}, 224, 224)')."
+                                ),
+                                node_id=node.id,
+                                node_label=node.data.label,
+                                edge_ids=incoming_edge_ids,
+                            )
                     try:
                         parsed = v
                         for v_name, v_def in var_defaults.items():
                             parsed = re.sub(fr'@var:{v_name}\b', str(v_def), parsed)
-                        # Evaluate basic math
+                        # Evaluate basic math if it looks purely numeric
                         if re.match(r'^[0-9+\-*/().\s]+$', parsed):
                             params_for_inference[k] = eval(parsed, {"__builtins__": None}, {})
+                        else:
+                            # Write back the substituted string as-is (e.g. shape = "(22,224)")
+                            params_for_inference[k] = parsed
                     except Exception:
                         pass # Ignore and pass raw string if it fails
         

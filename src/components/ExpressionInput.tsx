@@ -99,18 +99,37 @@ export function ExpressionInput({
 
   let validationError = '';
   if (localValue.trim() !== '') {
-    let parsed = localValue;
-    variables.forEach(v => {
-      parsed = parsed.replace(new RegExp(`@var:${v.name}`, 'g'), String(v.default));
-    });
-    if (/^[0-9+\-*/().\s]+$/.test(parsed)) {
-      try {
-        const result = new Function(`return ${parsed}`)();
-        if (expectedType === 'int' && !Number.isInteger(result)) {
-          validationError = 'Must evaluate to an integer';
+    // Check for type mismatch: numeric/bool variable bound to a string param
+    if (expectedType === 'string') {
+      const varRefRegex = /@var:([a-zA-Z0-9_]+)/g;
+      const referencedVarNames: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = varRefRegex.exec(localValue)) !== null) {
+        referencedVarNames.push(m[1]);
+      }
+      for (const refName of referencedVarNames) {
+        const refVar = variables.find(v => v.name === refName);
+        if (refVar && (refVar.type === 'int' || refVar.type === 'float' || refVar.type === 'bool')) {
+          validationError = `Type mismatch: '${refName}' is ${refVar.type}, but this parameter expects a string/tuple (e.g. shape). Use a string variable or write the value directly.`;
+          break;
         }
-      } catch {
-        validationError = 'Invalid expression';
+      }
+    }
+
+    if (!validationError) {
+      let parsed = localValue;
+      variables.forEach(v => {
+        parsed = parsed.replace(new RegExp(`@var:${v.name}`, 'g'), String(v.default));
+      });
+      if (/^[0-9+\-*/().\s]+$/.test(parsed)) {
+        try {
+          const result = new Function(`return ${parsed}`)();
+          if (expectedType === 'int' && !Number.isInteger(result)) {
+            validationError = 'Must evaluate to an integer';
+          }
+        } catch {
+          validationError = 'Invalid expression';
+        }
       }
     }
   }
@@ -146,6 +165,8 @@ export function ExpressionInput({
   };
 
   const compatibleVars = variables.filter(v => {
+    // string params (e.g. shape) only accept string variables
+    if (expectedType === 'string') return v.type === 'string';
     if (expectedType === 'float') return v.type === 'float' || v.type === 'int';
     return v.type === expectedType;
   });
