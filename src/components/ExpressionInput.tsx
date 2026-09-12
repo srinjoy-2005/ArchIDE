@@ -3,6 +3,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useVFSStore } from '../lib/vfsStore';
 
+function sanitizeInputVal(val: any): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number' && (isNaN(val) || !isFinite(val))) return '';
+  if (val === 'NaN') return '';
+  return String(val);
+}
+
 export function ExpressionInput({
   value,
   onChange,
@@ -25,7 +32,7 @@ export function ExpressionInput({
   onDrop: any;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [localValue, setLocalValue] = useState(String(value ?? ''));
+  const [localValue, setLocalValue] = useState(() => sanitizeInputVal(value));
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   
   const activeFileId = useVFSStore(s => s.activeFileId);
@@ -37,7 +44,7 @@ export function ExpressionInput({
   
   useEffect(() => {
     if (!isEditing) {
-      setLocalValue(value === null || value === undefined ? '' : String(value));
+      setLocalValue(sanitizeInputVal(value));
     }
   }, [value, isEditing]);
 
@@ -47,7 +54,7 @@ export function ExpressionInput({
       setShowAutocomplete(false);
       
       const trimmed = localValue.trim();
-      if (trimmed === '') {
+      if (trimmed === '' || trimmed === 'NaN') {
         onChange(null); // "Not Set" concept
       } else {
         onChange(trimmed);
@@ -151,7 +158,7 @@ export function ExpressionInput({
             ref={inputRef}
             type="text"
             className={`${inputClass} ${validationError ? 'border-red-500 text-red-400' : ''}`}
-            value={localValue}
+            value={sanitizeInputVal(localValue)}
             onChange={handleChange}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}

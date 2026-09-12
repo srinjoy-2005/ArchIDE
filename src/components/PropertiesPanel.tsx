@@ -28,6 +28,13 @@ const getBoundName = (v: string): string => v.slice(VAR_PREFIX.length);
 
 // ─── ParamInput ───────────────────────────────────────────────────────────────
 
+function sanitizeParamValue(val: any, fallback: any = ''): any {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'number' && (isNaN(val) || !isFinite(val))) return fallback;
+  if (val === 'NaN') return fallback;
+  return val;
+}
+
 function ParamInput({
   param,
   value,
@@ -39,9 +46,13 @@ function ParamInput({
 }) {
   const handler = PARAM_TYPE_HANDLERS[param.type as ParamTypeName] || PARAM_TYPE_HANDLERS.string;
 
+  const rawDefault = param.default;
+  const safeDefault = (typeof rawDefault === 'number' && (isNaN(rawDefault) || !isFinite(rawDefault))) ? '' : (rawDefault ?? '');
+  const safeValue = sanitizeParamValue(value, safeDefault);
+
   const isAutoInferEnabled = param.auto_infer;
-  const isChecked = isAutoInferEnabled && (value === -1 || value === '?' || value === -1.0);
-  const isBound = isVarBound(value);
+  const isChecked = isAutoInferEnabled && (safeValue === -1 || safeValue === '?' || safeValue === -1.0);
+  const isBound = isVarBound(safeValue);
   const isReadOnly = param.read_only || isChecked;
 
   const [isDragOver, setIsDragOver] = React.useState(false);
@@ -57,7 +68,9 @@ function ParamInput({
     if (isAutoInferEnabled && String(rawVal) === '-1') { onChange(param.name, -1); return; }
 
     if (handler.isValid(rawVal as any)) {
-      onChange(param.name, handler.coerce(rawVal as any));
+      const coerced = handler.coerce(rawVal as any);
+      const sanitized = (typeof coerced === 'number' && (isNaN(coerced) || !isFinite(coerced))) ? safeDefault : coerced;
+      onChange(param.name, sanitized);
     } else {
       onChange(param.name, rawVal);
     }
@@ -110,12 +123,12 @@ function ParamInput({
       {handler.inputType === 'checkbox' ? (
         <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]"
           onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-          <input type="checkbox" checked={!!value} onChange={handleChange} disabled={isReadOnly} />
-          {value ? 'True' : 'False'}
+          <input type="checkbox" checked={!!safeValue} onChange={handleChange} disabled={isReadOnly} />
+          {safeValue ? 'True' : 'False'}
         </label>
       ) : (
         <ExpressionInput
-          value={value ?? param.default}
+          value={safeValue}
           onChange={(v) => onChange(param.name, v)}
           expectedType={param.type}
           isReadOnly={isReadOnly}
@@ -139,12 +152,136 @@ function ModelSummaryDashboard() {
 
   const loadStarter = () => {
     const n: Node[] = [
-      { id: 's1', type: 'custom', position: { x: 60,   y: 160 }, data: { block_id: 'input',   label: 'Input',   is_functional: true,  params: [{ name: 'shape', type: 'string', default: '(1,3,224,224)' }], paramValues: { shape: '(1,3,224,224)' }, inputs: [], outputs: [{ id: 'out', name: 'Output' }] } },
-      { id: 's2', type: 'custom', position: { x: 270,  y: 160 }, data: { block_id: 'conv2d',  label: 'Conv2D',  is_functional: false, params: [{ name: 'in_channels', type: 'int', default: 3 }, { name: 'out_channels', type: 'int', default: 16 }, { name: 'kernel_size', type: 'int', default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
-      { id: 's3', type: 'custom', position: { x: 480,  y: 160 }, data: { block_id: 'relu',    label: 'ReLU',    is_functional: false, params: [], paramValues: {}, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
-      { id: 's4', type: 'custom', position: { x: 670,  y: 160 }, data: { block_id: 'flatten', label: 'Flatten', is_functional: true,  params: [{ name: 'start_dim', type: 'int', default: 1 }, { name: 'end_dim', type: 'int', default: -1 }], paramValues: { start_dim: 1, end_dim: -1 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
-      { id: 's5', type: 'custom', position: { x: 880,  y: 160 }, data: { block_id: 'linear',  label: 'Linear',  is_functional: false, params: [{ name: 'in_features', type: 'int', default: 128 }, { name: 'out_features', type: 'int', default: 10 }], paramValues: { in_features: -1, out_features: 10 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
-      { id: 's6', type: 'custom', position: { x: 1090, y: 160 }, data: { block_id: 'output',  label: 'Output',  is_functional: true,  params: [], paramValues: {}, inputs: [{ id: 'in', name: 'Return Value' }], outputs: [] } },
+      {
+        id: 's1',
+        type: 'custom',
+        position: { x: 60, y: 160 },
+        data: {
+          block_id: 'input',
+          label: 'Input',
+          description: 'The shape of the input tensor, e.g. (batch, channels, H, W)',
+          is_functional: true,
+          varName: '',
+          custom_module_id: '',
+          params: [
+            {
+              name: 'shape',
+              type: 'string',
+              default: '(1, 3, 224, 224)',
+              read_only: false,
+              auto_infer: false,
+              section: 'basic',
+              description: 'The shape of the input tensor, e.g. (batch, channels, H, W)',
+            },
+          ],
+          paramValues: { shape: '(1, 3, 224, 224)' },
+          inputs: [],
+          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: null }],
+        },
+      },
+      {
+        id: 's2',
+        type: 'custom',
+        position: { x: 270, y: 160 },
+        data: {
+          block_id: 'conv2d',
+          label: 'Conv2D',
+          description: 'Applies a 2D convolution over an input signal composed of several input planes',
+          is_functional: false,
+          varName: '',
+          custom_module_id: '',
+          params: [
+            { name: 'in_channels', type: 'int', default: 3, auto_infer: true, read_only: false, section: 'basic', description: 'Number of channels in the input image' },
+            { name: 'out_channels', type: 'int', default: 16, auto_infer: false, read_only: false, section: 'basic', description: 'Number of channels produced by the convolution' },
+            { name: 'kernel_size', type: 'int', default: 3, auto_infer: false, read_only: false, section: 'basic', description: 'Size of the convolving kernel' },
+            { name: 'stride', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Stride of the convolution' },
+            { name: 'padding', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Padding added to both sides of the input' },
+            { name: 'dilation', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Spacing between kernel elements' },
+            { name: 'groups', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Number of blocked connections from input to output' },
+            { name: 'bias', type: 'bool', default: true, auto_infer: false, read_only: false, section: 'advanced', description: 'If True, adds a learnable bias to the output' },
+          ],
+          paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3, stride: 1, padding: 1, dilation: 1, groups: 1, bias: true },
+          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
+          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'conv_feat' }],
+        },
+      },
+      {
+        id: 's3',
+        type: 'custom',
+        position: { x: 480, y: 160 },
+        data: {
+          block_id: 'relu',
+          label: 'ReLU',
+          description: 'Applies rectified linear unit activation',
+          is_functional: false,
+          varName: '',
+          custom_module_id: '',
+          params: [
+            { name: 'inplace', type: 'bool', default: false, auto_infer: false, read_only: false, section: 'advanced', description: 'Modify input in-place' },
+          ],
+          paramValues: { inplace: false },
+          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
+          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'activated' }],
+        },
+      },
+      {
+        id: 's4',
+        type: 'custom',
+        position: { x: 670, y: 160 },
+        data: {
+          block_id: 'flatten',
+          label: 'Flatten',
+          description: 'Flattens a contiguous range of dimensions into a tensor',
+          is_functional: true,
+          varName: '',
+          custom_module_id: '',
+          params: [
+            { name: 'start_dim', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'basic', description: 'First dimension to flatten' },
+            { name: 'end_dim', type: 'int', default: -1, auto_infer: false, read_only: false, section: 'basic', description: 'Last dimension to flatten' },
+          ],
+          paramValues: { start_dim: 1, end_dim: -1 },
+          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
+          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'flat' }],
+        },
+      },
+      {
+        id: 's5',
+        type: 'custom',
+        position: { x: 880, y: 160 },
+        data: {
+          block_id: 'linear',
+          label: 'Linear',
+          description: 'Applies a linear transformation to incoming data',
+          is_functional: false,
+          varName: '',
+          custom_module_id: '',
+          params: [
+            { name: 'in_features', type: 'int', default: 128, auto_infer: true, read_only: false, section: 'basic', description: 'Size of each input sample' },
+            { name: 'out_features', type: 'int', default: 10, auto_infer: false, read_only: false, section: 'basic', description: 'Size of each output sample' },
+            { name: 'bias', type: 'bool', default: true, auto_infer: false, read_only: false, section: 'advanced', description: 'If True, adds a learnable bias to the output' },
+          ],
+          paramValues: { in_features: -1, out_features: 10, bias: true },
+          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
+          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'fc_out' }],
+        },
+      },
+      {
+        id: 's6',
+        type: 'custom',
+        position: { x: 1090, y: 160 },
+        data: {
+          block_id: 'output',
+          label: 'Output',
+          description: 'Defines the model output return values',
+          is_functional: true,
+          varName: '',
+          custom_module_id: '',
+          params: [],
+          paramValues: {},
+          inputs: [{ id: 'in', name: 'Return Value', type: 'tensor', is_list: true, var_hint: null }],
+          outputs: [],
+        },
+      },
     ];
     const e: Edge[] = [
       { id: 'e12', source: 's1', sourceHandle: 'out', target: 's2', targetHandle: 'in', type: 'tensor' },
@@ -209,12 +346,13 @@ export function PropertiesPanel() {
   // Handles param changes including dynamic input/output resizing for variadic blocks
   const handleParamChange = (paramName: string, value: any) => {
     if (!selectedNode) return;
+    const safeVal = (typeof value === 'number' && (isNaN(value) || !isFinite(value))) ? '' : value;
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id === selectedNode.id) {
           const newData: any = {
             ...n.data,
-            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: value },
+            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: safeVal },
           };
           if (paramName === 'num_inputs') {
             const num = parseInt(value) || 2;

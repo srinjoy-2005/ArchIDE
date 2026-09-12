@@ -484,14 +484,14 @@ export function FileExplorer() {
           <div className="w-[1px] h-3 bg-[#333] mx-0.5" />
           <button
             onClick={handleExportProject}
-            title="Export Project (Save)"
+            title="Export Project (Single Monolith JSON)"
             className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            title="Import Project (Open)"
+            title="Import Project (Single Monolith JSON)"
             className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
           >
             <Upload className="w-3.5 h-3.5" />

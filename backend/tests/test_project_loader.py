@@ -2,7 +2,7 @@ import pytest
 import sys
 import os
 from pathlib import Path
-import torch
+torch = pytest.importorskip("torch")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from project_loader import load_project, compile_project, check_project

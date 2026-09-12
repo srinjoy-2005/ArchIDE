@@ -11,12 +11,18 @@ export const PARAM_TYPE_HANDLERS: Record<ParamTypeName, ParamTypeHandler> = {
   int: {
     inputType: 'text',
     isValid: (v) => String(v).trim() !== '' && Number.isInteger(Number(v)) && !isNaN(Number(v)),
-    coerce: (v) => parseInt(String(v), 10),
+    coerce: (v) => {
+      const parsed = parseInt(String(v), 10);
+      return isNaN(parsed) ? 0 : parsed;
+    },
   },
   float: {
     inputType: 'text',
     isValid: (v) => String(v).trim() !== '' && !isNaN(parseFloat(String(v))),
-    coerce: (v) => parseFloat(String(v)),
+    coerce: (v) => {
+      const parsed = parseFloat(String(v));
+      return isNaN(parsed) ? 0.0 : parsed;
+    },
   },
   bool: {
     inputType: 'checkbox',
