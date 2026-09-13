@@ -50,10 +50,12 @@ function ParamInput({
   const safeDefault = (typeof rawDefault === 'number' && (isNaN(rawDefault) || !isFinite(rawDefault))) ? '' : (rawDefault ?? '');
   const safeValue = sanitizeParamValue(value, safeDefault);
 
-  const isAutoInferEnabled = param.auto_infer;
-  const isChecked = isAutoInferEnabled && (safeValue === -1 || safeValue === '?' || safeValue === -1.0);
+  const isAutoInferEnabled = !!param.auto_infer;
+  const isStatic = isAutoInferEnabled && (safeValue === -1 || safeValue === '-1' || safeValue === '?' || safeValue === -1.0);
+  const isLazy = isAutoInferEnabled && (safeValue === 'LAZY' || safeValue === 'lazy');
+  const resolutionMode: 'manual' | 'static' | 'lazy' = isLazy ? 'lazy' : isStatic ? 'static' : 'manual';
   const isBound = isVarBound(safeValue);
-  const isReadOnly = param.read_only || isChecked;
+  const isReadOnly = Boolean(param.read_only || isStatic || isLazy);
 
   const [isDragOver, setIsDragOver] = React.useState(false);
 
@@ -76,12 +78,24 @@ function ParamInput({
     }
   };
 
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(param.name, e.target.checked ? (param.type === 'string' ? '?' : -1) : (param.default ?? 1));
+  const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const mode = e.target.value;
+    if (mode === 'static') {
+      const staticVal = (param.type === 'string' || param.type === 'shape' || param.type === 'tuple' || param.default === '?') ? '?' : -1;
+      onChange(param.name, staticVal);
+    } else if (mode === 'lazy') {
+      onChange(param.name, 'LAZY');
+    } else {
+      const fallback = (param.default !== -1 && param.default !== '-1' && param.default !== '?' && param.default !== 'LAZY' && param.default !== undefined && param.default !== null)
+        ? param.default
+        : (param.type === 'string' || param.type === 'shape' || param.type === 'tuple' ? '' : 1);
+      onChange(param.name, fallback);
+    }
   };
 
   // ── Drag-and-drop variable binding ──────────────────────────────────────────
   const handleDragOver = (e: React.DragEvent) => {
+    if (isReadOnly) return;
     if (e.dataTransfer.types.includes('application/archide-variable')) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -90,6 +104,7 @@ function ParamInput({
   };
   const handleDragLeave = () => setIsDragOver(false);
   const handleDrop = (e: React.DragEvent) => {
+    if (isReadOnly) return;
     e.preventDefault();
     setIsDragOver(false);
     const raw = e.dataTransfer.getData('application/archide-variable');
@@ -111,10 +126,16 @@ function ParamInput({
         </label>
         <div className="flex items-center gap-2">
           {isAutoInferEnabled && (
-            <label className="flex items-center gap-1 text-[9px] text-[#888] cursor-pointer">
-              <input type="checkbox" checked={isChecked} onChange={handleCheckboxChange} className="w-2.5 h-2.5 accent-[#2d8cf0]" />
-              Auto-Infer
-            </label>
+            <select
+              value={resolutionMode}
+              onChange={handleModeChange}
+              className="bg-[#252525] border border-[#3a3a3a] text-[#ccc] text-[9px] rounded px-1.5 py-0.5 outline-none focus:border-[#2d8cf0] cursor-pointer"
+              title="Resolution Mode"
+            >
+              <option value="manual">Manual</option>
+              <option value="static">Static Bake-In</option>
+              <option value="lazy">Lazy / Dynamic</option>
+            </select>
           )}
           <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
         </div>
@@ -138,6 +159,17 @@ function ParamInput({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         />
+      )}
+
+      {isAutoInferEnabled && resolutionMode === 'static' && (
+        <span className="text-[10px] text-[#888] italic leading-tight">
+          Bakes canvas dimension into compiled code.
+        </span>
+      )}
+      {isAutoInferEnabled && resolutionMode === 'lazy' && (
+        <span className="text-[10px] text-[#888] italic leading-tight">
+          Defers dimension inference to runtime using PyTorch Lazy modules.
+        </span>
       )}
     </div>
   );

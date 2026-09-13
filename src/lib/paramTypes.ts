@@ -1,4 +1,4 @@
-export type ParamTypeName = 'int' | 'float' | 'bool' | 'string';
+export type ParamTypeName = 'int' | 'float' | 'bool' | 'string' | 'shape' | 'tuple';
 
 export interface ParamTypeHandler {
   inputType: 'number' | 'text' | 'checkbox';
@@ -30,6 +30,16 @@ export const PARAM_TYPE_HANDLERS: Record<ParamTypeName, ParamTypeHandler> = {
     coerce: (v) => v === 'true' || v === true,
   },
   string: {
+    inputType: 'text',
+    isValid: () => true,
+    coerce: (v) => String(v),
+  },
+  shape: {
+    inputType: 'text',
+    isValid: () => true,
+    coerce: (v) => String(v),
+  },
+  tuple: {
     inputType: 'text',
     isValid: () => true,
     coerce: (v) => String(v),

@@ -1,4 +1,4 @@
-from models import CompileRequest, Node, Edge, PortDef, BlockDef, NodeData
+from models import CompileRequest, Node, Edge, PortDef, BlockDef, NodeData, ParamDef
 from typing import List, Dict, Tuple, Any, Optional
 from blocks import get_block_by_id, BaseBlock
 import re
@@ -165,11 +165,18 @@ class CustomModuleBlock(BaseBlock):
         return self._definition
         
     def emit_init(self, node_id: str, params: dict) -> str:
-        var_name = f"self.custom_{node_id.replace('-', '_')[:8]}"
+        var_name = f"self.custom_{node_id.replace('-', '_')}"
         kwargs = []
         if self.definition.params:
             for p in self.definition.params:
                 val = params.get(p.name, p.default)
+                if isinstance(val, str) and val.isdigit():
+                    val = int(val)
+                elif isinstance(val, str):
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        pass
                 if isinstance(val, str) and not val.isidentifier():
                     kwargs.append(f"{p.name}={repr(val)}")
                 else:
@@ -178,6 +185,13 @@ class CustomModuleBlock(BaseBlock):
             for k, v in params.items():
                 if k.startswith("_"):
                     continue
+                if isinstance(v, str) and v.isdigit():
+                    v = int(v)
+                elif isinstance(v, str):
+                    try:
+                        v = float(v)
+                    except ValueError:
+                        pass
                 if isinstance(v, str) and not v.isidentifier():
                     kwargs.append(f"{k}={repr(v)}")
                 else:
@@ -187,7 +201,7 @@ class CustomModuleBlock(BaseBlock):
         return f"{var_name} = {self.class_name}({args_str})"
         
     def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict) -> str:
-        var_name = f"self.custom_{node_id.replace('-', '_')[:8]}"
+        var_name = f"self.custom_{node_id.replace('-', '_')}"
         
         in_args = []
         for port in self.definition.inputs:
@@ -237,7 +251,8 @@ class CustomModuleBlock(BaseBlock):
                 sorted_nodes,
                 self.dep_graph.edges,
                 self.graphs,
-                initial_input_shapes=incoming
+                initial_input_shapes=incoming,
+                variables=getattr(self.dep_graph, "variables", []) or []
             )
             
             out_shapes = {}
@@ -329,7 +344,8 @@ def shape_inference_pass(
             else:
                 fallback_found = False
                 for g_path, g_data in graphs.items():
-                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id:
+                    label = getattr(node.data, "label", "").replace(".arch", "")
+                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
                         dep_id = g_path
                         dep_graph = g_data
                         class_name = _to_pascal_case(dep_graph.name)
@@ -379,22 +395,6 @@ def shape_inference_pass(
             param_type_map = {p.name: p.type for p in block.definition.params}
             for k, v in list(params_for_inference.items()):
                 if isinstance(v, str) and "@var:" in v:
-                    # Extract all variable names referenced in this expression
-                    referenced_var_names = re.findall(r'@var:([a-zA-Z0-9_]+)', v)
-                    param_expected_type = param_type_map.get(k)
-                    for ref_name in referenced_var_names:
-                        ref_var = var_map.get(ref_name)
-                        if ref_var and param_expected_type == "string" and ref_var.type in ("int", "float", "bool"):
-                            raise ShapeError(
-                                message=(
-                                    f"Type mismatch: parameter '{k}' expects a string/tuple value (e.g. shape), "
-                                    f"but variable '{ref_name}' has type '{ref_var.type}'. "
-                                    f"Use a string variable or write the value directly (e.g. '(1, {ref_var.default}, 224, 224)')."
-                                ),
-                                node_id=node.id,
-                                node_label=node.data.label,
-                                edge_ids=incoming_edge_ids,
-                            )
                     try:
                         parsed = v
                         for v_name, v_def in var_defaults.items():
@@ -407,6 +407,22 @@ def shape_inference_pass(
                             params_for_inference[k] = parsed
                     except Exception:
                         pass # Ignore and pass raw string if it fails
+                elif isinstance(v, (list, tuple)):
+                    substituted = []
+                    for item in v:
+                        if isinstance(item, str) and "@var:" in item:
+                            parsed_item = item
+                            for v_name, v_def in var_defaults.items():
+                                parsed_item = re.sub(fr'@var:{v_name}\b', str(v_def), parsed_item)
+                            try:
+                                if re.match(r'^[0-9+\-*/().\s]+$', parsed_item):
+                                    item = eval(parsed_item, {"__builtins__": None}, {})
+                                else:
+                                    item = parsed_item
+                            except Exception:
+                                pass
+                        substituted.append(item)
+                    params_for_inference[k] = tuple(substituted) if isinstance(v, tuple) else substituted
         
         # Handle input node override if provided via initial_input_shapes
         if block_id in {"input", "gourav"} and initial_input_shapes and node.id in initial_input_shapes:
@@ -521,6 +537,12 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
                 dep_id = getattr(node.data, "custom_module_id", "")
                 if dep_id and dep_id in graphs:
                     custom_deps.add(dep_id)
+                else:
+                    for g_path, g_data in graphs.items():
+                        label = getattr(node.data, "label", "").replace(".arch", "")
+                        if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
+                            custom_deps.add(g_path)
+                            break
                     
         imports = [
             "import torch",
@@ -592,7 +614,9 @@ def _generate_single_graph_code(
     if init_params:
         init_args = ["self"]
         for v in init_params:
-            t_str = f": {v.type}" if v.type else ""
+            type_map = {"string": "str", "int": "int", "float": "float", "bool": "bool", "shape": "tuple", "tuple": "tuple"}
+            py_type = type_map.get(v.type, v.type)
+            t_str = f": {py_type}" if py_type else ""
             d_val = repr(v.default) if isinstance(v.default, str) else str(v.default)
             init_args.append(f"{v.name}{t_str} = {d_val}")
         init_sig = f"    def __init__({', '.join(init_args)}):"
@@ -641,7 +665,8 @@ def _generate_single_graph_code(
             else:
                 fallback_found = False
                 for g_path, g_data in graphs.items():
-                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id:
+                    label = getattr(node.data, "label", "").replace(".arch", "")
+                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
                         dep_id = g_path
                         dep_graph = g_data
                         custom_class_name = _to_pascal_case(dep_graph.name)
@@ -671,7 +696,9 @@ def _generate_single_graph_code(
         # 2. Fill any remaining -1 parameters from inferred_params
         if inferred_params and node.id in inferred_params:
             for k, v in inferred_params[node.id].items():
-                if params.get(k) in (-1, "?", ""):
+                if params.get(k) == "LAZY" and block_id in ("linear", "conv2d"):
+                    continue
+                if params.get(k) in (-1, "?", "", "LAZY"):
                     params[k] = v
 
         # 3. Resolve @var: bindings — replace with self.<name> for init_params
@@ -686,6 +713,14 @@ def _generate_single_graph_code(
         for k, val in list(params.items()):
             if isinstance(val, str) and "@var:" in val:
                 params[k] = re.sub(r'@var:([a-zA-Z0-9_]+)', replace_var, val)
+            elif isinstance(val, (list, tuple)):
+                new_seq = []
+                for item in val:
+                    if isinstance(item, str) and "@var:" in item:
+                        new_seq.append(re.sub(r'@var:([a-zA-Z0-9_]+)', replace_var, item))
+                    else:
+                        new_seq.append(item)
+                params[k] = tuple(new_seq) if isinstance(val, tuple) else new_seq
                     
         # 3. Handle inputs
         input_vars: Dict[str, Any] = {}

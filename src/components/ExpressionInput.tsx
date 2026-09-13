@@ -99,8 +99,8 @@ export function ExpressionInput({
 
   let validationError = '';
   if (localValue.trim() !== '') {
-    // Check for type mismatch: numeric/bool variable bound to a string param
-    if (expectedType === 'string') {
+    // Check for type mismatch: bool variable bound to shape/tuple/string param
+    if (expectedType === 'string' || expectedType === 'shape' || expectedType === 'tuple') {
       const varRefRegex = /@var:([a-zA-Z0-9_]+)/g;
       const referencedVarNames: string[] = [];
       let m: RegExpExecArray | null;
@@ -109,8 +109,8 @@ export function ExpressionInput({
       }
       for (const refName of referencedVarNames) {
         const refVar = variables.find(v => v.name === refName);
-        if (refVar && (refVar.type === 'int' || refVar.type === 'float' || refVar.type === 'bool')) {
-          validationError = `Type mismatch: '${refName}' is ${refVar.type}, but this parameter expects a string/tuple (e.g. shape). Use a string variable or write the value directly.`;
+        if (refVar && refVar.type === 'bool') {
+          validationError = `Type mismatch: '${refName}' is bool, but this parameter expects a ${expectedType}.`;
           break;
         }
       }
@@ -165,8 +165,10 @@ export function ExpressionInput({
   };
 
   const compatibleVars = variables.filter(v => {
-    // string params (e.g. shape) only accept string variables
-    if (expectedType === 'string') return v.type === 'string';
+    // string/shape/tuple params accept int, float, string variables (e.g. for shape expressions)
+    if (expectedType === 'string' || expectedType === 'shape' || expectedType === 'tuple') {
+      return v.type === 'int' || v.type === 'float' || v.type === 'string';
+    }
     if (expectedType === 'float') return v.type === 'float' || v.type === 'int';
     return v.type === expectedType;
   });

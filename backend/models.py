@@ -23,7 +23,7 @@ class Node(BaseModel):
 
 class ParamDef(BaseModel):
     name: str
-    type: str                   # "int", "float", "string", "bool"
+    type: str                   # "int", "float", "string", "bool", "shape", "tuple"
     default: Any
     read_only: bool = False     # If True, shown greyed-out in UI (e.g. inferred shapes)
     auto_infer: bool = False    # If True, shown greyed-out in UI (e.g. inferred shapes)

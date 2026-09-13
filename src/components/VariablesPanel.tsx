@@ -133,7 +133,7 @@ export function VariablesPanel() {
     for (const node of getNodes()) {
       const pv = (node.data?.paramValues as Record<string, any>) || {};
       const bound = Object.entries(pv)
-        .filter(([, v]) => v === binding)
+        .filter(([, v]) => typeof v === 'string' ? (v === binding || v.includes(binding)) : v === binding)
         .map(([k]) => k);
       if (bound.length > 0) {
         result.push({ id: node.id, label: (node.data?.label as string) || node.id, params: bound });

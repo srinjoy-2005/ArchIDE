@@ -18,7 +18,7 @@ class InputBlock(BaseBlock):
             params=[
                 ParamDef(
                     name="shape",
-                    type="string",
+                    type="shape",
                     default="(1, 3, 224, 224)",
                     section="basic",
                     description="The shape of the input tensor, e.g. (batch, channels, H, W)"
@@ -108,7 +108,7 @@ class LinearBlock(BaseBlock):
         # It natively supports any number of leading dimensions, so no shape guard is needed.
         in_features = params.get("in_features", 128)
 
-        if in_features != -1 and isinstance(in_features, int) and in_features <= 0:
+        if in_features != -1 and in_features != "LAZY" and isinstance(in_features, int) and in_features <= 0:
             raise ValueError(f"Linear: in_features must be greater than 0, got {in_features}")
 
         # Auto-infer in_features if set to -1
@@ -120,7 +120,7 @@ class LinearBlock(BaseBlock):
         if isinstance(out_features, int) and out_features <= 0:
             raise ValueError(f"Linear: out_features must be greater than 0, got {out_features}")
 
-        if len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
+        if in_features != "LAZY" and len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
             raise ValueError(
                 f"Linear: expected in_features={in_features}, "
                 f"but input last dim is {in_shape[-1]}."
@@ -138,6 +138,8 @@ class LinearBlock(BaseBlock):
         in_feat  = params.get("in_features",  128)
         out_feat = params.get("out_features", 64)
         bias     = params.get("bias", True)
+        if in_feat == "LAZY":
+            return f"{layer_name} = nn.LazyLinear({out_feat}, bias={bias})"
         return f"{layer_name} = nn.Linear({in_feat}, {out_feat}, bias={bias})"
 
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
@@ -197,7 +199,7 @@ class Conv2DBlock(BaseBlock):
             in_channels = C
             params["in_channels"] = in_channels
 
-        if C != "ANY" and C != in_channels:
+        if in_channels != "LAZY" and C != "ANY" and C != in_channels:
             raise ValueError(
                 f"Conv2D: expected in_channels={in_channels}, "
                 f"but input has {C} channels."
@@ -230,7 +232,7 @@ class Conv2DBlock(BaseBlock):
         if groups <= 0:
             raise ValueError(f"Conv2D: groups must be greater than 0, got {params.get('groups')}")
 
-        if in_channels != "ANY" and in_channels != -1:
+        if in_channels != "ANY" and in_channels != -1 and in_channels != "LAZY":
             if in_channels <= 0:
                 raise ValueError(f"Conv2D: in_channels must be greater than 0, got {in_channels}")
             if in_channels % groups != 0:
@@ -284,6 +286,8 @@ class Conv2DBlock(BaseBlock):
         dilation = params.get("dilation", 1)
         groups   = params.get("groups",   1)
         bias     = params.get("bias",     True)
+        if in_ch == "LAZY":
+            return f"{layer_name} = nn.LazyConv2d({out_ch}, {k_size}, stride={stride}, padding={padding}, dilation={dilation}, groups={groups}, bias={bias})"
         return (
             f"{layer_name} = nn.Conv2d("
             f"{in_ch}, {out_ch}, {k_size}, "
@@ -296,3 +300,54 @@ class Conv2DBlock(BaseBlock):
         in_var  = input_vars.get("in", "None")
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         return f"{out_var} = {layer_name}({in_var})"
+
+
+class ShapeExtractorBlock(BaseBlock):
+    @property
+    def definition(self) -> BlockDef:
+        return BlockDef(
+            id="shape_extractor",
+            name="Shape Extractor",
+            category="Core Layers",
+            color="#a855f7",
+            is_functional=True,
+            inputs=[PortDef(id="in", name="Input")],
+            outputs=[
+                PortDef(id="shape", name="Shape", var_hint="shape"),
+                PortDef(id="dim_0", name="Dim 0 (B)", var_hint="b"),
+                PortDef(id="dim_1", name="Dim 1 (C)", var_hint="c"),
+                PortDef(id="dim_2", name="Dim 2 (H)", var_hint="h"),
+                PortDef(id="dim_3", name="Dim 3 (W)", var_hint="w"),
+            ],
+            params=[]
+        )
+
+    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        in_shape = input_shapes.get("in")
+        shape_dim = (len(in_shape),) if in_shape and in_shape != ("ANY",) else ("ANY",)
+        return {
+            "shape": shape_dim,
+            "dim_0": (1,),
+            "dim_1": (1,),
+            "dim_2": (1,),
+            "dim_3": (1,),
+        }
+
+    def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
+        return ""
+
+    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+        in_var = input_vars.get("in", "None")
+        lines = []
+        if "shape" in output_vars:
+            lines.append(f"{output_vars['shape']} = {in_var}.shape")
+        for i in range(4):
+            if f"dim_{i}" in output_vars:
+                lines.append(f"{output_vars[f'dim_{i}']} = {in_var}.shape[{i}] if len({in_var}.shape) > {i} else None")
+        return "\n        ".join(lines)
+
+    def docs(self) -> Dict[str, str]:
+        return {
+            "intro": "Extracts tensor shape and individual dimension sizes.",
+            "details": "### Shape Extractor\nExtracts tensor `.shape` tuple and individual dimension sizes (`dim_0` to `dim_3`) for dynamic dimension routing."
+        }
