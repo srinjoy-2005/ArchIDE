@@ -1,62 +1,56 @@
 ---
 name: archide-graph-editing
-description: Provides the strict JSON schema requirements for agentically generating or modifying `.arch` files.
+description: Instructs agents on how to scalably create or edit complex architectures using the Agentic Graph IR and compiler.
 ---
 
-# ArchIDE `.arch` File Editing Guidelines
+# Scalable Architecture Generation Guidelines
 
-When generating or modifying `.arch` graph files programmatically (e.g. for Live-Sync VFS editing), you **MUST** adhere to the following schema constraints. If you fail to include these properties, the React Flow canvas will fail to render the nodes or edges properly.
+When tasked with creating or modifying an ArchIDE architecture graph (`.arch` file), **DO NOT** attempt to write raw React Flow JSON manually. Raw JSON requires exact UUIDs, (x, y) spatial coordinates, and heavy UI boilerplate which leads to broken graphs.
 
-## 1. Node Schema Requirements
+Instead, you must use the **Agentic Graph IR** and compile it using the backend tooling.
 
-Every node in the `nodes` array must have `"type": "custom"`. If this is omitted, React Flow will render an empty default white box.
+## 1. The Agentic Graph IR
+The IR is a simplified JSON file where nodes use semantic aliases (instead of UUIDs), coordinates are omitted, and edges use a simple `source.port -> target.port` string syntax.
 
-Additionally, the `data` object inside each node must contain the full `inputs`, `outputs`, and `params` array schemas that correspond to its `block_id`. Without these, the frontend CustomNode component will not render the connecting handles, which in turn causes React Flow to hide any connected edges.
-
+Create a `.ir.json` file like this:
 ```json
 {
-  "id": "linear_1",
-  "type": "custom", 
-  "position": { "x": 100, "y": 100 },
-  "data": {
-    "block_id": "linear",
-    "label": "Linear",
-    "is_functional": false,
-    
-    // REQUIRED: Must include the schema definitions so the UI can render handles & inspectors
-    "inputs": [{"id": "in", "name": "Input", "type": "tensor"}],
-    "outputs": [{"id": "out", "name": "Output", "type": "tensor"}],
-    "params": [
-      {
-        "name": "in_features",
-        "type": "int",
-        "default": 128
-      }
-    ],
-    
-    // REQUIRED: The actual values the user has configured
-    "paramValues": {
-      "in_features": 256
-    }
-  }
+  "name": "My Architecture",
+  "hyperparameters": [
+    {"name": "dim", "type": "int", "default": 128}
+  ],
+  "nodes": {
+    "in": {"block": "input", "params": {"shape": "(1, dim, 32, 32)"}},
+    "conv1": {"block": "conv2d", "params": {"in_channels": "dim", "out_channels": "dim * 2"}},
+    "relu": {"block": "relu"},
+    "out": {"block": "output"}
+  },
+  "edges": [
+    "in.out -> conv1.in",
+    "conv1.out -> relu.in",
+    "relu.out -> out.in"
+  ]
 }
 ```
 
-## 2. Edge Schema Requirements
-
-Every edge in the `edges` array must have `"type": "tensor"`. If omitted, the custom animated SVGs for edges won't render.
-
-```json
-{
-  "id": "edge_1",
-  "source": "linear_1",
-  "sourceHandle": "out",
-  "target": "relu_1",
-  "targetHandle": "in",
-  "type": "tensor"
-}
+## 2. Dynamic Schema Discovery
+Before writing the IR, you need to know what blocks, ports, and parameters are available.
+Run the schema dumper tool:
+```bash
+source backend/.venv/bin/activate && python backend/dump_block_schema.py
+cat backend/block_schema.json
 ```
+This will give you the exact `block` IDs, valid `params`, and `inputs`/`outputs` handles you can use.
 
-## 3. Best Practices
-- If you don't know the exact `inputs`, `outputs`, or `params` for a block, run a quick Python script importing `backend.blocks.get_all_block_defs` to extract the exact schema rather than guessing.
-- Custom Sub-Graphs (like `transformer/ffn`) use `"block_id": "custom"` and must also supply a `"custom_module_id"` field indicating the relative path (e.g. `"transformer/ffn"`).
+## 3. Compiling the Graph
+Once you have written your `my_graph.ir.json` file, compile it into the final visual graph:
+```bash
+source backend/.venv/bin/activate && python backend/agent_compiler.py workspace/graphs/my_graph.ir.json
+```
+This script will automatically:
+1. Generate strict React Flow UUIDs.
+2. Hydrate all missing `inputs`, `outputs`, and UI boilerplate from the schema.
+3. Calculate beautiful topological `x, y` coordinates using a DAG layout algorithm.
+4. Output `workspace/graphs/my_graph.arch` (which ArchIDE will automatically load via Live-Sync).
+
+**Always use `agent_compiler.py`. Never edit `.arch` files directly.**

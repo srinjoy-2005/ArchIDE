@@ -1,0 +1,861 @@
+{
+  "input": {
+    "name": "Input",
+    "category": "Core Layers",
+    "is_functional": true,
+    "inputs": [],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "shape",
+        "type": "shape",
+        "default": "(1, 3, 224, 224)",
+        "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+      }
+    ]
+  },
+  "output": {
+    "name": "Output",
+    "category": "Core Layers",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Return Value",
+        "is_list": true
+      }
+    ],
+    "outputs": [],
+    "params": []
+  },
+  "linear": {
+    "name": "Linear",
+    "category": "Core Layers",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "in_features",
+        "type": "int",
+        "default": 128,
+        "description": "Size of each input sample"
+      },
+      {
+        "name": "out_features",
+        "type": "int",
+        "default": 64,
+        "description": "Size of each output sample"
+      },
+      {
+        "name": "bias",
+        "type": "bool",
+        "default": true,
+        "description": "If True, adds a learnable bias to the output"
+      }
+    ]
+  },
+  "conv2d": {
+    "name": "Conv2D",
+    "category": "Core Layers",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "in_channels",
+        "type": "int",
+        "default": 3,
+        "description": "Number of channels in the input image"
+      },
+      {
+        "name": "out_channels",
+        "type": "int",
+        "default": 16,
+        "description": "Number of channels produced by the convolution"
+      },
+      {
+        "name": "kernel_size",
+        "type": "int",
+        "default": 3,
+        "description": "Size of the convolving kernel"
+      },
+      {
+        "name": "stride",
+        "type": "int",
+        "default": 1,
+        "description": "Stride of the convolution"
+      },
+      {
+        "name": "padding",
+        "type": "int",
+        "default": 0,
+        "description": "Padding added to both sides of the input"
+      },
+      {
+        "name": "dilation",
+        "type": "int",
+        "default": 1,
+        "description": "Spacing between kernel elements"
+      },
+      {
+        "name": "groups",
+        "type": "int",
+        "default": 1,
+        "description": "Number of blocked connections from input to output"
+      },
+      {
+        "name": "bias",
+        "type": "bool",
+        "default": true,
+        "description": "If True, adds a learnable bias to the output"
+      }
+    ]
+  },
+  "shape_extractor": {
+    "name": "Shape Extractor",
+    "category": "Core Layers",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "shape",
+        "name": "Shape"
+      },
+      {
+        "id": "dim_0",
+        "name": "Dim 0 (B)"
+      },
+      {
+        "id": "dim_1",
+        "name": "Dim 1 (C)"
+      },
+      {
+        "id": "dim_2",
+        "name": "Dim 2 (H)"
+      },
+      {
+        "id": "dim_3",
+        "name": "Dim 3 (W)"
+      }
+    ],
+    "params": []
+  },
+  "relu": {
+    "name": "ReLU",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "inplace",
+        "type": "bool",
+        "default": false,
+        "description": "Modify input in-place"
+      }
+    ]
+  },
+  "softmax": {
+    "name": "Softmax",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "dim",
+        "type": "int",
+        "default": -1,
+        "description": "Dimension along which Softmax will be computed"
+      }
+    ]
+  },
+  "sigmoid": {
+    "name": "Sigmoid",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": []
+  },
+  "tanh": {
+    "name": "Tanh",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": []
+  },
+  "maxpool2d": {
+    "name": "MaxPool2D",
+    "category": "Pooling",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "kernel_size",
+        "type": "int",
+        "default": 2,
+        "description": "Size of the window to take a max over"
+      },
+      {
+        "name": "stride",
+        "type": "int",
+        "default": 2,
+        "description": "Stride of the window"
+      },
+      {
+        "name": "padding",
+        "type": "int",
+        "default": 0,
+        "description": "Implicit zero padding to be added on both sides"
+      },
+      {
+        "name": "dilation",
+        "type": "int",
+        "default": 1,
+        "description": "Parameter that controls the stride of elements in the window"
+      }
+    ]
+  },
+  "avgpool2d": {
+    "name": "AvgPool2D",
+    "category": "Pooling",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "kernel_size",
+        "type": "int",
+        "default": 2,
+        "description": "Size of the window"
+      },
+      {
+        "name": "stride",
+        "type": "int",
+        "default": 2,
+        "description": "Stride of the window"
+      },
+      {
+        "name": "padding",
+        "type": "int",
+        "default": 0,
+        "description": "Implicit zero padding to be added on both sides"
+      }
+    ]
+  },
+  "adaptiveavgpool2d": {
+    "name": "AdaptiveAvgPool2D",
+    "category": "Pooling",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "output_size",
+        "type": "string",
+        "default": "(1, 1)",
+        "description": "The target output size of the image of the form (H, W)"
+      }
+    ]
+  },
+  "batchnorm2d": {
+    "name": "BatchNorm2D",
+    "category": "Normalization",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "num_features",
+        "type": "int",
+        "default": 1,
+        "description": "Number of features/channels in the input. Auto-inferred if checked."
+      },
+      {
+        "name": "eps",
+        "type": "float",
+        "default": 1e-05,
+        "description": "Value added to the denominator for numerical stability"
+      },
+      {
+        "name": "momentum",
+        "type": "float",
+        "default": 0.1,
+        "description": "Value used for the running_mean and running_var computation"
+      }
+    ]
+  },
+  "layernorm": {
+    "name": "LayerNorm",
+    "category": "Normalization",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "normalized_shape",
+        "type": "string",
+        "default": "?",
+        "description": "Input shape from an expected size, auto-inferred from input."
+      },
+      {
+        "name": "eps",
+        "type": "float",
+        "default": 1e-05,
+        "description": "Value added to the denominator for numerical stability"
+      }
+    ]
+  },
+  "dropout": {
+    "name": "Dropout",
+    "category": "Normalization",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "p",
+        "type": "float",
+        "default": 0.5,
+        "description": "Probability of an element to be zeroed"
+      },
+      {
+        "name": "inplace",
+        "type": "bool",
+        "default": false,
+        "description": "Modify input in-place"
+      }
+    ]
+  },
+  "flatten": {
+    "name": "Flatten",
+    "category": "Shape Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "start_dim",
+        "type": "int",
+        "default": 1,
+        "description": "First dimension to flatten"
+      },
+      {
+        "name": "end_dim",
+        "type": "int",
+        "default": -1,
+        "description": "Last dimension to flatten"
+      }
+    ]
+  },
+  "reshape": {
+    "name": "Reshape",
+    "category": "Shape Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "shape",
+        "type": "string",
+        "default": "(-1,)",
+        "description": "Target shape, e.g. -1, 256"
+      }
+    ]
+  },
+  "add": {
+    "name": "Add",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Inputs",
+        "is_list": true
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "split": {
+    "name": "Split (Chunk)",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input Tensor",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out_1",
+        "name": "Chunk 1"
+      },
+      {
+        "id": "out_2",
+        "name": "Chunk 2"
+      }
+    ],
+    "params": [
+      {
+        "name": "chunks",
+        "type": "int",
+        "default": 2,
+        "description": ""
+      },
+      {
+        "name": "dim",
+        "type": "int",
+        "default": -1,
+        "description": ""
+      }
+    ]
+  },
+  "sub": {
+    "name": "Subtract",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in_a",
+        "name": "A",
+        "is_list": false
+      },
+      {
+        "id": "in_b",
+        "name": "B",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "mul": {
+    "name": "Multiply",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Inputs",
+        "is_list": true
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "div": {
+    "name": "Divide",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in_a",
+        "name": "A",
+        "is_list": false
+      },
+      {
+        "id": "in_b",
+        "name": "B",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "pow": {
+    "name": "Power",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in_a",
+        "name": "Base",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": [
+      {
+        "name": "exponent",
+        "type": "float",
+        "default": 2.0,
+        "description": ""
+      }
+    ]
+  },
+  "sin": {
+    "name": "Sin",
+    "category": "Trig",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "cos": {
+    "name": "Cos",
+    "category": "Trig",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "matmul": {
+    "name": "MatMul",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in_a",
+        "name": "A",
+        "is_list": false
+      },
+      {
+        "id": "in_b",
+        "name": "B",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": []
+  },
+  "unsqueeze": {
+    "name": "Unsqueeze",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": [
+      {
+        "name": "dim",
+        "type": "int",
+        "default": 0,
+        "description": ""
+      }
+    ]
+  },
+  "cat": {
+    "name": "Concat",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Tensors",
+        "is_list": true
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": [
+      {
+        "name": "dim",
+        "type": "int",
+        "default": -1,
+        "description": ""
+      }
+    ]
+  },
+  "arange": {
+    "name": "Arange",
+    "category": "Generators",
+    "is_functional": true,
+    "inputs": [],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Out"
+      }
+    ],
+    "params": [
+      {
+        "name": "start",
+        "type": "int",
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "end",
+        "type": "int",
+        "default": 10,
+        "description": ""
+      },
+      {
+        "name": "step",
+        "type": "int",
+        "default": 1,
+        "description": ""
+      }
+    ]
+  },
+  "transpose": {
+    "name": "Transpose",
+    "category": "Tensor Ops",
+    "is_functional": true,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input Tensor",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "dim0",
+        "type": "int",
+        "default": -2,
+        "description": "First dimension to transpose"
+      },
+      {
+        "name": "dim1",
+        "type": "int",
+        "default": -1,
+        "description": "Second dimension to transpose"
+      }
+    ]
+  }
+}
