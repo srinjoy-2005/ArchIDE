@@ -36,13 +36,18 @@ interface VFSState {
   openTabIds: string[];
   activeFileId: string;
   entryFileId: string;
-  isMirroring: boolean;
+  /** True when auto-save is active: every node/edge change is persisted to backend */
+  isSaving: boolean;
+  /** Stable UIDs for the root graphs/ and python/ folders — unaffected by user renames */
+  graphsFolderId: string;
+  pythonFolderId: string;
 
   setEntryFileId: (id: string) => void;
-  setIsMirroring: (val: boolean) => void;
+  setIsSaving: (val: boolean) => void;
   
   handleCompiledFiles: (compiledData: Record<string, string>) => void;
   overwriteFilesFromVFS: (filesMap: Record<string, any>) => void;
+  restoreVFSFromFiles: (filesMap: Record<string, any>) => void;
 
   openTab: (id: string) => void;
   closeTab: (id: string) => void;
@@ -74,8 +79,7 @@ interface VFSState {
 export const useVFSStore = create<VFSState>((set, get) => ({
   folders: [
     { id: 'fol_graphs', name: 'graphs', parentId: null, isExpanded: true },
-    { id: 'fol_python', name: 'python', parentId: null, isExpanded: true },
-    { id: 'fol_graphs_conv', name: 'conv', parentId: 'fol_graphs', isExpanded: true }
+    { id: 'fol_python', name: 'python', parentId: null, isExpanded: true }
   ],
   files: [
     {
@@ -90,60 +94,43 @@ export const useVFSStore = create<VFSState>((set, get) => ({
       id: 'main',
       name: 'main.arch',
       parentId: 'fol_graphs',
-      nodes: [
-        { id: 'node_in', type: 'custom', position: { x: 80, y: 150 }, data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 3, 224, 224)' } } },
-        { id: 'node_conv', type: 'custom', position: { x: 280, y: 150 }, data: { block_id: 'conv2d', label: 'Conv2D', paramValues: { in_channels: 3, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } } },
-        { id: 'node_relu', type: 'custom', position: { x: 480, y: 150 }, data: { block_id: 'relu', label: 'ReLU', paramValues: {} } },
-        { id: 'node_out', type: 'custom', position: { x: 680, y: 150 }, data: { block_id: 'output', label: 'out', paramValues: {} } }
-      ],
-      edges: [
-        { id: 'e1', type: 'tensor', source: 'node_in', sourceHandle: 'out', target: 'node_conv', targetHandle: 'in' },
-        { id: 'e2', type: 'tensor', source: 'node_conv', sourceHandle: 'out', target: 'node_relu', targetHandle: 'in' },
-        { id: 'e3', type: 'tensor', source: 'node_relu', sourceHandle: 'out', target: 'node_out', targetHandle: 'in' }
-      ]
-    },
-    {
-      id: 'file_res_block',
-      name: 'res_block.arch',
-      parentId: 'fol_graphs_conv',
-      variables: [
-        { id: 'var_rb_in_ch',  name: 'in_channels',  type: 'int' as ArchVariableType, default: 32, scope: 'init_param' as ArchVariableScope },
-        { id: 'var_rb_out_ch', name: 'out_channels', type: 'int' as ArchVariableType, default: 32, scope: 'init_param' as ArchVariableScope },
-      ],
-      nodes: [
-        { id: 'rb_in', type: 'custom', position: { x: 80, y: 120 }, data: { block_id: 'input', label: 'x', paramValues: { shape: '(1, 32, 224, 224)' } } },
-        { id: 'rb_conv', type: 'custom', position: { x: 280, y: 80 }, data: { block_id: 'conv2d', label: 'Conv 3x3', paramValues: { in_channels: 32, out_channels: 32, kernel_size: 3, padding: 1, stride: 1 } } },
-        { id: 'rb_add', type: 'custom', position: { x: 480, y: 120 }, data: { block_id: 'add', label: 'Residual Add', paramValues: {} } },
-        { id: 'rb_out', type: 'custom', position: { x: 680, y: 120 }, data: { block_id: 'output', label: 'out', paramValues: {} } }
-      ],
-      edges: [
-        { id: 're1', type: 'tensor', source: 'rb_in', sourceHandle: 'out', target: 'rb_conv', targetHandle: 'in' },
-        { id: 're2', type: 'tensor', source: 'rb_conv', sourceHandle: 'out', target: 'rb_add', targetHandle: 'in' },
-        { id: 're3', type: 'tensor', source: 'rb_in', sourceHandle: 'out', target: 'rb_add', targetHandle: 'in' },
-        { id: 're4', type: 'tensor', source: 'rb_add', sourceHandle: 'out', target: 'rb_out', targetHandle: 'in' }
-      ]
+      nodes: [],
+      edges: []
     }
   ],
-  openTabIds: ['main', 'file_res_block'],
+  openTabIds: ['main'],
   activeFileId: 'main',
   entryFileId: 'main',
-  isMirroring: false,
+  isSaving: false,
+  // Stable UIDs that persist even if the user renames graphs/ or python/
+  graphsFolderId: 'fol_graphs',
+  pythonFolderId: 'fol_python',
 
   setEntryFileId: (id) => set({ entryFileId: id }),
-  setIsMirroring: (val) => set({ isMirroring: val }),
+  setIsSaving: (val) => set({ isSaving: val }),
 
   handleCompiledFiles: (compiledData) => {
     set((state) => {
       const newFiles = [...state.files];
       const newFolders = [...state.folders];
-      const pyFolder = newFolders.find((f) => f.name === 'python' && f.parentId === null);
-      if (!pyFolder) return state;
+
+      // Use stable UID instead of name lookup so renames don't break this
+      let pyFolderId = state.pythonFolderId;
+      if (!newFolders.find((f) => f.id === pyFolderId)) {
+        // python folder was deleted — recreate it
+        const newPyFolder = { id: pyFolderId, name: 'python', parentId: null, isExpanded: true };
+        newFolders.push(newPyFolder);
+      }
+
+      const validCompiledFilePaths = new Set<string>();
 
       for (const [gid, code] of Object.entries(compiledData)) {
         const pathParts = gid.split('/');
         const baseName = pathParts.pop();
         const pyFileName = baseName + '.py';
-        const pyParentId = getOrCreateFolderPath(newFolders, pyFolder.id, pathParts);
+        const pyParentId = getOrCreateFolderPath(newFolders, pyFolderId, pathParts);
+        
+        validCompiledFilePaths.add(`${pyParentId}/${pyFileName}`);
 
         const existingIdx = newFiles.findIndex(
           (f) => f.parentId === pyParentId && f.name === pyFileName
@@ -162,17 +149,33 @@ export const useVFSStore = create<VFSState>((set, get) => ({
           });
         }
       }
-      return { files: newFiles, folders: newFolders };
+      
+      // Cleanup stale files that are inside the python folder but weren't in this compile pass
+      const isInsideFolderTree = (fileParentId: string | null, targetRootId: string): boolean => {
+        let current = fileParentId;
+        while (current) {
+          if (current === targetRootId) return true;
+          const folder = newFolders.find(f => f.id === current);
+          current = folder?.parentId ?? null;
+        }
+        return false;
+      };
+
+      const finalFiles = newFiles.filter(f => {
+        if (!isInsideFolderTree(f.parentId ?? null, pyFolderId)) return true;
+        return validCompiledFilePaths.has(`${f.parentId}/${f.name}`);
+      });
+
+      return { files: finalFiles, folders: newFolders };
     });
   },
 
   overwriteFilesFromVFS: (filesMap) => set((state) => {
     const newFiles = [...state.files];
     const newFolders = [...state.folders];
-    const graphsFolderId = newFolders.find(
-      (f) => f.name === 'graphs' && f.parentId === null
-    )?.id ?? null;
-    if (!graphsFolderId) return state;
+    // Use stable UID — not name — so this works even if the user renames the graphs folder
+    const graphsFolderId = state.graphsFolderId;
+    if (!newFolders.find((f) => f.id === graphsFolderId)) return state;
 
     for (const [fileId, content] of Object.entries(filesMap)) {
       const parts = fileId.split('/');
@@ -205,6 +208,70 @@ export const useVFSStore = create<VFSState>((set, get) => ({
       }
     }
     return { files: newFiles, folders: newFolders };
+  }),
+
+  restoreVFSFromFiles: (filesMap) => set((state) => {
+    // Preserve root graphs/ and python/ folders using stable UIDs
+    const newFolders: Folder[] = [
+      { id: state.graphsFolderId, name: 'graphs', parentId: null, isExpanded: true },
+      { id: state.pythonFolderId, name: 'python', parentId: null, isExpanded: true },
+    ];
+    const newFiles: GraphFile[] = [];
+
+    for (const [relPath, content] of Object.entries(filesMap)) {
+      const parts = relPath.split('/');
+      const fileName = parts.pop() || 'file';
+
+      let parentId: string | null = null;
+      if (parts.length > 0) {
+        if (parts[0] === 'graphs') {
+          parentId = getOrCreateFolderPath(newFolders, state.graphsFolderId, parts.slice(1));
+        } else if (parts[0] === 'python') {
+          parentId = getOrCreateFolderPath(newFolders, state.pythonFolderId, parts.slice(1));
+        } else {
+          parentId = getOrCreateFolderPath(newFolders, null, parts);
+        }
+      }
+
+      const isGraph = fileName.endsWith('.arch') || (typeof content === 'object' && content !== null && 'nodes' in content);
+      if (isGraph) {
+        const rawVars: any[] = content?.variables ?? content?.parameters ?? [];
+        const variables: ArchVariable[] = migrateParameters(rawVars);
+        const fileId = fileName === 'main.arch' && (parts[0] === 'graphs' || parts.length === 0) ? 'main' : generateId();
+        newFiles.push({
+          id: fileId,
+          name: fileName,
+          parentId,
+          nodes: content?.nodes || [],
+          edges: content?.edges || [],
+          variables,
+          fileType: 'graph',
+        });
+      } else {
+        const codeText = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+        newFiles.push({
+          id: generateId(),
+          name: fileName,
+          parentId,
+          nodes: [],
+          edges: [],
+          fileType: 'code',
+          compiledCode: codeText,
+        });
+      }
+    }
+
+    const entryFile = newFiles.find(f => f.name === 'main.arch') || newFiles.find(f => f.fileType === 'graph') || newFiles[0];
+    const activeFileId = entryFile?.id || (newFiles[0]?.id ?? 'main');
+    const entryFileId = entryFile?.id || (newFiles[0]?.id ?? 'main');
+
+    return {
+      folders: newFolders,
+      files: newFiles,
+      openTabIds: [activeFileId],
+      activeFileId,
+      entryFileId,
+    };
   }),
 
   openTab: (id) => {
@@ -502,12 +569,18 @@ export const useVFSStore = create<VFSState>((set, get) => ({
         ? (files.find((f) => f.id === entryPoint || f.name === entryPoint)?.id || files[0].id)
         : files[0].id;
 
+      // Detect stable folder UIDs from imported project (if present) or re-derive by name
+      const graphsFolder = folders.find((f) => f.parentId === null && (f.name === 'graphs' || f.id === get().graphsFolderId));
+      const pythonFolder = folders.find((f) => f.parentId === null && (f.name === 'python' || f.id === get().pythonFolderId));
+
       set({
         folders,
         files,
         entryFileId: validEntryId,
         openTabIds: [validEntryId],
         activeFileId: validEntryId,
+        graphsFolderId: graphsFolder?.id ?? get().graphsFolderId,
+        pythonFolderId: pythonFolder?.id ?? get().pythonFolderId,
       });
       return true;
     } catch (err) {
