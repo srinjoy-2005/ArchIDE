@@ -18,3 +18,10 @@ Welcome to ArchIDE. You are modifying a full-stack Next.js + PyTorch compilation
 - **DO NOT** update documentation for bug fixes or local refactors.
 - **Session Wrap-up**: When the session ends, follow `.agents/rules/session_wrapup.md` and use the `sync-docs` skill to update the changelog.
 - **Tests**: Always run `npx tsc --noEmit` and `pytest backend/tests/` before completing a task.
+
+## GitHub Issues & Backlog Protocol
+- **Single Source of Truth**: All tasks, bugs, and feature backlog items are tracked exclusively via GitHub Issues (`gh issue`).
+- **Discovery**: When identifying a bug, defect, or planned enhancement, run `gh issue list -R srinjoy-2005/ArchIDE` to verify if it is already tracked. If not, create an issue using `gh issue create` with standard labels (`bug`, `enhancement`, `task`, `area:*`, `priority:*`).
+- **Traceability**: Reference issues in commit messages, PRs, and daily changelogs (e.g., `Fixes #X` or `Ref #X`).
+- **Resolution**: Once a fix or feature is verified with passing tests (`npx tsc --noEmit` and `pytest backend/tests/`), close the issue via `gh issue close <issue-number> -R srinjoy-2005/ArchIDE`.
+
