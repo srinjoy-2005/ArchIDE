@@ -192,7 +192,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
         newFiles[existingIdx] = {
           ...newFiles[existingIdx],
           nodes: content.nodes || [],
-          edges: content.edges || [],
+          edges: (content.edges || []).map((e: any) => ({ ...e, type: 'tensor' })),
           variables,
         };
       } else {
@@ -201,7 +201,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
           name: fileName,
           parentId: targetParentId,
           nodes: content.nodes || [],
-          edges: content.edges || [],
+          edges: (content.edges || []).map((e: any) => ({ ...e, type: 'tensor' })),
           variables,
           fileType: 'graph',
         });
@@ -243,7 +243,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
           name: fileName,
           parentId,
           nodes: content?.nodes || [],
-          edges: content?.edges || [],
+          edges: (content?.edges || []).map((e: any) => ({ ...e, type: 'tensor' })),
           variables,
           fileType: 'graph',
         });

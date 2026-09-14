@@ -24,7 +24,26 @@ interface EditorState {
   setClipboard: (data: { nodes: Node[], edges: Edge[] } | null) => void;
   canvasMode: 'pan' | 'select';
   setCanvasMode: (mode: 'pan' | 'select') => void;
+
+  edgeRouting: 'bezier' | 'step';
+  setEdgeRouting: (mode: 'bezier' | 'step') => void;
+  toggleEdgeRouting: () => void;
+
+  inspectorOpen: boolean;
+  setInspectorOpen: (open: boolean) => void;
+  toggleInspector: () => void;
+
+  quickInsert: { isOpen: boolean; clientPos: { x: number; y: number } | null };
+  setQuickInsert: (val: { isOpen: boolean; clientPos?: { x: number; y: number } | null }) => void;
 }
+
+const getInitialEdgeRouting = (): 'bezier' | 'step' => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('archide_edge_routing');
+    if (saved === 'step' || saved === 'bezier') return saved;
+  }
+  return 'bezier';
+};
 
 export const useEditorStore = create<EditorState>((set) => ({
   generatedCode: `import torch
@@ -56,4 +75,31 @@ class Model(nn.Module):
   setClipboard: (data) => set({ clipboard: data }),
   canvasMode: 'pan',
   setCanvasMode: (mode) => set({ canvasMode: mode }),
+
+  edgeRouting: getInitialEdgeRouting(),
+  setEdgeRouting: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('archide_edge_routing', mode);
+    }
+    set({ edgeRouting: mode });
+  },
+  toggleEdgeRouting: () => set((state) => {
+    const next = state.edgeRouting === 'step' ? 'bezier' : 'step';
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('archide_edge_routing', next);
+    }
+    return { edgeRouting: next };
+  }),
+
+  inspectorOpen: true,
+  setInspectorOpen: (open) => set({ inspectorOpen: open }),
+  toggleInspector: () => set((state) => ({ inspectorOpen: !state.inspectorOpen })),
+
+  quickInsert: { isOpen: false, clientPos: null },
+  setQuickInsert: (val) => set({
+    quickInsert: {
+      isOpen: val.isOpen,
+      clientPos: val.clientPos ?? null,
+    }
+  }),
 }));

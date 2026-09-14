@@ -35,20 +35,28 @@ import {
   useReactFlow,
   useNodes,
   useEdges,
+  ConnectionLineType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode';
 import TensorEdge from './TensorEdge';
 import { CentralCodeEditor } from './CentralCodeEditor';
+import { QuickInsertModal } from './QuickInsertModal';
 import { useEditorStore, useVFSStore } from '../lib/store';
-import { Plus, X, FileCode, Network, Code2, Hand, MousePointer2 } from 'lucide-react';
+import { X, FileCode, Network, Code2, Hand, MousePointer2, GitFork } from 'lucide-react';
 import { getId, initialNodes, initialEdges, API_BASE } from '../lib/constants';
 import { resolveFilePath } from '../lib/utils';
 
 // Defined at module level to avoid re-creating objects on every render,
 // which would cause React Flow to unmount and remount all nodes.
 const nodeTypes = { custom: CustomNode };
-const edgeTypes = { tensor: TensorEdge };
+const edgeTypes = {
+  tensor: TensorEdge,
+  default: TensorEdge,
+  bezier: TensorEdge,
+  step: TensorEdge,
+  smoothstep: TensorEdge,
+};
 
 // ─── FileTabBar ───────────────────────────────────────────────────────────────
 
@@ -59,7 +67,6 @@ function FileTabBar() {
     openTabIds,
     activeFileId,
     switchFile,
-    createFile,
     closeTab,
     updateFileState
   } = useVFSStore();
@@ -70,12 +77,6 @@ function FileTabBar() {
     // Snapshot live canvas state before switching so edits aren't lost
     updateFileState(activeFileId, getNodes(), getEdges());
     switchFile(id);
-  };
-
-  const handleCreate = () => {
-    updateFileState(activeFileId, getNodes(), getEdges());
-    const name = prompt('Enter new file name (e.g. attention.json or layer.py):');
-    if (name) createFile(name);
   };
 
   const handleClose = (e: React.MouseEvent, id: string) => {
@@ -131,15 +132,7 @@ function FileTabBar() {
             </div>
           );
         })}
-        <button
-          onClick={handleCreate}
-          title="New File"
-          className="ml-1 p-1 rounded hover:bg-[#252525] text-[#666] hover:text-[#d4d4d4] transition-colors flex items-center justify-center"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
       </div>
-
     </div>
   );
 }
@@ -148,6 +141,9 @@ function FileTabBar() {
 
 export function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const isCanvasHoveredRef = useRef(false);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
+
   const { screenToFlowPosition, setNodes, setEdges, getNode, getNodes, getEdges } = useReactFlow();
   const nodes = useNodes();
   const edges = useEdges();
@@ -156,6 +152,19 @@ export function DnDCanvas() {
   const setClipboard = useEditorStore((s) => s.setClipboard);
   const canvasMode = useEditorStore((s) => s.canvasMode);
   const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
+  const edgeRouting = useEditorStore((s) => s.edgeRouting);
+  const toggleEdgeRouting = useEditorStore((s) => s.toggleEdgeRouting);
+  const sidebarOpen = useEditorStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useEditorStore((s) => s.setSidebarOpen);
+  const activeSidebarView = useEditorStore((s) => s.activeSidebarView);
+  const setActiveSidebarView = useEditorStore((s) => s.setActiveSidebarView);
+  const toggleInspector = useEditorStore((s) => s.toggleInspector);
+  const setQuickInsert = useEditorStore((s) => s.setQuickInsert);
+
+  const handleToggleEdgeRouting = useCallback(() => {
+    toggleEdgeRouting();
+    setEdges((eds) => eds.map((e) => ({ ...e, type: 'tensor' })));
+  }, [toggleEdgeRouting, setEdges]);
 
   const activeFileId = useVFSStore((s) => s.activeFileId);
   const files = useVFSStore((s) => s.files);
@@ -165,6 +174,13 @@ export function DnDCanvas() {
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
+
+  const initialCanvasEdges = React.useMemo(() => {
+    return (activeFile?.edges || initialEdges).map((e) => ({
+      ...e,
+      type: 'tensor',
+    }));
+  }, [activeFile?.id, activeFile?.edges]);
 
   // Ref to track the last saved structural state to prevent infinite ping-pongs
   const lastSavedState = useRef<string>("");
@@ -230,15 +246,66 @@ export function DnDCanvas() {
 
   // (SSE disk-to-canvas sync removed — no longer needed without Mirror Local)
 
-  // ─── Clipboard (Copy / Paste) ────────────────────────────────────────────────
+  // ─── Canvas Shortcuts & Clipboard ──────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // 1. Ignore if typing in an input, textarea, select, or editable element
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      // 2. Only fire shortcuts when canvas is active/selected (focused or mouse hovered)
+      const isCanvasActive =
+        isCanvasHoveredRef.current ||
+        (canvasRef.current && canvasRef.current.contains(document.activeElement));
+      if (!isCanvasActive) return;
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
+      // Tab: Quick search & insert layer at cursor
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const pos = lastMousePosRef.current || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        setQuickInsert({ isOpen: true, clientPos: pos });
+        return;
+      }
+
+      // V: Toggle Variables panel
+      if (!cmdKey && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        if (sidebarOpen && activeSidebarView === 'variables') {
+          setSidebarOpen(false);
+        } else {
+          setActiveSidebarView('variables');
+        }
+        return;
+      }
+
+      // E: Toggle File Explorer
+      if (!cmdKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        if (sidebarOpen && activeSidebarView === 'explorer') {
+          setSidebarOpen(false);
+        } else {
+          setActiveSidebarView('explorer');
+        }
+        return;
+      }
+
+      // I: Toggle Inspector
+      if (!cmdKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        toggleInspector();
+        return;
+      }
+
+      // Cmd+C / Ctrl+C: Copy selected nodes
       if (cmdKey && (e.key === 'c' || e.key === 'C')) {
         const selectedNodes = getNodes().filter((n: Node) => n.selected);
         if (selectedNodes.length === 0) return;
@@ -249,6 +316,7 @@ export function DnDCanvas() {
         setClipboard({ nodes: selectedNodes, edges: innerEdges });
       }
 
+      // Cmd+V / Ctrl+V: Paste copied nodes
       if (cmdKey && (e.key === 'v' || e.key === 'V')) {
         if (!clipboard || clipboard.nodes.length === 0) return;
 
@@ -278,7 +346,20 @@ export function DnDCanvas() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [getNodes, getEdges, setNodes, setEdges, clipboard, setClipboard]);
+  }, [
+    getNodes,
+    getEdges,
+    setNodes,
+    setEdges,
+    clipboard,
+    setClipboard,
+    sidebarOpen,
+    activeSidebarView,
+    setSidebarOpen,
+    setActiveSidebarView,
+    toggleInspector,
+    setQuickInsert
+  ]);
 
   // Prevent connecting a single-input port that already has an incoming edge
   const isValidConnection = useCallback(
@@ -383,7 +464,16 @@ export function DnDCanvas() {
   );
 
   return (
-    <div className="flex-1 relative flex flex-col h-full overflow-hidden" ref={canvasRef}>
+    <div
+      className="flex-1 relative flex flex-col h-full overflow-hidden outline-none"
+      ref={canvasRef}
+      tabIndex={0}
+      onMouseEnter={() => { isCanvasHoveredRef.current = true; }}
+      onMouseLeave={() => { isCanvasHoveredRef.current = false; }}
+      onMouseMove={(e) => {
+        lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      }}
+    >
       <FileTabBar />
       <div className="flex-1 relative overflow-hidden">
         {isCodeMode ? (
@@ -392,9 +482,11 @@ export function DnDCanvas() {
           <ReactFlow
             key={activeFileId}
             defaultNodes={activeFile?.nodes || initialNodes}
-            defaultEdges={activeFile?.edges || initialEdges}
+            defaultEdges={initialCanvasEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: 'tensor' }}
+            connectionLineType={edgeRouting === 'step' ? ConnectionLineType.SmoothStep : ConnectionLineType.Bezier}
             onConnect={onConnect}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -425,6 +517,14 @@ export function DnDCanvas() {
               >
                 <MousePointer2 className="w-3.5 h-3.5" />
               </ControlButton>
+              <ControlButton
+                onClick={handleToggleEdgeRouting}
+                title={`Edge Routing: ${edgeRouting === 'step' ? 'Stepped / Orthogonal (SimulIDE)' : 'Smooth Bezier'} (Click to switch)`}
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: edgeRouting === 'step' ? '#333' : 'transparent', color: edgeRouting === 'step' ? '#38bdf8' : '#777' }}
+              >
+                <GitFork className="w-3.5 h-3.5" />
+              </ControlButton>
             </Controls>
             <MiniMap
               nodeColor={() => '#2d8cf0'}
@@ -436,6 +536,7 @@ export function DnDCanvas() {
           </ReactFlow>
         )}
       </div>
+      <QuickInsertModal />
     </div>
   );
 }

@@ -18,6 +18,7 @@ Welcome to the ArchiDE documentation.
 
 ## 📝 Historical Changelog
 *(See `docs/changelog/` for the day-to-day session wrap-ups)*
+*   **[September 14, 2026](changelog/2026_09_14.md)**: Canvas UX: stepped wire edges, configurable port orientation & flipping, clarified variable badges, and tool shortcuts.
 *   **[September 13, 2026](changelog/2026_09_13.md)**: Variable binding fixes, frontend type mismatch validation, and permissive tensor rank guards.
 *   **[September 11, 2026](changelog/2026_09_11.md)**: True 1:1 VFS state mirroring, redundancy pruning, exact file paths, and decoupled Save/Load State actions.
 

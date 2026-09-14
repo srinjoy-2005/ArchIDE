@@ -8,20 +8,21 @@
  * and the <VariablesPanel /> for managing per-file variables.
  */
 
-import { useState } from 'react';
 import { Settings2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { PropertiesPanel } from './PropertiesPanel';
+import { useEditorStore } from '../lib/store';
 
 export function RightPanel() {
-  const [rightOpen, setRightOpen] = useState(true);
+  const inspectorOpen = useEditorStore((s) => s.inspectorOpen);
+  const toggleInspector = useEditorStore((s) => s.toggleInspector);
 
-  if (!rightOpen) {
+  if (!inspectorOpen) {
     return (
       <button
-        onClick={() => setRightOpen(true)}
+        onClick={toggleInspector}
         className="flex-shrink-0 flex items-center justify-center text-[#555] hover:text-[#aaa] transition-colors"
         style={{ width: 24, background: '#191919', borderLeft: '1px solid #282828' }}
-        title="Open Inspector"
+        title="Open Inspector (I)"
       >
         <PanelRightOpen className="w-3.5 h-3.5" />
       </button>
@@ -45,9 +46,9 @@ export function RightPanel() {
           </span>
         </div>
         <button
-          onClick={() => setRightOpen(false)}
+          onClick={toggleInspector}
           className="p-1 text-[#666] hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
-          title="Collapse Inspector"
+          title="Collapse Inspector (I)"
         >
           <PanelRightClose className="w-3.5 h-3.5" />
         </button>
