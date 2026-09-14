@@ -213,6 +213,8 @@ node_modules/
 .next/
 out/
 build/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
 .env.local
 .env.development.local
 .env.test.local
