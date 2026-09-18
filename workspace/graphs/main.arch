@@ -1,31 +1,42 @@
 {
-  "name": "main",
+  "name": "model",
+  "variables": [
+    {
+      "id": "var_num_classes",
+      "name": "num_classes",
+      "type": "int",
+      "default": 10,
+      "description": "",
+      "scope": "init_param"
+    }
+  ],
+  "parameters": [
+    {
+      "id": "var_num_classes",
+      "name": "num_classes",
+      "type": "int",
+      "default": 10,
+      "description": "",
+      "scope": "init_param"
+    }
+  ],
   "nodes": [
     {
-      "id": "node_mtzg033w_d8ovo",
+      "id": "input_6808ea65",
       "type": "custom",
       "position": {
-        "x": 456.7132306849944,
-        "y": -12.628860311284466
+        "x": 100,
+        "y": 250.0
       },
       "data": {
         "block_id": "input",
         "label": "Input",
-        "description": "A Input layer",
-        "params": [
-          {
-            "name": "shape",
-            "type": "shape",
-            "default": "(1, 3, 224, 224)",
-            "read_only": false,
-            "auto_infer": false,
-            "section": "basic",
-            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
-          }
-        ],
+        "is_functional": true,
         "paramValues": {
-          "shape": "(1,64,512)"
+          "shape": "(1, 64, 512)"
         },
+        "varName": "",
+        "custom_module_id": "",
         "inputs": [],
         "outputs": [
           {
@@ -36,312 +47,168 @@
             "var_hint": null
           }
         ],
-        "is_functional": true,
-        "varName": "",
-        "inferredShapes": {
-          "out": [
-            1,
-            64,
-            512
-          ]
-        }
+        "params": [
+          {
+            "name": "shape",
+            "type": "shape",
+            "default": "(1, 3, 224, 224)",
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "The shape of the input tensor, e.g. (batch, channels, H, W)"
+          }
+        ]
       }
     },
     {
-      "id": "node_mtzh3q94_92u3l",
+      "id": "custom_module_f725bf82",
       "type": "custom",
       "position": {
-        "x": 678.582946511518,
-        "y": -8.878543494091996
+        "x": 400,
+        "y": 250.0
       },
       "data": {
         "block_id": "custom_module",
-        "label": "transformer_block.arch",
-        "description": "A transformer_block.arch layer",
-        "params": [
-          {
-            "name": "d_model",
-            "type": "int",
-            "default": 512,
-            "section": "basic"
-          },
-          {
-            "name": "d_ff",
-            "type": "int",
-            "default": 2048,
-            "section": "basic"
-          },
-          {
-            "name": "d_k",
-            "type": "int",
-            "default": 64,
-            "section": "basic"
-          }
-        ],
+        "label": "X",
+        "is_functional": false,
         "paramValues": {
-          "d_model": "512",
-          "d_ff": "4096",
-          "d_k": 64
+          "in_channels": 3,
+          "embed_dim": 256
         },
+        "varName": "x",
+        "custom_module_id": "modules/file2",
         "inputs": [
           {
-            "id": "node_mtzg2box_7xac3",
+            "id": "input_8d42204e",
             "name": "Input",
+            "type": "tensor"
+          },
+          {
+            "id": "in",
+            "name": "In",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "node_mtzh20q5_q77s4",
+            "id": "output_5001566a",
             "name": "Output",
+            "type": "tensor"
+          },
+          {
+            "id": "out",
+            "name": "Out",
             "type": "tensor"
           }
         ],
-        "is_functional": false,
-        "varName": "",
-        "custom_module_id": "10ib7hx",
-        "inferredShapes": {
-          "node_mtzg2box_7xac3": [
-            1,
-            64,
-            512
-          ],
-          "node_mtzh20q5_q77s4": [
-            1,
-            64,
-            512
-          ]
-        }
+        "params": []
       }
     },
     {
-      "id": "node_mtzh4nhh_heg4j",
+      "id": "custom_module_2440c387",
       "type": "custom",
       "position": {
-        "x": 903.4495271501316,
-        "y": -11.313066940140331
+        "x": 700,
+        "y": 250.0
       },
       "data": {
         "block_id": "custom_module",
-        "label": "transformer_block.arch",
-        "description": "A transformer_block.arch layer",
-        "params": [
-          {
-            "name": "d_model",
-            "type": "int",
-            "default": 512,
-            "section": "basic"
-          },
-          {
-            "name": "d_ff",
-            "type": "int",
-            "default": 2048,
-            "section": "basic"
-          },
-          {
-            "name": "d_k",
-            "type": "int",
-            "default": 64,
-            "section": "basic"
-          }
-        ],
+        "label": "X_2",
+        "is_functional": false,
         "paramValues": {
-          "d_model": "512",
-          "d_ff": "4096",
-          "d_k": 64
+          "embed_dim": 256,
+          "depth": 6,
+          "num_heads": 8,
+          "mlp_ratio": 4.0,
+          "dropout": 0.1
         },
+        "varName": "x",
+        "custom_module_id": "modules/file3",
         "inputs": [
           {
-            "id": "node_mtzg2box_7xac3",
+            "id": "input_7a9ad152",
             "name": "Input",
+            "type": "tensor"
+          },
+          {
+            "id": "in",
+            "name": "In",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "node_mtzh20q5_q77s4",
+            "id": "output_f98ea7fd",
             "name": "Output",
+            "type": "tensor"
+          },
+          {
+            "id": "out",
+            "name": "Out",
             "type": "tensor"
           }
         ],
-        "is_functional": false,
-        "varName": "",
-        "custom_module_id": "10ib7hx",
-        "inferredShapes": {
-          "node_mtzg2box_7xac3": [
-            1,
-            64,
-            512
-          ],
-          "node_mtzh20q5_q77s4": [
-            1,
-            64,
-            512
-          ]
-        }
+        "params": []
       }
     },
     {
-      "id": "node_mtzh5ck0_ztzhg",
+      "id": "custom_module_65893cc8",
       "type": "custom",
       "position": {
-        "x": 872.548321787232,
-        "y": 115.90133255726371
+        "x": 1000,
+        "y": 250.0
       },
       "data": {
-        "block_id": "layernorm",
-        "label": "LayerNorm",
-        "description": "A LayerNorm layer",
-        "params": [
-          {
-            "name": "normalized_shape",
-            "type": "string",
-            "default": "?",
-            "read_only": false,
-            "auto_infer": true,
-            "section": "basic",
-            "description": "Input shape from an expected size, auto-inferred from input."
-          },
-          {
-            "name": "eps",
-            "type": "float",
-            "default": 1e-05,
-            "read_only": false,
-            "auto_infer": false,
-            "section": "advanced",
-            "description": "Value added to the denominator for numerical stability"
-          }
-        ],
+        "block_id": "custom_module",
+        "label": "X_3",
+        "is_functional": false,
         "paramValues": {
-          "normalized_shape": "LAZY",
-          "eps": 1e-05
+          "embed_dim": 256,
+          "num_classes": "@var:num_classes"
         },
+        "varName": "x",
+        "custom_module_id": "modules/file4",
         "inputs": [
           {
-            "id": "in",
+            "id": "input_a2a14760",
             "name": "Input",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": null
+            "type": "tensor"
+          },
+          {
+            "id": "in",
+            "name": "In",
+            "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "out",
+            "id": "output_5886d7b5",
             "name": "Output",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": "norm_out"
+            "type": "tensor"
+          },
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor"
           }
         ],
-        "is_functional": false,
-        "varName": "",
-        "inferredShapes": {
-          "in": [
-            1,
-            64,
-            512
-          ],
-          "out": [
-            1,
-            64,
-            512
-          ]
-        }
+        "params": []
       }
     },
     {
-      "id": "node_mtzh6bhw_1qawb",
+      "id": "output_a95fbf6f",
       "type": "custom",
       "position": {
-        "x": 1077.759663244936,
-        "y": 77.01918364948823
-      },
-      "data": {
-        "block_id": "linear",
-        "label": "Linear",
-        "description": "A Linear layer",
-        "params": [
-          {
-            "name": "in_features",
-            "type": "int",
-            "default": 128,
-            "read_only": false,
-            "auto_infer": true,
-            "section": "basic",
-            "description": "Size of each input sample"
-          },
-          {
-            "name": "out_features",
-            "type": "int",
-            "default": 64,
-            "read_only": false,
-            "auto_infer": false,
-            "section": "basic",
-            "description": "Size of each output sample"
-          },
-          {
-            "name": "bias",
-            "type": "bool",
-            "default": true,
-            "read_only": false,
-            "auto_infer": false,
-            "section": "advanced",
-            "description": "If True, adds a learnable bias to the output"
-          }
-        ],
-        "paramValues": {
-          "in_features": "LAZY",
-          "out_features": "3000",
-          "bias": true
-        },
-        "inputs": [
-          {
-            "id": "in",
-            "name": "Input",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": null
-          }
-        ],
-        "outputs": [
-          {
-            "id": "out",
-            "name": "Output",
-            "type": "tensor",
-            "is_list": false,
-            "var_hint": "fc_out"
-          }
-        ],
-        "is_functional": false,
-        "varName": "",
-        "inferredShapes": {
-          "in": [
-            1,
-            64,
-            512
-          ],
-          "out": [
-            1,
-            64,
-            "3000"
-          ]
-        }
-      }
-    },
-    {
-      "id": "node_mtzh6vwo_73577",
-      "type": "custom",
-      "position": {
-        "x": 1237.301145254317,
-        "y": 197.5494333640311
+        "x": 1300,
+        "y": 250.0
       },
       "data": {
         "block_id": "output",
         "label": "Output",
-        "description": "A Output layer",
-        "params": [],
+        "is_functional": true,
         "paramValues": {},
+        "varName": "",
+        "custom_module_id": "",
         "inputs": [
           {
             "id": "in",
@@ -352,65 +219,42 @@
           }
         ],
         "outputs": [],
-        "is_functional": true,
-        "varName": "",
-        "inferredShapes": {
-          "in": [
-            [
-              1,
-              64,
-              "3000"
-            ]
-          ]
-        }
+        "params": []
       }
     }
   ],
   "edges": [
     {
-      "id": "xy-edge__node_mtzg033w_d8ovoout-node_mtzh3q94_92u3lnode_mtzg2box_7xac3",
-      "source": "node_mtzg033w_d8ovo",
+      "id": "e_input_6808ea65_out_custom_module_f725bf82_in_0",
+      "source": "input_6808ea65",
       "sourceHandle": "out",
-      "target": "node_mtzh3q94_92u3l",
-      "targetHandle": "node_mtzg2box_7xac3"
+      "target": "custom_module_f725bf82",
+      "targetHandle": "in",
+      "type": "tensor"
     },
     {
-      "id": "xy-edge__node_mtzh3q94_92u3lnode_mtzh20q5_q77s4-node_mtzh4nhh_heg4jnode_mtzg2box_7xac3",
-      "source": "node_mtzh3q94_92u3l",
-      "sourceHandle": "node_mtzh20q5_q77s4",
-      "target": "node_mtzh4nhh_heg4j",
-      "targetHandle": "node_mtzg2box_7xac3"
-    },
-    {
-      "id": "xy-edge__node_mtzh4nhh_heg4jnode_mtzh20q5_q77s4-node_mtzh5ck0_ztzhgin",
-      "source": "node_mtzh4nhh_heg4j",
-      "sourceHandle": "node_mtzh20q5_q77s4",
-      "target": "node_mtzh5ck0_ztzhg",
-      "targetHandle": "in"
-    },
-    {
-      "id": "xy-edge__node_mtzh5ck0_ztzhgout-node_mtzh6bhw_1qawbin",
-      "source": "node_mtzh5ck0_ztzhg",
+      "id": "e_custom_module_f725bf82_out_custom_module_2440c387_in_1",
+      "source": "custom_module_f725bf82",
       "sourceHandle": "out",
-      "target": "node_mtzh6bhw_1qawb",
-      "targetHandle": "in"
+      "target": "custom_module_2440c387",
+      "targetHandle": "in",
+      "type": "tensor"
     },
     {
-      "id": "xy-edge__node_mtzh6bhw_1qawbout-node_mtzh6vwo_73577in",
-      "source": "node_mtzh6bhw_1qawb",
+      "id": "e_custom_module_2440c387_out_custom_module_65893cc8_in_2",
+      "source": "custom_module_2440c387",
       "sourceHandle": "out",
-      "target": "node_mtzh6vwo_73577",
-      "targetHandle": "in"
-    }
-  ],
-  "variables": [
+      "target": "custom_module_65893cc8",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
     {
-      "id": "4o5nx7w",
-      "name": "sample_int",
-      "type": "string",
-      "default": "64",
-      "description": "",
-      "scope": "init_param"
+      "id": "e_custom_module_65893cc8_out_output_a95fbf6f_in_3",
+      "source": "custom_module_65893cc8",
+      "sourceHandle": "out",
+      "target": "output_a95fbf6f",
+      "targetHandle": "in",
+      "type": "tensor"
     }
   ]
 }

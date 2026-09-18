@@ -233,7 +233,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
         }
       }
 
-      const isGraph = fileName.endsWith('.arch') || (typeof content === 'object' && content !== null && 'nodes' in content);
+      const isGraph = fileName.endsWith('.arch') && typeof content === 'object' && content !== null && Array.isArray(content?.nodes);
       if (isGraph) {
         const rawVars: any[] = content?.variables ?? content?.parameters ?? [];
         const variables: ArchVariable[] = migrateParameters(rawVars);
@@ -242,8 +242,8 @@ export const useVFSStore = create<VFSState>((set, get) => ({
           id: fileId,
           name: fileName,
           parentId,
-          nodes: content?.nodes || [],
-          edges: content?.edges || [],
+          nodes: Array.isArray(content?.nodes) ? content.nodes : [],
+          edges: Array.isArray(content?.edges) ? content.edges : [],
           variables,
           fileType: 'graph',
         });
@@ -424,7 +424,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
 
   createFile: (name, parentId = null, fileType = 'graph') => {
     const trimmed = name.trim() || 'Untitled';
-    const isCode = fileType === 'code' || trimmed.endsWith('.py');
+    const isCode = fileType === 'code' || !trimmed.endsWith('.arch');
     const newFile: GraphFile = {
       id: generateId(),
       name: trimmed,
@@ -433,7 +433,7 @@ export const useVFSStore = create<VFSState>((set, get) => ({
       nodes: [],
       edges: [],
       fileType: isCode ? 'code' : 'graph',
-      compiledCode: isCode ? '# Python script' : ''
+      compiledCode: isCode ? (trimmed.endsWith('.json') ? '{\n}' : '# Python script') : ''
     };
     set((state) => ({
       files: [...state.files, newFile],

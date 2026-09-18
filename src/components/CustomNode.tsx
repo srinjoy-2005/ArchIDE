@@ -76,8 +76,14 @@ const CustomNode = ({ id, data, isConnectable }: any) => {
   const nodeShapes = useEditorStore((s) => s.nodeShapes);
   const [hovered, setHovered] = useState(false);
 
-  const inputs = data.inputs || [{ id: 'in', name: 'Input' }];
-  const outputs = data.outputs || [{ id: 'out', name: 'Output' }];
+  const inputs = Array.isArray(data.inputs) && data.inputs.length > 0
+    ? data.inputs
+    : (data.block_id === 'input' ? [] : [{ id: 'in', name: 'Input' }]);
+
+  const outputs = Array.isArray(data.outputs) && data.outputs.length > 0
+    ? data.outputs
+    : (data.block_id === 'output' ? [] : [{ id: 'out', name: 'Output' }]);
+
   const paramValues = data.paramValues || {};
   const paramSummary = getParamSummary(paramValues);
   const accent = getAccentColor(data.label);

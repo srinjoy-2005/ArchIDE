@@ -93,3 +93,34 @@ def test_shape_mismatch_error_detection():
         compiler.validate(graph_dict)
 
     assert "Linear: expected in_features=20, but input last dim is 50" in str(exc_info.value)
+
+def test_decompile_and_roundtrip():
+    from agent_compiler import decompile_arch_to_ir
+
+    ir = {
+        "name": "RoundTripMLP",
+        "variables": [{"name": "hidden", "type": "int", "default": 64}],
+        "nodes": {
+            "in": {"block": "input", "params": {"shape": "(1, 128)"}},
+            "fc": {"block": "linear", "params": {"in_features": 128, "out_features": 64}},
+            "out": {"block": "output"}
+        },
+        "edges": [
+            "in.out -> fc.in",
+            "fc.out -> out.in"
+        ]
+    }
+
+    arch = compile_ir(ir, validate=True)
+    decompiled_ir = decompile_arch_to_ir(arch)
+
+    assert decompiled_ir["name"] == "RoundTripMLP"
+    assert "in" in decompiled_ir["nodes"]
+    assert "out" in decompiled_ir["nodes"]
+    assert len(decompiled_ir["edges"]) == 2
+
+    # Recompile decompiled IR to ensure full round-trip validity
+    recompiled_arch = compile_ir(decompiled_ir, validate=True)
+    assert len(recompiled_arch["nodes"]) == 3
+    assert len(recompiled_arch["edges"]) == 2
+

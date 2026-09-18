@@ -42,15 +42,35 @@ cat backend/block_schema.json
 ```
 This will give you the exact `block` IDs, valid `params`, and `inputs`/`outputs` handles you can use.
 
-## 3. Compiling the Graph
-Once you have written your `my_graph.ir.json` file, compile it into the final visual graph:
+## 3. Storage Locations
+- **IR files**: Stored in `workspace/ir/*.ir.json`
+- **Visual graph files**: Stored in `workspace/graphs/*.arch`
+
+## 4. Compiling and Decompiling Graphs
+
+### Compiling IR to Visual Graph (`.arch`)
+Once you have written or updated your `workspace/ir/my_graph.ir.json` file:
 ```bash
-source backend/.venv/bin/activate && python backend/agent_compiler.py workspace/graphs/my_graph.ir.json
+./scripts/compile_all_to_arch.sh workspace/ir/my_graph.ir.json
 ```
-This script will automatically:
+To batch compile and validate all IR files:
+```bash
+./scripts/compile_all_to_arch.sh
+```
+This will automatically:
 1. Generate strict React Flow UUIDs.
 2. Hydrate all missing `inputs`, `outputs`, and UI boilerplate from the schema.
 3. Calculate beautiful topological `x, y` coordinates using a DAG layout algorithm.
-4. Output `workspace/graphs/my_graph.arch` (which ArchIDE will automatically load via Live-Sync).
+4. Perform shape inference and PyTorch code validation.
+5. Output `workspace/graphs/my_graph.arch` (which ArchIDE loads via Live-Sync).
 
-**Always use `agent_compiler.py`. Never edit `.arch` files directly.**
+### Decompiling Visual Graph (`.arch`) to IR (`.ir.json`)
+To inspect or decompile visual `.arch` files to compact IR:
+```bash
+./scripts/decompile_all_to_ir.sh workspace/graphs/my_graph.arch
+# Or batch decompile all:
+./scripts/decompile_all_to_ir.sh
+```
+
+**Always use `agent_compiler.py` or the helper scripts. Never edit `.arch` files directly.**
+
