@@ -15,7 +15,7 @@
 import React from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
-import { Brain, ChevronRight, X } from 'lucide-react';
+import { Brain, ChevronRight, X, ArrowRightLeft, ArrowUpDown } from 'lucide-react';
 import { PARAM_TYPE_HANDLERS, type ParamTypeName } from '../lib/paramTypes';
 import { useVFSStore } from '../lib/vfsStore';
 import { ExpressionInput } from './ExpressionInput';
@@ -455,6 +455,76 @@ export function PropertiesPanel() {
             <span className="text-[9px] text-[#555]">
               Leave blank to auto-generate. Used as the tensor variable in compiled PyTorch code.
             </span>
+          </div>
+
+          {/* Port Layout Configuration */}
+          <div className="flex flex-col gap-1.5 pt-2 border-t border-[#2e2e2e]">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-[#888]">Port Layout</label>
+              <span className="text-[9px] font-mono text-[#555]">orientation</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const currentLayout = (selectedNode.data.portLayout as any) || {};
+                  setNodes((nds) =>
+                    nds.map((n) =>
+                      n.id === selectedNode.id
+                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, orientation: 'horizontal' } } }
+                        : n
+                    )
+                  );
+                }}
+                className={`py-1 px-2 rounded-[3px] text-[11px] font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                  ((selectedNode.data.portLayout as any)?.orientation || 'horizontal') === 'horizontal'
+                    ? 'bg-[#262626] border-[#2d8cf0] text-[#e2e2e2]'
+                    : 'bg-[#1e1e1e] border-[#3a3a3a] text-[#888] hover:text-[#ccc]'
+                }`}
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                <span>Horizontal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentLayout = (selectedNode.data.portLayout as any) || {};
+                  setNodes((nds) =>
+                    nds.map((n) =>
+                      n.id === selectedNode.id
+                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, orientation: 'vertical' } } }
+                        : n
+                    )
+                  );
+                }}
+                className={`py-1 px-2 rounded-[3px] text-[11px] font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                  (selectedNode.data.portLayout as any)?.orientation === 'vertical'
+                    ? 'bg-[#262626] border-[#2d8cf0] text-[#e2e2e2]'
+                    : 'bg-[#1e1e1e] border-[#3a3a3a] text-[#888] hover:text-[#ccc]'
+                }`}
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                <span>Vertical</span>
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-[11px] text-[#aaa] cursor-pointer mt-0.5">
+              <input
+                type="checkbox"
+                checked={Boolean((selectedNode.data.portLayout as any)?.flipped)}
+                onChange={(e) => {
+                  const currentLayout = (selectedNode.data.portLayout as any) || {};
+                  setNodes((nds) =>
+                    nds.map((n) =>
+                      n.id === selectedNode.id
+                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, flipped: e.target.checked } } }
+                        : n
+                    )
+                  );
+                }}
+                className="accent-[#2d8cf0]"
+              />
+              <span>Invert / Flip Port Sides</span>
+            </label>
           </div>
         </div>
       </div>
