@@ -2,27 +2,27 @@
   "name": "model",
   "variables": [
     {
-      "id": "var_num_classes",
-      "name": "num_classes",
-      "type": "int",
-      "default": 10,
+      "id": "var_sample_int",
+      "name": "sample_int",
+      "type": "string",
+      "default": "64",
       "description": "",
       "scope": "init_param"
     }
   ],
   "parameters": [
     {
-      "id": "var_num_classes",
-      "name": "num_classes",
-      "type": "int",
-      "default": 10,
+      "id": "var_sample_int",
+      "name": "sample_int",
+      "type": "string",
+      "default": "64",
       "description": "",
       "scope": "init_param"
     }
   ],
   "nodes": [
     {
-      "id": "input_ea1b6eb3",
+      "id": "input_fc1eadf6",
       "type": "custom",
       "position": {
         "x": 100,
@@ -61,7 +61,7 @@
       }
     },
     {
-      "id": "custom_module_e5dad3fc",
+      "id": "custom_module_64f6fdc3",
       "type": "custom",
       "position": {
         "x": 400,
@@ -69,35 +69,26 @@
       },
       "data": {
         "block_id": "custom_module",
-        "label": "X",
+        "label": "Node_mtzh3q94_92u3l",
         "is_functional": false,
         "paramValues": {
-          "in_channels": 3,
-          "embed_dim": 256
+          "d_model": 512,
+          "d_ff": 4096,
+          "d_k": 64
         },
-        "varName": "x",
-        "custom_module_id": "modules/file2",
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
         "inputs": [
           {
-            "id": "input_f6a7254e",
-            "name": "Input",
-            "type": "tensor"
-          },
-          {
             "id": "in",
-            "name": "In",
+            "name": "Input",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "output_952349bb",
-            "name": "Output",
-            "type": "tensor"
-          },
-          {
             "id": "out",
-            "name": "Out",
+            "name": "Output",
             "type": "tensor"
           }
         ],
@@ -105,7 +96,7 @@
       }
     },
     {
-      "id": "custom_module_2d40c985",
+      "id": "custom_module_247cb0c5",
       "type": "custom",
       "position": {
         "x": 700,
@@ -113,38 +104,26 @@
       },
       "data": {
         "block_id": "custom_module",
-        "label": "X_2",
+        "label": "Node_mtzh4nhh_heg4j",
         "is_functional": false,
         "paramValues": {
-          "embed_dim": 256,
-          "depth": 6,
-          "num_heads": 8,
-          "mlp_ratio": 4.0,
-          "dropout": 0.1
+          "d_model": 512,
+          "d_ff": 4096,
+          "d_k": 64
         },
-        "varName": "x",
-        "custom_module_id": "modules/file3",
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
         "inputs": [
           {
-            "id": "input_f60f0799",
-            "name": "Input",
-            "type": "tensor"
-          },
-          {
             "id": "in",
-            "name": "In",
+            "name": "Input",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "output_06622ef0",
-            "name": "Output",
-            "type": "tensor"
-          },
-          {
             "id": "out",
-            "name": "Out",
+            "name": "Output",
             "type": "tensor"
           }
         ],
@@ -152,7 +131,7 @@
       }
     },
     {
-      "id": "custom_module_06a179f0",
+      "id": "custom_module_33527ce5",
       "type": "custom",
       "position": {
         "x": 1000,
@@ -160,35 +139,26 @@
       },
       "data": {
         "block_id": "custom_module",
-        "label": "X_3",
+        "label": "Node_mu1k003d_ljg0w",
         "is_functional": false,
         "paramValues": {
-          "embed_dim": 256,
-          "num_classes": "@var:num_classes"
+          "d_model": 512,
+          "d_ff": 2048,
+          "d_k": 64
         },
-        "varName": "x",
-        "custom_module_id": "modules/file4",
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
         "inputs": [
           {
-            "id": "input_073fd909",
-            "name": "Input",
-            "type": "tensor"
-          },
-          {
             "id": "in",
-            "name": "In",
+            "name": "Input",
             "type": "tensor"
           }
         ],
         "outputs": [
           {
-            "id": "output_f0aa0fb8",
-            "name": "Output",
-            "type": "tensor"
-          },
-          {
             "id": "out",
-            "name": "Out",
+            "name": "Output",
             "type": "tensor"
           }
         ],
@@ -196,10 +166,115 @@
       }
     },
     {
-      "id": "output_4289094b",
+      "id": "custom_module_6dab15c0",
       "type": "custom",
       "position": {
         "x": 1300,
+        "y": 250.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "Node_mu1k1bi5_c5g24",
+        "is_functional": false,
+        "paramValues": {
+          "d_model": 512,
+          "d_ff": 4096,
+          "d_k": 64
+        },
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "custom_module_1bb76b54",
+      "type": "custom",
+      "position": {
+        "x": 1600,
+        "y": 250.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "Node_mu1k1bi5_pfyb6",
+        "is_functional": false,
+        "paramValues": {
+          "d_model": 512,
+          "d_ff": 4096,
+          "d_k": 64
+        },
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "custom_module_17e4cf11",
+      "type": "custom",
+      "position": {
+        "x": 1900,
+        "y": 250.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "Node_mu1k1bi5_ux9bz",
+        "is_functional": false,
+        "paramValues": {
+          "d_model": 512,
+          "d_ff": 2048,
+          "d_k": 64
+        },
+        "varName": "",
+        "custom_module_id": "modules/transformer_block",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "output_85d918a9",
+      "type": "custom",
+      "position": {
+        "x": 2200,
         "y": 250.0
       },
       "data": {
@@ -225,34 +300,58 @@
   ],
   "edges": [
     {
-      "id": "e_input_ea1b6eb3_out_custom_module_e5dad3fc_in_0",
-      "source": "input_ea1b6eb3",
+      "id": "e_input_fc1eadf6_out_custom_module_64f6fdc3_in_0",
+      "source": "input_fc1eadf6",
       "sourceHandle": "out",
-      "target": "custom_module_e5dad3fc",
+      "target": "custom_module_64f6fdc3",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_e5dad3fc_out_custom_module_2d40c985_in_1",
-      "source": "custom_module_e5dad3fc",
+      "id": "e_custom_module_64f6fdc3_out_custom_module_247cb0c5_in_1",
+      "source": "custom_module_64f6fdc3",
       "sourceHandle": "out",
-      "target": "custom_module_2d40c985",
+      "target": "custom_module_247cb0c5",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_2d40c985_out_custom_module_06a179f0_in_2",
-      "source": "custom_module_2d40c985",
+      "id": "e_custom_module_247cb0c5_out_custom_module_33527ce5_in_2",
+      "source": "custom_module_247cb0c5",
       "sourceHandle": "out",
-      "target": "custom_module_06a179f0",
+      "target": "custom_module_33527ce5",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_06a179f0_out_output_4289094b_in_3",
-      "source": "custom_module_06a179f0",
+      "id": "e_custom_module_33527ce5_out_custom_module_6dab15c0_in_3",
+      "source": "custom_module_33527ce5",
       "sourceHandle": "out",
-      "target": "output_4289094b",
+      "target": "custom_module_6dab15c0",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_custom_module_6dab15c0_out_custom_module_1bb76b54_in_4",
+      "source": "custom_module_6dab15c0",
+      "sourceHandle": "out",
+      "target": "custom_module_1bb76b54",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_custom_module_1bb76b54_out_custom_module_17e4cf11_in_5",
+      "source": "custom_module_1bb76b54",
+      "sourceHandle": "out",
+      "target": "custom_module_17e4cf11",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_custom_module_17e4cf11_out_output_85d918a9_in_6",
+      "source": "custom_module_17e4cf11",
+      "sourceHandle": "out",
+      "target": "output_85d918a9",
       "targetHandle": "in",
       "type": "tensor"
     }

@@ -439,10 +439,16 @@ class AgentGraphCompiler:
             if curr_dep in graphs or not self.workspace_dir:
                 continue
 
+            dep_stem = curr_dep.split("/")[-1]
             candidates = [
                 os.path.join(self.workspace_dir, f"{curr_dep}.arch"),
                 os.path.join(self.workspace_dir, f"{curr_dep}.json"),
                 os.path.join(self.workspace_dir, curr_dep),
+                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.arch"),
+                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.json"),
+                os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.arch"),
+                os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.json"),
+                os.path.join(os.path.dirname(self.workspace_dir), "graphs", f"{dep_stem}.arch"),
             ]
             loaded_path = None
             for p in candidates:
@@ -852,35 +858,6 @@ def main():
             print(f"\nCompilation completed with {len(errors)} error(s) out of {count + len(errors)} files.", file=sys.stderr)
             sys.exit(1)
         print(f"Successfully compiled and validated {count} IR files to {os.path.relpath(arch_dir)}")
-
-        # Synchronize generated PyTorch code to python_dir
-        if count > 0:
-            os.makedirs(python_dir, exist_ok=True)
-            graphs = {}
-            file_paths = {}
-            for root, _, files in os.walk(arch_dir):
-                for f in sorted(files):
-                    if f.endswith(".arch"):
-                        full_path = os.path.join(root, f)
-                        rel = os.path.relpath(full_path, arch_dir)
-                        key = rel[:-5]
-                        with open(full_path, "r", encoding="utf-8") as fp:
-                            d = json.load(fp)
-                        nodes = [Node(id=n["id"], data=NodeData(**n["data"]), position=n.get("position")) for n in d["nodes"]]
-                        edges = [Edge(**e) for e in d["edges"]]
-                        vars = [ArchVariableModel(**v) for v in (d.get("variables") or d.get("parameters") or []) if isinstance(v, dict)]
-                        graphs[key] = GraphData(name=d.get("name", key), nodes=nodes, edges=edges, variables=vars)
-                        file_paths[key] = key
-
-            try:
-                compiled_files, _, _ = generate_pytorch_code(graphs, "main", file_paths=file_paths)
-                for k, code in compiled_files.items():
-                    out_file = os.path.join(python_dir, f"{k}.py")
-                    os.makedirs(os.path.dirname(out_file), exist_ok=True)
-                    with open(out_file, "w", encoding="utf-8") as fp:
-                        fp.write(code)
-            except Exception:
-                pass
 
         return
 

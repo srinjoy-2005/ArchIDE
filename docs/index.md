@@ -4,6 +4,7 @@ Welcome to the ArchiDE documentation.
 
 ## 🏗 Architecture & Specifications
 *   **[Architecture Overview](architecture.md)**: Unified high-level overview of the Next.js frontend, Python FastAPI backend architecture, state rules, and compiler flow.
+*   **[Decompilation & Agentic IR](decompilation.md)**: PyTorch AST decompiler, IR JSON schemas, and bidirectional roundtrip pipelines.
 *   **[API & Registry Contracts](contracts.md)**: Stable boundaries, PyTorch block definitions, and JSON schema expectations.
 *   **[Backend Testing](backend/testing.md)**: Specifications for automated backend unit and integration test suites.
 *   **[Testing Strategy Plan](testing_plan.md)**: Roadmap for backend and frontend testing.
