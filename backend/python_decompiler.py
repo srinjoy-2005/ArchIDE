@@ -306,13 +306,9 @@ class PyTorchASTDecompiler:
             for k, v in sub_irs.items():
                 if k not in self.all_irs:
                     self.all_irs[k] = v
-            if self.workspace_dir:
-                modules_dir = os.path.join(self.workspace_dir, "ir", "modules")
-                os.makedirs(modules_dir, exist_ok=True)
-                for k, v in sub_irs.items():
-                    out_path = os.path.join(modules_dir, f"{k}.ir.json")
-                    with open(out_path, "w", encoding="utf-8") as f:
-                        json.dump(v, f, indent=2)
+            # Do NOT write sidecar IR files here — the class-name-lowered keys
+            # (e.g. 'convblock') would create camelCase duplicates alongside the
+            # canonical snake_case files written by the --all-from-python loop.
         except Exception:
             pass
 
@@ -1223,7 +1219,11 @@ def decompile_python_to_ir(
         os.makedirs(modules_dir, exist_ok=True)
         for cls_stem, sub_ir in decompiler.all_irs.items():
             if sub_ir is not ir_dict:
-                sub_path = os.path.join(modules_dir, f"{os.path.basename(cls_stem)}.ir.json")
+                # Use the snake_case name from the IR payload itself if available,
+                # falling back to the class-name-lowered key only as a last resort.
+                ir_name = sub_ir.get("name", "") if isinstance(sub_ir, dict) else ""
+                file_name = ir_name if ir_name else os.path.basename(cls_stem)
+                sub_path = os.path.join(modules_dir, f"{file_name}.ir.json")
                 with open(sub_path, "w", encoding="utf-8") as f:
                     json.dump(sub_ir, f, indent=2)
 
