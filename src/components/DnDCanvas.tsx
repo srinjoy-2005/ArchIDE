@@ -173,7 +173,7 @@ export function DnDCanvas() {
   const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
 
   const activeFile = files.find((f) => f.id === activeFileId);
-  const isCodeMode = activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py') || activeFile?.name.endsWith('.toml');
+  const isCodeMode = activeFile?.fileType === 'code' || !activeFile?.name.endsWith('.arch') || !Array.isArray(activeFile?.nodes);
 
   const initialCanvasEdges = React.useMemo(() => {
     return (activeFile?.edges || initialEdges).map((e) => ({
@@ -206,7 +206,7 @@ export function DnDCanvas() {
     if (nodes.some(n => n.dragging)) return;
 
     // Ensure we don't save an empty graph if it hasn't hydrated properly
-    if (nodes.length === 0 && edges.length === 0 && activeFile.nodes.length > 0) return;
+    if (nodes.length === 0 && edges.length === 0 && Array.isArray(activeFile.nodes) && activeFile.nodes.length > 0) return;
 
     // 2. Strip transient UI state to isolate structural/semantic data
     const strippedGraph = getStrippedGraph(nodes, edges);
@@ -475,13 +475,13 @@ export function DnDCanvas() {
       }}
     >
       <FileTabBar />
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden w-full h-full min-h-0">
         {isCodeMode ? (
           <CentralCodeEditor />
         ) : (
           <ReactFlow
             key={activeFileId}
-            defaultNodes={activeFile?.nodes || initialNodes}
+            defaultNodes={Array.isArray(activeFile?.nodes) ? activeFile.nodes : initialNodes}
             defaultEdges={initialCanvasEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}

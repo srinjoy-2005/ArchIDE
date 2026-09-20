@@ -347,7 +347,7 @@ export function FileExplorer() {
         {currentFiles.map((file) => {
           const isActive = file.id === activeFileId;
           const isRenamingThis = renaming?.id === file.id && !renaming.isFolder;
-          const isCode = file.fileType === 'code' || file.name.endsWith('.py');
+          const isCode = file.fileType === 'code' || !file.name.endsWith('.arch');
 
           return (
             <div

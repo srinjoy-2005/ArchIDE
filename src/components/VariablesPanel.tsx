@@ -115,7 +115,7 @@ export function VariablesPanel() {
   const activeFile  = files.find((f) => f.id === activeFileId);
   const variables   = activeFile?.variables || [];
   const nodes       = activeFile?.nodes || [];
-  const isGraphFile = activeFile && activeFile.fileType !== "code" && !activeFile.name.endsWith(".py");
+  const isGraphFile = activeFile && activeFile.fileType !== "code" && activeFile.name.endsWith(".arch") && Array.isArray(activeFile.nodes);
 
   const [editingId, setEditingId]     = useState<string | null>(null);
   const [showAdd, setShowAdd]         = useState(false);

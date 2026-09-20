@@ -10,16 +10,24 @@ class Edge(BaseModel):
 
 class NodeData(BaseModel):
     block_id: str = ""
-    label: str
+    label: str = ""
     is_functional: bool = False
     paramValues: dict = {}
     varName: str = ""  # optional user-defined output variable name
     custom_module_id: str = ""
+    inputs: List[Any] = []
+    outputs: List[Any] = []
+    inferredShapes: Dict[str, Any] = {}
+    inferredParams: Dict[str, Any] = {}
+
+    model_config = {"extra": "allow"}
 
 class Node(BaseModel):
     id: str
     data: NodeData
     position: Optional[Dict[str, float]] = None
+
+    model_config = {"extra": "allow"}
 
 class ParamDef(BaseModel):
     name: str
