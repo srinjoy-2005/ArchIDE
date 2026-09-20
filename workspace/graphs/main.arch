@@ -1,32 +1,49 @@
 {
-  "name": "model",
+  "name": "complexnetwork",
   "variables": [
     {
-      "id": "var_sample_int",
-      "name": "sample_int",
-      "type": "string",
-      "default": "64",
+      "id": "var_in_channels",
+      "name": "in_channels",
+      "type": "int",
+      "default": 3,
+      "description": "",
+      "scope": "init_param"
+    },
+    {
+      "id": "var_num_classes",
+      "name": "num_classes",
+      "type": "int",
+      "default": 1000,
       "description": "",
       "scope": "init_param"
     }
   ],
   "parameters": [
     {
-      "id": "var_sample_int",
-      "name": "sample_int",
-      "type": "string",
-      "default": "64",
+      "id": "var_in_channels",
+      "name": "in_channels",
+      "type": "int",
+      "default": 3,
+      "description": "",
+      "scope": "init_param"
+    },
+    {
+      "id": "var_num_classes",
+      "name": "num_classes",
+      "type": "int",
+      "default": 1000,
       "description": "",
       "scope": "init_param"
     }
   ],
+  "attributes": {},
   "nodes": [
     {
-      "id": "input_fc1eadf6",
+      "id": "in",
       "type": "custom",
       "position": {
         "x": 100,
-        "y": 250.0
+        "y": 175.0
       },
       "data": {
         "block_id": "input",
@@ -61,7 +78,144 @@
       }
     },
     {
-      "id": "custom_module_64f6fdc3",
+      "id": "patch_encoder",
+      "type": "custom",
+      "position": {
+        "x": 400,
+        "y": 100.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "PatchEncoder",
+        "is_functional": false,
+        "paramValues": {
+          "in_channels": "@var:in_channels",
+          "embed_dim": 256,
+          "patch_size": 4
+        },
+        "varName": "patches",
+        "custom_module_id": "modules/patchencoder",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "token_processor",
+      "type": "custom",
+      "position": {
+        "x": 700,
+        "y": 175.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "TokenProcessor",
+        "is_functional": false,
+        "paramValues": {
+          "embed_dim": 256,
+          "heads": 8,
+          "layers": 4
+        },
+        "varName": "tokens",
+        "custom_module_id": "modules/tokenprocessor",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "token_projection",
+      "type": "custom",
+      "position": {
+        "x": 1000,
+        "y": 175.0
+      },
+      "data": {
+        "block_id": "linear",
+        "label": "Linear",
+        "is_functional": false,
+        "paramValues": {
+          "bias": true,
+          "in_features": 256,
+          "out_features": 512
+        },
+        "varName": "tokens",
+        "custom_module_id": "",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conv_block",
       "type": "custom",
       "position": {
         "x": 400,
@@ -69,15 +223,14 @@
       },
       "data": {
         "block_id": "custom_module",
-        "label": "Node_mtzh3q94_92u3l",
+        "label": "ConvBlock",
         "is_functional": false,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 4096,
-          "d_k": 64
+          "in_channels": "@var:in_channels",
+          "channels": 256
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "conv_features",
+        "custom_module_id": "modules/convblock",
         "inputs": [
           {
             "id": "in",
@@ -96,132 +249,223 @@
       }
     },
     {
-      "id": "custom_module_247cb0c5",
+      "id": "conv_tokens",
       "type": "custom",
       "position": {
         "x": 700,
-        "y": 250.0
+        "y": 325.0
       },
       "data": {
-        "block_id": "custom_module",
-        "label": "Node_mtzh4nhh_heg4j",
-        "is_functional": false,
+        "block_id": "flatten",
+        "label": "Flatten",
+        "is_functional": true,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 4096,
-          "d_k": 64
+          "start_dim": 2,
+          "end_dim": -1
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "conv_tokens",
+        "custom_module_id": "",
         "inputs": [
           {
             "id": "in",
             "name": "Input",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
           }
         ],
         "outputs": [
           {
             "id": "out",
             "name": "Output",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "flat"
           }
         ],
-        "params": []
+        "params": [
+          {
+            "name": "start_dim",
+            "type": "int",
+            "default": 1,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "First dimension to flatten"
+          },
+          {
+            "name": "end_dim",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Last dimension to flatten"
+          }
+        ]
       }
     },
     {
-      "id": "custom_module_33527ce5",
+      "id": "conv_tokens_2",
       "type": "custom",
       "position": {
         "x": 1000,
-        "y": 250.0
+        "y": 325.0
       },
       "data": {
-        "block_id": "custom_module",
-        "label": "Node_mu1k003d_ljg0w",
-        "is_functional": false,
+        "block_id": "transpose",
+        "label": "Transpose",
+        "is_functional": true,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 2048,
-          "d_k": 64
+          "dim0": 1,
+          "dim1": 2
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "conv_tokens",
+        "custom_module_id": "",
         "inputs": [
           {
             "id": "in",
-            "name": "Input",
-            "type": "tensor"
+            "name": "Input Tensor",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
           }
         ],
         "outputs": [
           {
             "id": "out",
             "name": "Output",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "transposed"
           }
         ],
-        "params": []
+        "params": [
+          {
+            "name": "dim0",
+            "type": "int",
+            "default": -2,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "First dimension to transpose"
+          },
+          {
+            "name": "dim1",
+            "type": "int",
+            "default": -1,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Second dimension to transpose"
+          }
+        ]
       }
     },
     {
-      "id": "custom_module_6dab15c0",
+      "id": "conv_projection",
       "type": "custom",
       "position": {
         "x": 1300,
         "y": 250.0
       },
       "data": {
-        "block_id": "custom_module",
-        "label": "Node_mu1k1bi5_c5g24",
+        "block_id": "linear",
+        "label": "Linear",
         "is_functional": false,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 4096,
-          "d_k": 64
+          "bias": true,
+          "in_features": 256,
+          "out_features": 512
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "conv_tokens",
+        "custom_module_id": "",
         "inputs": [
           {
             "id": "in",
             "name": "Input",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
           }
         ],
         "outputs": [
           {
             "id": "out",
             "name": "Output",
-            "type": "tensor"
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "fc_out"
           }
         ],
-        "params": []
+        "params": [
+          {
+            "name": "in_features",
+            "type": "int",
+            "default": 128,
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Size of each input sample"
+          },
+          {
+            "name": "out_features",
+            "type": "int",
+            "default": 64,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "basic",
+            "description": "Size of each output sample"
+          },
+          {
+            "name": "bias",
+            "type": "bool",
+            "default": true,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "If True, adds a learnable bias to the output"
+          }
+        ]
       }
     },
     {
-      "id": "custom_module_1bb76b54",
+      "id": "cross_attention",
       "type": "custom",
       "position": {
         "x": 1600,
-        "y": 250.0
+        "y": 150.0
       },
       "data": {
         "block_id": "custom_module",
-        "label": "Node_mu1k1bi5_pfyb6",
+        "label": "MultiheadAttention",
         "is_functional": false,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 4096,
-          "d_k": 64
+          "embed_dim": 512,
+          "num_heads": 8,
+          "batch_first": true
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "cross_attention",
+        "custom_module_id": "modules/multiheadattention",
         "inputs": [
           {
             "id": "in",
             "name": "Input",
+            "type": "tensor"
+          },
+          {
+            "id": "query",
+            "name": "Query",
+            "type": "tensor"
+          },
+          {
+            "id": "key",
+            "name": "Key",
+            "type": "tensor"
+          },
+          {
+            "id": "value",
+            "name": "Value",
             "type": "tensor"
           }
         ],
@@ -236,23 +480,195 @@
       }
     },
     {
-      "id": "custom_module_17e4cf11",
+      "id": "fused",
       "type": "custom",
       "position": {
         "x": 1900,
         "y": 250.0
       },
       "data": {
-        "block_id": "custom_module",
-        "label": "Node_mu1k1bi5_ux9bz",
+        "block_id": "add",
+        "label": "Add",
+        "is_functional": true,
+        "paramValues": {
+          "scalar_a": null,
+          "scalar_b": null
+        },
+        "varName": "fused",
+        "custom_module_id": "",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "scalar_a",
+            "type": "string",
+            "default": null,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Scalar left operand"
+          },
+          {
+            "name": "scalar_b",
+            "type": "string",
+            "default": null,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Scalar right operand"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fusion_norm",
+      "type": "custom",
+      "position": {
+        "x": 2200,
+        "y": 250.0
+      },
+      "data": {
+        "block_id": "layernorm",
+        "label": "LayerNorm",
         "is_functional": false,
         "paramValues": {
-          "d_model": 512,
-          "d_ff": 2048,
-          "d_k": 64
+          "eps": 1e-05,
+          "normalized_shape": 512
         },
-        "varName": "",
-        "custom_module_id": "modules/transformer_block",
+        "varName": "fused",
+        "custom_module_id": "",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "norm_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "normalized_shape",
+            "type": "string",
+            "default": "?",
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Input shape from an expected size, auto-inferred from input."
+          },
+          {
+            "name": "eps",
+            "type": "float",
+            "default": 1e-05,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Value added to the denominator for numerical stability"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fused_2",
+      "type": "custom",
+      "position": {
+        "x": 2800,
+        "y": 250.0
+      },
+      "data": {
+        "block_id": "add",
+        "label": "Add",
+        "is_functional": true,
+        "paramValues": {
+          "scalar_a": null,
+          "scalar_b": null
+        },
+        "varName": "fused",
+        "custom_module_id": "",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Inputs",
+            "type": "tensor",
+            "is_list": true,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Out",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "sum_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "scalar_a",
+            "type": "string",
+            "default": null,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Scalar left operand"
+          },
+          {
+            "name": "scalar_b",
+            "type": "string",
+            "default": null,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Scalar right operand"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fusion_mlp",
+      "type": "custom",
+      "position": {
+        "x": 2500,
+        "y": 150.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "Sequential",
+        "is_functional": false,
+        "paramValues": {
+          "param_0": "nn.Linear(512, 1024)",
+          "param_1": "nn.GELU()",
+          "param_2": "nn.Dropout(0.15)",
+          "param_3": "nn.Linear(1024, 512)"
+        },
+        "varName": "fusion_mlp",
+        "custom_module_id": "sequential",
         "inputs": [
           {
             "id": "in",
@@ -271,11 +687,102 @@
       }
     },
     {
-      "id": "output_85d918a9",
+      "id": "final_norm",
       "type": "custom",
       "position": {
-        "x": 2200,
+        "x": 3100,
         "y": 250.0
+      },
+      "data": {
+        "block_id": "layernorm",
+        "label": "LayerNorm",
+        "is_functional": false,
+        "paramValues": {
+          "eps": 1e-05,
+          "normalized_shape": 512
+        },
+        "varName": "fused",
+        "custom_module_id": "",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": null
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor",
+            "is_list": false,
+            "var_hint": "norm_out"
+          }
+        ],
+        "params": [
+          {
+            "name": "normalized_shape",
+            "type": "string",
+            "default": "?",
+            "read_only": false,
+            "auto_infer": true,
+            "section": "basic",
+            "description": "Input shape from an expected size, auto-inferred from input."
+          },
+          {
+            "name": "eps",
+            "type": "float",
+            "default": 1e-05,
+            "read_only": false,
+            "auto_infer": false,
+            "section": "advanced",
+            "description": "Value added to the denominator for numerical stability"
+          }
+        ]
+      }
+    },
+    {
+      "id": "prediction_head",
+      "type": "custom",
+      "position": {
+        "x": 100,
+        "y": 325.0
+      },
+      "data": {
+        "block_id": "custom_module",
+        "label": "PredictionHead",
+        "is_functional": false,
+        "paramValues": {
+          "input_dim": 512,
+          "num_classes": "@var:num_classes"
+        },
+        "varName": "output",
+        "custom_module_id": "modules/predictionhead",
+        "inputs": [
+          {
+            "id": "in",
+            "name": "Input",
+            "type": "tensor"
+          }
+        ],
+        "outputs": [
+          {
+            "id": "out",
+            "name": "Output",
+            "type": "tensor"
+          }
+        ],
+        "params": []
+      }
+    },
+    {
+      "id": "out",
+      "type": "custom",
+      "position": {
+        "x": 400,
+        "y": 400.0
       },
       "data": {
         "block_id": "output",
@@ -300,58 +807,146 @@
   ],
   "edges": [
     {
-      "id": "e_input_fc1eadf6_out_custom_module_64f6fdc3_in_0",
-      "source": "input_fc1eadf6",
+      "id": "e_in_out_patch_encoder_in_0",
+      "source": "in",
       "sourceHandle": "out",
-      "target": "custom_module_64f6fdc3",
+      "target": "patch_encoder",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_64f6fdc3_out_custom_module_247cb0c5_in_1",
-      "source": "custom_module_64f6fdc3",
+      "id": "e_patch_encoder_out_token_processor_in_1",
+      "source": "patch_encoder",
       "sourceHandle": "out",
-      "target": "custom_module_247cb0c5",
+      "target": "token_processor",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_247cb0c5_out_custom_module_33527ce5_in_2",
-      "source": "custom_module_247cb0c5",
+      "id": "e_token_processor_out_token_projection_in_2",
+      "source": "token_processor",
       "sourceHandle": "out",
-      "target": "custom_module_33527ce5",
+      "target": "token_projection",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_33527ce5_out_custom_module_6dab15c0_in_3",
-      "source": "custom_module_33527ce5",
+      "id": "e_in_out_conv_block_in_3",
+      "source": "in",
       "sourceHandle": "out",
-      "target": "custom_module_6dab15c0",
+      "target": "conv_block",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_6dab15c0_out_custom_module_1bb76b54_in_4",
-      "source": "custom_module_6dab15c0",
+      "id": "e_conv_block_out_conv_tokens_in_4",
+      "source": "conv_block",
       "sourceHandle": "out",
-      "target": "custom_module_1bb76b54",
+      "target": "conv_tokens",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_1bb76b54_out_custom_module_17e4cf11_in_5",
-      "source": "custom_module_1bb76b54",
+      "id": "e_conv_tokens_out_conv_tokens_2_in_5",
+      "source": "conv_tokens",
       "sourceHandle": "out",
-      "target": "custom_module_17e4cf11",
+      "target": "conv_tokens_2",
       "targetHandle": "in",
       "type": "tensor"
     },
     {
-      "id": "e_custom_module_17e4cf11_out_output_85d918a9_in_6",
-      "source": "custom_module_17e4cf11",
+      "id": "e_conv_tokens_2_out_conv_projection_in_6",
+      "source": "conv_tokens_2",
       "sourceHandle": "out",
-      "target": "output_85d918a9",
+      "target": "conv_projection",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_token_projection_out_cross_attention_query_7",
+      "source": "token_projection",
+      "sourceHandle": "out",
+      "target": "cross_attention",
+      "targetHandle": "query",
+      "type": "tensor"
+    },
+    {
+      "id": "e_conv_projection_out_cross_attention_key_8",
+      "source": "conv_projection",
+      "sourceHandle": "out",
+      "target": "cross_attention",
+      "targetHandle": "key",
+      "type": "tensor"
+    },
+    {
+      "id": "e_conv_projection_out_cross_attention_value_9",
+      "source": "conv_projection",
+      "sourceHandle": "out",
+      "target": "cross_attention",
+      "targetHandle": "value",
+      "type": "tensor"
+    },
+    {
+      "id": "e_token_projection_out_fused_in_10",
+      "source": "token_projection",
+      "sourceHandle": "out",
+      "target": "fused",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_cross_attention_out_fused_in_11",
+      "source": "cross_attention",
+      "sourceHandle": "out",
+      "target": "fused",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_fused_out_fusion_norm_in_12",
+      "source": "fused",
+      "sourceHandle": "out",
+      "target": "fusion_norm",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_fusion_norm_out_fusion_mlp_in_13",
+      "source": "fusion_norm",
+      "sourceHandle": "out",
+      "target": "fusion_mlp",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_fusion_norm_out_fused_2_in_14",
+      "source": "fusion_norm",
+      "sourceHandle": "out",
+      "target": "fused_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_fusion_mlp_out_fused_2_in_15",
+      "source": "fusion_mlp",
+      "sourceHandle": "out",
+      "target": "fused_2",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_fused_2_out_final_norm_in_16",
+      "source": "fused_2",
+      "sourceHandle": "out",
+      "target": "final_norm",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_prediction_head_out_out_in_17",
+      "source": "prediction_head",
+      "sourceHandle": "out",
+      "target": "out",
       "targetHandle": "in",
       "type": "tensor"
     }

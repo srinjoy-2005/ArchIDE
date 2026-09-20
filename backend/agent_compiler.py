@@ -949,7 +949,7 @@ def main():
         errors = []
         for root, _, files in os.walk(ir_dir):
             for f in sorted(files):
-                if f.endswith(".ir.json") or f.endswith(".json"):
+                if f.endswith(".ir.json"):
                     ir_file = os.path.join(root, f)
                     rel_subpath = os.path.relpath(ir_file, ir_dir)
                     stem = rel_subpath.replace(".ir.json", "").replace(".json", "")
