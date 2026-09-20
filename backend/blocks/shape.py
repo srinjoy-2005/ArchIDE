@@ -81,12 +81,21 @@ class ReshapeBlock(BaseBlock):
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         in_shape = input_shapes.get("in", ("ANY",))
-        shape_str = params.get("shape", "(-1,)")
+        shape_val = params.get("shape", "(-1,)")
         
+        if isinstance(shape_val, (tuple, list)):
+            return {"out": tuple(s if isinstance(s, int) else "ANY" for s in shape_val)}
+
         try:
-            clean = "".join(c for c in str(shape_str) if c.isdigit() or c == ',' or c == '-')
-            shape = tuple(int(s) for s in clean.split(",") if s)
-            return {"out": shape if shape else ("ANY",)}
+            raw = str(shape_val).strip("()[] ")
+            parts = [p.strip() for p in raw.split(",") if p.strip()]
+            parsed = []
+            for p in parts:
+                if p == "-1" or p.isdigit() or (p.startswith("-") and p[1:].isdigit()):
+                    parsed.append(int(p))
+                else:
+                    parsed.append("ANY")
+            return {"out": tuple(parsed) if parsed else ("ANY",)}
         except Exception:
             return {"out": ("ANY",)}
 
@@ -96,6 +105,9 @@ class ReshapeBlock(BaseBlock):
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         in_var = input_vars.get("in", "None")
-        shape_str = params.get("shape", "-1")
-        clean = "".join(c for c in str(shape_str) if c.isdigit() or c == ',' or c == '-')
-        return f"{out_var} = {in_var}.reshape({clean})"
+        shape_val = params.get("shape", "-1")
+        if isinstance(shape_val, (tuple, list)):
+            args_str = ", ".join(str(s) for s in shape_val)
+        else:
+            args_str = str(shape_val).strip("()[] ")
+        return f"{out_var} = {in_var}.reshape({args_str})"

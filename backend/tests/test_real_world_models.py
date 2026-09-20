@@ -133,25 +133,74 @@ def copy_weights_and_buffers(orig: nn.Module, gen: nn.Module) -> None:
     """
     Robustly copies parameters and buffers from the original module to the recompiled module.
     Attempts matching by:
-    1. Child-by-child matching for structured modular networks (Conv2d, BatchNorm2d, Linear, etc.)
-    2. Exact parameter name match (e.g. 'fc.weight' -> 'fc.weight')
-    3. Direct flat parameter/buffer sequence alignment as robust fallback
+    1. Name-based leaf module matching (matching original attribute names to generated layer names)
+    2. Leaf submodule signature matching (module type, parameter shapes, buffer shapes)
+    3. Fallback matching by parameter/buffer shape sequence
     """
-    orig_children = [c for c in orig.children() if list(c.parameters()) or list(c.buffers())]
-    gen_children = [c for c in gen.children() if list(c.parameters()) or list(c.buffers())]
+    orig_named_leaves = {
+        name: m for name, m in orig.named_modules()
+        if not list(m.children()) and (list(m.parameters()) or list(m.buffers()))
+    }
+    gen_named_leaves = {
+        name: m for name, m in gen.named_modules()
+        if not list(m.children()) and (list(m.parameters()) or list(m.buffers()))
+    }
 
-    if len(orig_children) == len(gen_children) and len(orig_children) > 0:
-        for c1, c2 in zip(orig_children, gen_children):
-            for p1, p2 in zip(c1.parameters(), c2.parameters()):
-                if p1.shape == p2.shape:
+    used_gen_leaves = set()
+
+    # Pass 1: Name-based matching for leaves
+    for o_name, o_mod in orig_named_leaves.items():
+        o_clean = o_name.split(".")[-1].lower()
+        for g_name, g_mod in gen_named_leaves.items():
+            if g_name in used_gen_leaves:
+                continue
+            g_clean = g_name.split(".")[-1].lower()
+            if o_clean and (o_clean in g_clean or g_clean in o_clean):
+                if (
+                    type(o_mod) == type(g_mod)
+                    and tuple(p.shape for p in o_mod.parameters()) == tuple(p.shape for p in g_mod.parameters())
+                    and tuple(b.shape for b in o_mod.buffers()) == tuple(b.shape for b in g_mod.buffers())
+                ):
+                    used_gen_leaves.add(g_name)
+                    for p1, p2 in zip(o_mod.parameters(), g_mod.parameters()):
+                        with torch.no_grad():
+                            p2.copy_(p1)
+                    for b1, b2 in zip(o_mod.buffers(), g_mod.buffers()):
+                        with torch.no_grad():
+                            b2.copy_(b1)
+                    break
+
+    # Pass 2: Signature-based matching for remaining unmatched leaves
+    unmatched_orig = [
+        m for name, m in orig_named_leaves.items()
+        if not any(
+            g_name in used_gen_leaves and (name.split(".")[-1].lower() in g_name.lower() or g_name.lower() in name.split(".")[-1].lower())
+            for g_name in gen_named_leaves
+        )
+    ]
+    unmatched_gen = [
+        (name, m) for name, m in gen_named_leaves.items()
+        if name not in used_gen_leaves
+    ]
+
+    for m1 in unmatched_orig:
+        sig1 = (type(m1), tuple(p.shape for p in m1.parameters()), tuple(b.shape for b in m1.buffers()))
+        for g_name, m2 in unmatched_gen:
+            if g_name in used_gen_leaves:
+                continue
+            sig2 = (type(m2), tuple(p.shape for p in m2.parameters()), tuple(b.shape for b in m2.buffers()))
+            if sig1 == sig2:
+                used_gen_leaves.add(g_name)
+                for p1, p2 in zip(m1.parameters(), m2.parameters()):
                     with torch.no_grad():
                         p2.copy_(p1)
-            for b1, b2 in zip(c1.buffers(), c2.buffers()):
-                if b1.shape == b2.shape:
+                for b1, b2 in zip(m1.buffers(), m2.buffers()):
                     with torch.no_grad():
                         b2.copy_(b1)
-    else:
-        # Direct parameter/buffer match
+                break
+
+    # Pass 3: Fallback by shape sequence if any parameters were not covered
+    if len(used_gen_leaves) < len(orig_named_leaves) or len(orig_named_leaves) == 0:
         orig_params = list(orig.parameters())
         gen_params = list(gen.parameters())
         for p1, p2 in zip(orig_params, gen_params):
@@ -219,7 +268,7 @@ def assert_roundtrip_numerical_equivalence(
             ir_payload["nodes"][nid].setdefault("params", {})["shape"] = str(in_shapes[idx])
 
     # Step 2: Compile IR to code
-    compiler = AgentGraphCompiler(ir_payload, workspace_dir=workspace_dir)
+    compiler = AgentGraphCompiler(ir_payload, workspace_dir=workspace_dir, all_irs=all_irs)
     compiled_arch = compiler.compile()
     val_res = compiler.validate(compiled_arch)
     gen_code = val_res["code"]

@@ -54,6 +54,7 @@ class GraphData(BaseModel):
     parameters: List[ParamDef] = []
     nodes: List[Node]
     edges: List[Edge]
+    attributes: Dict[str, Any] = {}
 
 class CompileRequest(BaseModel):
     main_graph_id: str

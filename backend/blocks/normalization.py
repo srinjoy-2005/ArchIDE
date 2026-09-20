@@ -130,3 +130,53 @@ class DropoutBlock(BaseBlock):
         in_var = input_vars.get("in", "None")
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         return f"{out_var} = {layer_name}({in_var})"
+
+
+class BatchNorm1DBlock(BaseBlock):
+    @property
+    def definition(self) -> BlockDef:
+        return BlockDef(
+            id="batchnorm1d",
+            name="BatchNorm1D",
+            category="Normalization",
+            color="#0ea5e9",
+            is_functional=False,
+            inputs=[PortDef(id="in", name="Input")],
+            outputs=[PortDef(id="out", name="Output", var_hint="norm_out")],
+            params=[
+                ParamDef(name="num_features", type="int", default=1, auto_infer=True, section="basic", description="Number of features/channels in the input."),
+                ParamDef(name="eps", type="float", default=1e-05, section="advanced", description="Value added to the denominator for numerical stability"),
+                ParamDef(name="momentum", type="float", default=0.1, section="advanced", description="Value used for the running_mean and running_var computation")
+            ]
+        )
+
+    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        in_shape = input_shapes.get("in")
+        if not in_shape:
+            return {"out": ("ANY",)}
+
+        num_features = params.get("num_features", -1)
+        if num_features == -1 and len(in_shape) > 1 and in_shape[1] != "ANY":
+            num_features = in_shape[1]
+            params["num_features"] = num_features
+
+        if len(in_shape) > 1 and in_shape[1] != "ANY" and in_shape[1] != num_features:
+            raise ValueError(f"BatchNorm1D expected {num_features} channels, but got {in_shape[1]}")
+
+        return {"out": in_shape}
+
+    def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
+        layer_name = f"self.layer_{node_id.replace('-', '_')}"
+        num_features = params.get("num_features", 1)
+        if num_features == -1:
+            num_features = 1
+        eps = params.get("eps", 1e-05)
+        momentum = params.get("momentum", 0.1)
+        return f"{layer_name} = nn.BatchNorm1d({num_features}, eps={eps}, momentum={momentum})"
+
+    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+        layer_name = f"self.layer_{node_id.replace('-', '_')}"
+        in_var = input_vars.get("in", "None")
+        out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
+        return f"{out_var} = {layer_name}({in_var})"
+

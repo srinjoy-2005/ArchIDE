@@ -120,7 +120,13 @@ class LinearBlock(BaseBlock):
         if isinstance(out_features, int) and out_features <= 0:
             raise ValueError(f"Linear: out_features must be greater than 0, got {out_features}")
 
-        if in_features != "LAZY" and len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
+        if (
+            in_features != "LAZY"
+            and not (isinstance(in_features, str) and in_features.startswith("@var:"))
+            and len(in_shape) > 0
+            and in_shape[-1] != "ANY"
+            and in_shape[-1] != in_features
+        ):
             raise ValueError(
                 f"Linear: expected in_features={in_features}, "
                 f"but input last dim is {in_shape[-1]}."

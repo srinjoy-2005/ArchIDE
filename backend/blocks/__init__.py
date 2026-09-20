@@ -6,7 +6,7 @@ from .tensor_ops import (
     MatMulBlock, UnsqueezeBlock, CatBlock, SplitBlock, TransposeBlock
 )
 from .pooling import MaxPool2DBlock, AvgPool2DBlock, AdaptiveAvgPool2DBlock
-from .normalization import BatchNorm2DBlock, LayerNormBlock, DropoutBlock
+from .normalization import BatchNorm1DBlock, BatchNorm2DBlock, LayerNormBlock, DropoutBlock
 from .shape import FlattenBlock, ReshapeBlock
 from .trig import SinBlock, CosBlock
 from .generators import ArangeBlock
@@ -31,6 +31,7 @@ _BLOCK_INSTANCES = [
     MaxPool2DBlock(),
     AvgPool2DBlock(),
     AdaptiveAvgPool2DBlock(),
+    BatchNorm1DBlock(),
     BatchNorm2DBlock(),
     LayerNormBlock(),
     DropoutBlock(),

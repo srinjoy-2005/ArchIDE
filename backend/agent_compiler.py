@@ -1,4 +1,5 @@
 import argparse
+import copy
 import json
 import os
 import sys
@@ -14,6 +15,9 @@ from compiler import (
     generate_pytorch_code,
     ShapeError,
     topological_sort,
+    topological_sort_graphs,
+    _to_pascal_case,
+    _sanitize,
 )
 
 def generate_id(prefix: str = "") -> str:
@@ -26,12 +30,18 @@ class AgentGraphCompiler:
     a complete, UI-compatible ArchIDE .arch (React Flow) JSON structure.
     """
 
-    def __init__(self, ir_payload: Dict[str, Any], workspace_dir: Optional[str] = None):
+    def __init__(
+        self,
+        ir_payload: Dict[str, Any],
+        workspace_dir: Optional[str] = None,
+        all_irs: Optional[Dict[str, Any]] = None,
+    ):
         self.ir = ir_payload
         self.name = self.ir.get("name", "Generated Graph")
         self.workspace_dir = workspace_dir or os.path.abspath(
             os.path.join(os.path.dirname(__file__), "../workspace/graphs")
         )
+        self.all_irs = all_irs or {}
 
         # Support both 'variables' and legacy 'hyperparameters' / 'parameters'
         self.variables = self.ir.get("variables", [])
@@ -147,7 +157,29 @@ class AgentGraphCompiler:
             return [{"id": "in", "name": "Input", "type": "tensor"}], [{"id": "out", "name": "Output", "type": "tensor"}]
 
         stem = os.path.splitext(os.path.basename(custom_module_id))[0]
-        
+
+        # Check in-memory all_irs first
+        if self.all_irs:
+            for k in (custom_module_id, stem, custom_module_id.lower(), stem.lower()):
+                if k in self.all_irs:
+                    data = self.all_irs[k]
+                    inputs, outputs = [], []
+                    raw_nodes = data.get("nodes", {})
+                    if isinstance(raw_nodes, dict):
+                        for node_id, n_info in raw_nodes.items():
+                            b_id = n_info.get("block") or n_info.get("block_id")
+                            if b_id in {"input", "gourav"}:
+                                lbl = n_info.get("var_name") or node_id or "Input"
+                                inputs.append({"id": node_id, "name": lbl, "type": "tensor"})
+                            elif b_id == "output":
+                                lbl = n_info.get("var_name") or node_id or "Output"
+                                outputs.append({"id": node_id, "name": lbl, "type": "tensor"})
+                    if inputs or outputs:
+                        return (
+                            inputs or [{"id": "in", "name": "Input", "type": "tensor"}],
+                            outputs or [{"id": "out", "name": "Output", "type": "tensor"}],
+                        )
+
         # Check candidate locations
         search_dirs = [self.workspace_dir] if self.workspace_dir else []
         if self.workspace_dir:
@@ -245,7 +277,8 @@ class AgentGraphCompiler:
             label = node_info.get("label") or alias.capitalize()
             var_name = node_info.get("var_name") or node_info.get("varName") or ""
 
-            real_id = generate_id(block_id)
+            clean_alias = _sanitize(alias) if alias else ""
+            real_id = clean_alias or generate_id(block_id)
             self.node_ids[alias] = real_id
             x, y = coords.get(alias, (100.0, 100.0))
 
@@ -393,6 +426,7 @@ class AgentGraphCompiler:
             "name": self.name,
             "variables": self.variables,
             "parameters": self.variables,  # Backwards compatibility
+            "attributes": self.ir.get("attributes", {}),
             "nodes": list(self.nodes_data.values()),
             "edges": self.edges_data,
         }
@@ -450,44 +484,58 @@ class AgentGraphCompiler:
                 variables=var_models,
                 nodes=nodes_list,
                 edges=edges_list,
+                attributes=graph_dict.get("attributes", {}),
             )
         }
 
-        # Only load dependent graphs from workspace if needed
+        # Only load dependent graphs from workspace or all_irs if needed
         needed_deps = {n.data.custom_module_id for n in nodes_list if n.data.custom_module_id}
         while needed_deps:
             curr_dep = needed_deps.pop()
-            if curr_dep in graphs or not self.workspace_dir:
+            if curr_dep in graphs:
                 continue
 
             dep_stem = curr_dep.split("/")[-1]
-            candidates = [
-                os.path.join(self.workspace_dir, f"{curr_dep}.arch"),
-                os.path.join(self.workspace_dir, f"{curr_dep}.ir.json"),
-                os.path.join(self.workspace_dir, f"{curr_dep}.json"),
-                os.path.join(self.workspace_dir, curr_dep),
-                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.arch"),
-                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.ir.json"),
-                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.json"),
-                os.path.join(self.workspace_dir, "ir", "modules", f"{dep_stem}.ir.json"),
-                os.path.join(self.workspace_dir, "ir", f"{dep_stem}.ir.json"),
-                os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.arch"),
-                os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.json"),
-                os.path.join(os.path.dirname(self.workspace_dir), "graphs", f"{dep_stem}.arch"),
-                os.path.join(os.path.dirname(self.workspace_dir), "ir", "modules", f"{dep_stem}.ir.json"),
-            ]
-            loaded_path = None
-            for p in candidates:
-                if os.path.isfile(p):
-                    loaded_path = p
-                    break
+            g_json = None
+            if self.all_irs:
+                for k in (curr_dep, dep_stem, curr_dep.lower(), dep_stem.lower()):
+                    if k in self.all_irs:
+                        g_json = copy.deepcopy(self.all_irs[k])
+                        break
 
-            if loaded_path:
+            if g_json is None and self.workspace_dir:
+                candidates = [
+                    os.path.join(self.workspace_dir, f"{curr_dep}.arch"),
+                    os.path.join(self.workspace_dir, f"{curr_dep}.ir.json"),
+                    os.path.join(self.workspace_dir, f"{curr_dep}.json"),
+                    os.path.join(self.workspace_dir, curr_dep),
+                    os.path.join(self.workspace_dir, "modules", f"{dep_stem}.arch"),
+                    os.path.join(self.workspace_dir, "modules", f"{dep_stem}.ir.json"),
+                    os.path.join(self.workspace_dir, "modules", f"{dep_stem}.json"),
+                    os.path.join(self.workspace_dir, "ir", "modules", f"{dep_stem}.ir.json"),
+                    os.path.join(self.workspace_dir, "ir", f"{dep_stem}.ir.json"),
+                    os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.arch"),
+                    os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.json"),
+                    os.path.join(os.path.dirname(self.workspace_dir), "graphs", f"{dep_stem}.arch"),
+                    os.path.join(os.path.dirname(self.workspace_dir), "ir", "modules", f"{dep_stem}.ir.json"),
+                ]
+                loaded_path = None
+                for p in candidates:
+                    if os.path.isfile(p):
+                        loaded_path = p
+                        break
+
+                if loaded_path:
+                    try:
+                        with open(loaded_path, "r", encoding="utf-8") as g_file:
+                            g_json = json.load(g_file)
+                    except Exception:
+                        g_json = None
+
+            if g_json:
                 try:
-                    with open(loaded_path, "r", encoding="utf-8") as g_file:
-                        g_json = json.load(g_file)
                     if isinstance(g_json.get("nodes"), dict):
-                        g_json = AgentGraphCompiler(g_json, workspace_dir=self.workspace_dir).compile()
+                        g_json = AgentGraphCompiler(g_json, workspace_dir=self.workspace_dir, all_irs=self.all_irs).compile()
                     g_nodes = [
                         Node(
                             id=gn["id"],
@@ -526,11 +574,14 @@ class AgentGraphCompiler:
                         if isinstance(v, dict)
                     ]
                     graphs[curr_dep] = GraphData(
-                        name=g_json.get("name", curr_dep),
+                        name=g_json.get("class_name") or g_json.get("name", dep_stem),
                         variables=g_vars,
                         nodes=g_nodes,
                         edges=g_edges,
+                        attributes=g_json.get("attributes", {}),
                     )
+                    if dep_stem != curr_dep:
+                        graphs[dep_stem] = graphs[curr_dep]
                     # Add any nested dependencies
                     for gn in g_nodes:
                         if gn.data.custom_module_id and gn.data.custom_module_id not in graphs:
@@ -544,8 +595,48 @@ class AgentGraphCompiler:
         # 2. PyTorch Code generation validation
         compiled_files, _, _ = generate_pytorch_code(graphs, main_graph_id)
 
-        # 3. Python Syntax Verification
+        # 3. Python Syntax Verification & Self-Contained Execution Assembly
         main_py_code = compiled_files.get(main_graph_id, "")
+        if len(graphs) > 1:
+            sorted_gids = topological_sort_graphs(graphs)
+            dep_codes = []
+            seen_classes = set()
+            for gid in sorted_gids:
+                if gid != main_graph_id and gid in compiled_files:
+                    cls_key = graphs[gid].name
+                    if cls_key in seen_classes:
+                        continue
+                    seen_classes.add(cls_key)
+                    dep_code = compiled_files[gid]
+                    dep_lines = [
+                        line for line in dep_code.splitlines()
+                        if not line.startswith("import ") and not line.startswith("from ")
+                    ]
+                    dep_codes.append("\n".join(dep_lines).strip())
+
+            main_lines = []
+            for line in main_py_code.splitlines():
+                is_sub_import = False
+                for gid in graphs:
+                    if gid != main_graph_id:
+                        dep_name = _to_pascal_case(graphs[gid].name)
+                        if f"import {dep_name}" in line or f"import {graphs[gid].name}" in line:
+                            is_sub_import = True
+                            break
+                if not is_sub_import:
+                    main_lines.append(line)
+
+            import_end_idx = 0
+            for idx, line in enumerate(main_lines):
+                if line.startswith("import ") or line.startswith("from "):
+                    import_end_idx = idx + 1
+
+            header_lines = main_lines[:import_end_idx]
+            body_lines = main_lines[import_end_idx:]
+
+            combined_code = "\n".join(header_lines) + "\n\n" + "\n\n".join(dep_codes) + "\n\n" + "\n".join(body_lines)
+            main_py_code = combined_code
+
         compile(main_py_code, f"<{self.name}>", "exec")
 
         return {

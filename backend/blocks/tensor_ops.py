@@ -263,6 +263,15 @@ class TransposeBlock(BaseBlock):
         in_shape = input_shapes.get("in", ("ANY",))
         if in_shape == ("ANY",):
             return {"out": ("ANY",)}
+
+        dims = params.get("dims")
+        if dims and isinstance(dims, (tuple, list)):
+            try:
+                norm_dims = [d if d >= 0 else d + len(in_shape) for d in dims]
+                out_shape = [in_shape[d] for d in norm_dims]
+                return {"out": tuple(out_shape)}
+            except Exception:
+                return {"out": ("ANY",)}
             
         dim0 = params.get("dim0", -2)
         dim1 = params.get("dim1", -1)
@@ -286,6 +295,9 @@ class TransposeBlock(BaseBlock):
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         in_var = input_vars.get("in", "None")
+        dims = params.get("dims")
+        if dims and isinstance(dims, (tuple, list)):
+            return f"{out_var} = {in_var}.permute({', '.join(str(d) for d in dims)})"
         dim0 = params.get("dim0", -2)
         dim1 = params.get("dim1", -1)
         return f"{out_var} = {in_var}.transpose({dim0}, {dim1})"

@@ -9,8 +9,8 @@ import re
 
 def _sanitize(label: str) -> str:
     """Turn a block label into a valid Python identifier fragment."""
-    s = label.strip().lower()
-    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = label.strip()
+    s = re.sub(r"[^a-zA-Z0-9_]+", "_", s)
     s = s.strip("_")
     return s or "var"
 
@@ -38,7 +38,7 @@ def _to_pascal_case(name: str) -> str:
 
 def _label_to_identifier(label: str) -> str:
     """Turn a user-provided node name into a clean Python snake_case identifier."""
-    s = _sanitize(label)
+    s = _sanitize(label).lower()
     if not s or s[0].isdigit():
         s = "x_" + s
     return s
@@ -103,8 +103,8 @@ def _resolve_custom_dep(node: Node, graphs: Dict[str, Any]) -> Optional[str]:
         g_stem = g_path.replace(".arch", "").split("/")[-1]
         if (
             (dep_id and (dep_id == g_path or dep_id == g_name or dep_id in g_path))
-            or (clean_dep and (clean_dep == g_stem or clean_dep == g_name))
-            or (label and (label == g_path or label == g_name or label == g_stem or label in g_path or g_stem in label))
+            or (clean_dep and (clean_dep == g_stem or clean_dep == g_name or clean_dep.lower() == g_stem.lower() or clean_dep.lower() == g_name.lower()))
+            or (label and (label == g_path or label == g_name or label == g_stem or label in g_path or g_stem in label or label.lower() == g_stem.lower() or label.lower() == g_name.lower()))
         ):
             return g_path
     return None
@@ -724,7 +724,10 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
     for gid in sorted_gids:
         graph_data = graphs[gid]
         is_main = (gid == main_graph_id)
-        class_name = _to_pascal_case(graph_data.name) if not is_main else "Model"
+        if is_main and (gid == "main" or len(graphs) == 1 or graph_data.name.lower() in ("main", "model", "")):
+            class_name = "Model"
+        else:
+            class_name = _to_pascal_case(graph_data.name)
         if not class_name:
             class_name = f"Module_{gid[:8]}"
             
@@ -821,6 +824,22 @@ def _generate_single_graph_code(
     for v in init_params:
         code.append(f"        self.{v.name} = {v.name}")
 
+    # Emit non-layer self.attributes (e.g. self.head_dim, self.scale)
+    init_param_names = {v.name for v in init_params}
+    var_name_to_scope_init = {v.name: v.scope for v in variables}
+    def replace_var_init(match):
+        var_name = match.group(1)
+        scope = var_name_to_scope_init.get(var_name, "init_param")
+        return f"self.{var_name}" if scope == "init_param" else var_name.upper()
+
+    for attr_name, attr_val in getattr(graph_data, "attributes", {}).items():
+        if attr_name not in init_param_names:
+            if isinstance(attr_val, str):
+                formatted_val = re.sub(r'@var:([a-zA-Z0-9_]+)', replace_var_init, attr_val)
+            else:
+                formatted_val = repr(attr_val)
+            code.append(f"        self.{attr_name} = {formatted_val}")
+
     init_lines: List[str] = []
 
     var_map = _build_input_var_map(sorted_nodes)
@@ -855,20 +874,27 @@ def _generate_single_graph_code(
             continue
 
         if not block.definition.is_functional:
+            raw_var = getattr(node.data, "varName", "") or ""
+            clean_var = _sanitize(raw_var) if raw_var and raw_var.lower() not in ("custom", "custom_module", "sequential", "input", "output") else ""
             raw_lbl = getattr(node.data, "label", "") or ""
             clean_lbl = _sanitize(raw_lbl) if raw_lbl and raw_lbl.lower() not in ("custom", "custom_module", "sequential", "input", "output") else ""
             if not clean_lbl and getattr(node.data, "custom_module_id", ""):
                 clean_lbl = _sanitize(node.data.custom_module_id.split("/")[-1])
             
-            if clean_lbl:
-                member_cand = clean_lbl
-            elif block_id in ("linear", "conv1d", "conv2d", "embedding", "layernorm", "batchnorm2d", "maxpool2d", "avgpool2d", "adaptiveavgpool2d", "dropout", "relu", "gelu", "silu", "sigmoid", "tanh", "softmax"):
-                member_cand = f"layer_{_sanitize(raw_lbl or block_id)}"
+            if clean_var:
+                member_cand = clean_var
+            elif clean_lbl:
+                member_cand = clean_lbl.lower()
+            elif block_id in ("linear", "conv1d", "conv2d", "embedding", "layernorm", "batchnorm1d", "batchnorm2d", "maxpool2d", "avgpool2d", "adaptiveavgpool2d", "dropout", "relu", "gelu", "silu", "sigmoid", "tanh", "softmax"):
+                member_cand = f"layer_{_sanitize(raw_lbl or block_id).lower()}"
             else:
                 member_cand = f"custom_{node.id.replace('-', '_')}"
             
-            if member_cand in used_member_names:
-                member_cand = f"{member_cand}_{node.id[:4]}"
+            base_cand = member_cand
+            cand_count = 1
+            while member_cand in used_member_names:
+                cand_count += 1
+                member_cand = f"{base_cand}_{cand_count}"
             used_member_names.add(member_cand)
             node_member_map[node.id] = f"self.{member_cand}"
 

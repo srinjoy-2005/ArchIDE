@@ -27,7 +27,7 @@ LAYER_MAP: Dict[str, Tuple[str, List[str], Dict[str, Any]]] = {
     "Softmax": ("softmax", ["dim"], {"dim": -1}),
     "LayerNorm": ("layernorm", ["normalized_shape", "eps"], {"eps": 1e-05}),
     "BatchNorm2d": ("batchnorm2d", ["num_features", "eps", "momentum"], {"eps": 1e-05, "momentum": 0.1}),
-    "BatchNorm1d": ("batchnorm2d", ["num_features", "eps", "momentum"], {"eps": 1e-05, "momentum": 0.1}),
+    "BatchNorm1d": ("batchnorm1d", ["num_features", "eps", "momentum"], {"eps": 1e-05, "momentum": 0.1}),
     "Dropout": ("dropout", ["p", "inplace"], {"p": 0.5, "inplace": False}),
     "MaxPool2d": ("maxpool2d", ["kernel_size", "stride", "padding", "dilation"], {"stride": 2, "padding": 0, "dilation": 1}),
     "AvgPool2d": ("avgpool2d", ["kernel_size", "stride", "padding"], {"stride": 2, "padding": 0}),
@@ -101,13 +101,16 @@ def _eval_ast_literal(node: ast.AST, init_vars: Set[str]) -> Any:
     if isinstance(node, ast.BinOp):
         left = _eval_ast_literal(node.left, init_vars)
         right = _eval_ast_literal(node.right, init_vars)
-        op_map = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/"}
+        op_map = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.FloorDiv: "//", ast.Mod: "%", ast.Pow: "**"}
         op_str = op_map.get(type(node.op), "+")
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             if isinstance(node.op, ast.Add): return left + right
             if isinstance(node.op, ast.Sub): return left - right
             if isinstance(node.op, ast.Mult): return left * right
             if isinstance(node.op, ast.Div): return left / right
+            if isinstance(node.op, ast.FloorDiv): return left // right
+            if isinstance(node.op, ast.Mod): return left % right
+            if isinstance(node.op, ast.Pow): return left ** right
         return f"{left} {op_str} {right}"
     if isinstance(node, ast.Call):
         func_name = ast.unparse(node.func)
@@ -115,7 +118,9 @@ def _eval_ast_literal(node: ast.AST, init_vars: Set[str]) -> Any:
         if func_name in ("math.sqrt", "sqrt") and args and isinstance(args[0], (int, float)):
             import math
             return math.sqrt(args[0])
-        args_str = ", ".join(str(a) for a in args)
+        kwargs = [f"{kw.arg}={_eval_ast_literal(kw.value, init_vars)}" for kw in node.keywords if kw.arg]
+        all_args = [str(a) for a in args] + kwargs
+        args_str = ", ".join(all_args)
         return f"{func_name}({args_str})"
     try:
         return ast.unparse(node)
@@ -145,12 +150,15 @@ class PyTorchASTDecompiler:
         self.node_counters: Dict[str, int] = {}
         self.all_irs: Dict[str, Dict[str, Any]] = {}
         self.known_class_inits: Dict[str, List[str]] = {}
+        self.attributes: Dict[str, Any] = {}
 
     def _next_node_id(self, base_name: str) -> str:
         clean = re.sub(r'[^a-zA-Z0-9_]', '_', base_name).strip('_').lower() or "node"
         count = self.node_counters.get(clean, 0) + 1
         self.node_counters[clean] = count
-        if count == 1 and clean in {"in", "out", "input", "output", "flatten"}:
+        if clean in {"out", "output"}:
+            return f"out_{count}"
+        if count == 1 and clean in {"in", "input", "flatten"}:
             return clean
         return f"{clean}_{count}" if count > 1 else clean
 
@@ -482,10 +490,12 @@ class PyTorchASTDecompiler:
         model_name: str,
         module_classes: Optional[Dict[str, ast.ClassDef]] = None,
     ) -> Dict[str, Any]:
+        self.module_classes = module_classes or {}
         # Reset per-class state
         self.init_variables = []
         self.init_var_names = set()
         self.layer_instances = {}
+        self.attributes = {}
         self.nodes = {}
         self.edges = []
         self.env = {}
@@ -505,7 +515,9 @@ class PyTorchASTDecompiler:
 
         return {
             "name": model_name,
+            "class_name": module_class.name,
             "variables": list(self.init_variables),
+            "attributes": dict(self.attributes),
             "nodes": dict(self.nodes),
             "edges": list(self.edges),
         }
@@ -559,6 +571,10 @@ class PyTorchASTDecompiler:
                         attr_name = target.attr
                         if isinstance(stmt.value, ast.Call):
                             self._parse_layer_instantiation(attr_name, stmt.value)
+                        else:
+                            val = _eval_ast_literal(stmt.value, self.init_var_names)
+                            self.attributes[attr_name] = val
+                            self.init_var_names.add(attr_name)
 
     def _parse_layer_instantiation(self, attr_name: str, call: ast.Call) -> None:
         func_name = ast.unparse(call.func)
@@ -648,13 +664,61 @@ class PyTorchASTDecompiler:
                             list_layers.append({"block": s_block, "params": s_params, "class_name": sub_func, "is_custom": False})
                         else:
                             sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
-                            list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "class_name": sub_func, "is_custom": True})
+                            s_pos_names = self.known_class_inits.get(sub_func, [])
+                            s_params = {}
+                            for p_idx, p_arg in enumerate(elt.args):
+                                p_name = s_pos_names[p_idx] if p_idx < len(s_pos_names) else f"param_{p_idx}"
+                                s_params[p_name] = _eval_ast_literal(p_arg, self.init_var_names)
+                            for p_kw in elt.keywords:
+                                if p_kw.arg:
+                                    s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                            list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "params": s_params, "class_name": sub_func, "is_custom": True})
             elif call.args and isinstance(call.args[0], ast.ListComp):
                 elt = call.args[0].elt
+                repeat_count = 1
+                if call.args[0].generators:
+                    gen = call.args[0].generators[0]
+                    if isinstance(gen.iter, ast.Call) and ast.unparse(gen.iter.func) == "range":
+                        if gen.iter.args:
+                            r_arg = _eval_ast_literal(gen.iter.args[0], self.init_var_names)
+                            if isinstance(r_arg, str) and r_arg.startswith("@var:"):
+                                v_name = r_arg[5:]
+                                for v in self.init_variables:
+                                    if v["name"] == v_name and isinstance(v.get("default"), int):
+                                        repeat_count = v["default"]
+                                        break
+                            elif isinstance(r_arg, int):
+                                repeat_count = r_arg
+
                 if isinstance(elt, ast.Call):
                     sub_func = ast.unparse(elt.func).split(".")[-1]
-                    sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
-                    list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "class_name": sub_func, "is_custom": True})
+                    s_params = {}
+                    if sub_func in LAYER_MAP:
+                        s_block, s_pos_params, s_default_params = LAYER_MAP[sub_func]
+                        s_params = dict(s_default_params)
+                        for p_idx, p_arg in enumerate(elt.args):
+                            if p_idx < len(s_pos_params):
+                                s_params[s_pos_params[p_idx]] = _eval_ast_literal(p_arg, self.init_var_names)
+                        for p_kw in elt.keywords:
+                            if p_kw.arg:
+                                s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                        for _ in range(repeat_count):
+                            list_layers.append({"block": s_block, "params": dict(s_params), "class_name": sub_func, "is_custom": False})
+                    else:
+                        sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
+                        s_pos_names = self.known_class_inits.get(sub_func, [])
+                        if not s_pos_names and hasattr(self, "module_classes") and sub_func in self.module_classes:
+                            target_init = next((m for m in self.module_classes[sub_func].body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
+                            if target_init:
+                                s_pos_names = [a.arg for a in target_init.args.args[1:]]
+                        for p_idx, p_arg in enumerate(elt.args):
+                            p_name = s_pos_names[p_idx] if p_idx < len(s_pos_names) else f"param_{p_idx}"
+                            s_params[p_name] = _eval_ast_literal(p_arg, self.init_var_names)
+                        for p_kw in elt.keywords:
+                            if p_kw.arg:
+                                s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                        for _ in range(repeat_count):
+                            list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "params": dict(s_params), "class_name": sub_func, "is_custom": True})
 
             self.layer_instances[attr_name] = {
                 "block": "module_list",
@@ -685,6 +749,11 @@ class PyTorchASTDecompiler:
 
         # Parameter binding: map positional args to constructor argument names if known
         pos_param_names = self.known_class_inits.get(raw_class_name, [])
+        if not pos_param_names and hasattr(self, "module_classes") and raw_class_name in self.module_classes:
+            target_init = next((m for m in self.module_classes[raw_class_name].body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
+            if target_init:
+                pos_param_names = [a.arg for a in target_init.args.args[1:]]
+
         params = {}
         for kw in call.keywords:
             if kw.arg:
@@ -710,33 +779,42 @@ class PyTorchASTDecompiler:
 
             # Look ahead for first downstream layer to set a compatible input shape
             inferred_shape = "(1, 3, 224, 224)"
-            for stmt in func.body:
-                if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call):
-                    if any(isinstance(a, ast.Name) and a.id == arg_name for a in stmt.value.args):
-                        chain = self._extract_self_chain(stmt.value.func)
+            def _resolve_val(v, default_val=128):
+                if isinstance(v, str) and "@var:" in v:
+                    v_name = v.split("@var:")[-1]
+                    for iv in self.init_variables:
+                        if iv.get("name") == v_name:
+                            return iv.get("default", default_val)
+                    return default_val
+                return v if v is not None else default_val
+
+            for node in ast.walk(func):
+                if isinstance(node, ast.Call):
+                    if any(isinstance(a, ast.Name) and a.id == arg_name for a in node.args):
+                        chain = self._extract_self_chain(node.func)
                         if chain:
                             b_id, _, b_params = self._resolve_chain_layer(chain)
                             if b_id == "linear":
-                                in_feat = b_params.get("in_features", 128)
+                                in_feat = _resolve_val(b_params.get("in_features", 128), 128)
                                 inferred_shape = f"(1, {in_feat})"
                                 break
                             elif b_id == "conv2d":
-                                in_ch = b_params.get("in_channels", 3)
+                                in_ch = _resolve_val(b_params.get("in_channels", 3), 3)
                                 inferred_shape = f"(1, {in_ch}, 224, 224)"
                                 break
                             elif b_id == "conv1d":
-                                in_ch = b_params.get("in_channels", 3)
+                                in_ch = _resolve_val(b_params.get("in_channels", 3), 3)
                                 inferred_shape = f"(1, {in_ch}, 128)"
                                 break
                             elif b_id == "embedding":
                                 inferred_shape = "(1, 64)"
                                 break
                             elif b_id == "layernorm":
-                                n_shape = b_params.get("normalized_shape", 512)
+                                n_shape = _resolve_val(b_params.get("normalized_shape", 512), 512)
                                 inferred_shape = f"(1, 64, {n_shape})"
                                 break
                             elif b_id == "custom_module":
-                                d_m = b_params.get("d_model", 512)
+                                d_m = _resolve_val(b_params.get("d_model", 512), 512)
                                 inferred_shape = f"(1, 64, {d_m})"
                                 break
 
@@ -748,9 +826,70 @@ class PyTorchASTDecompiler:
 
         self._parse_statements(func.body)
 
+    def _eval_test_operand(self, node: ast.AST) -> Any:
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
+            attr = node.attr
+            if attr in self.layer_instances:
+                return self.layer_instances[attr]
+            if attr in self.attributes:
+                return self.attributes[attr]
+            return None
+        return _eval_ast_literal(node, self.init_var_names)
+
+    def _eval_condition(self, test: ast.AST) -> Optional[bool]:
+        if isinstance(test, ast.Compare):
+            left_val = self._eval_test_operand(test.left)
+            if len(test.ops) == 1 and len(test.comparators) == 1:
+                op = test.ops[0]
+                right_val = self._eval_test_operand(test.comparators[0])
+                if isinstance(op, ast.IsNot):
+                    return left_val is not right_val
+                elif isinstance(op, ast.Is):
+                    return left_val is right_val
+                elif isinstance(op, ast.Eq):
+                    return left_val == right_val
+                elif isinstance(op, ast.NotEq):
+                    return left_val != right_val
+        if isinstance(test, (ast.Attribute, ast.Name)):
+            val = self._eval_test_operand(test)
+            return bool(val)
+        if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+            sub = self._eval_condition(test.operand)
+            return not sub if sub is not None else None
+        return None
+
     def _parse_statements(self, statements: List[ast.AST]) -> None:
         for stmt in statements:
             if isinstance(stmt, ast.Assign):
+                # Check for tuple unpacking of x.shape or x.size(): B, N, C = x.shape
+                is_shape_val = False
+                shape_tensor_expr = None
+                if isinstance(stmt.value, ast.Attribute) and stmt.value.attr == "shape":
+                    is_shape_val = True
+                    shape_tensor_expr = stmt.value.value
+                elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute) and stmt.value.func.attr in ("size", "shape"):
+                    is_shape_val = True
+                    shape_tensor_expr = stmt.value.func.value
+
+                if is_shape_val and any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
+                    target_tuple = next(t for t in stmt.targets if isinstance(t, (ast.Tuple, ast.List)))
+                    src_node, src_port = self._parse_expr(shape_tensor_expr)
+                    extractor_id = self._next_node_id("shape_extractor")
+                    output_aliases = {}
+                    for idx, elt in enumerate(target_tuple.elts):
+                        if isinstance(elt, ast.Name):
+                            output_aliases[f"dim_{idx}"] = elt.id
+                            self.env[elt.id] = (extractor_id, f"dim_{idx}")
+                    self.nodes[extractor_id] = {
+                        "block": "shape_extractor",
+                        "params": {"_output_aliases": output_aliases} if output_aliases else {},
+                    }
+                    if src_node:
+                        self.edges.append(f"{src_node}.{src_port} -> {extractor_id}.in")
+                    continue
+
                 for target in stmt.targets:
                     if isinstance(target, ast.Name):
                         out_var = target.id
@@ -775,24 +914,26 @@ class PyTorchASTDecompiler:
                         self.env[out_var] = (src_node, src_port)
             elif isinstance(stmt, ast.Return):
                 self._parse_return(stmt.value)
+            elif isinstance(stmt, ast.If):
+                cond = self._eval_condition(stmt.test)
+                if cond is True:
+                    self._parse_statements(stmt.body)
+                elif cond is False:
+                    self._parse_statements(stmt.orelse)
+                else:
+                    self._parse_statements(stmt.body)
             elif isinstance(stmt, ast.For):
-                # Unroll for loops over module lists if simple
+                # Unroll for loops over module lists: for blk in self.blocks: x = blk(x)
                 if isinstance(stmt.iter, ast.Attribute) and isinstance(stmt.iter.value, ast.Name) and stmt.iter.value.id == "self":
                     mod_list = self.layer_instances.get(stmt.iter.attr)
                     if mod_list and mod_list.get("block") == "module_list":
-                        for sub_layer in mod_list.get("layers", []):
-                            # Instantiate inline sublayer step
-                            node_id = self._next_node_id(sub_layer.get("custom_module_id", "module").split("/")[-1])
-                            self.nodes[node_id] = {
-                                "block": "custom_module",
-                                "custom_module_id": sub_layer.get("custom_module_id"),
-                            }
-                            # Connect loop variable
-                            if isinstance(stmt.target, ast.Name) and stmt.body:
-                                loop_var = stmt.target.id
-                                prev_src, prev_port = self.env.get(loop_var, ("in", "out"))
-                                self.edges.append(f"{prev_src}.{prev_port} -> {node_id}.in")
-                                self.env[loop_var] = (node_id, "out")
+                        target_name = stmt.target.id if isinstance(stmt.target, ast.Name) else None
+                        for sub_idx, sub_layer in enumerate(mod_list.get("layers", [])):
+                            if target_name:
+                                self.layer_instances[target_name] = sub_layer
+                            self._parse_statements(stmt.body)
+                            if target_name and target_name in self.layer_instances:
+                                del self.layer_instances[target_name]
 
     def _parse_expr(self, expr: ast.AST, target_hint: str = "") -> Tuple[Optional[str], str]:
         # Variable name reference
@@ -842,6 +983,42 @@ class PyTorchASTDecompiler:
         return (None, "out")
 
     def _parse_call(self, call: ast.Call, target_hint: str = "") -> Tuple[Optional[str], str]:
+        # 0. Local layer instance call (e.g. unrolled loop variable blk(x))
+        if isinstance(call.func, ast.Name) and call.func.id in self.layer_instances:
+            layer_info = self.layer_instances[call.func.id]
+            block_id = layer_info.get("block", "custom_module")
+            custom_mod_id = layer_info.get("custom_module_id")
+            params = dict(layer_info.get("params", {}))
+            base_name = call.func.id or target_hint or block_id
+            node_id = self._next_node_id(base_name)
+
+            node_entry: Dict[str, Any] = {"block": block_id}
+            if custom_mod_id:
+                node_entry["custom_module_id"] = custom_mod_id
+            if layer_info.get("class_name"):
+                node_entry["label"] = layer_info["class_name"]
+            if params:
+                node_entry["params"] = params
+            if target_hint and not target_hint.startswith("x_"):
+                node_entry["var_name"] = target_hint
+            self.nodes[node_id] = node_entry
+
+            for idx, arg in enumerate(call.args):
+                if isinstance(arg, ast.Constant) and arg.value is None:
+                    continue
+                src_node, src_port = self._parse_expr(arg)
+                if src_node:
+                    target_handle = "in" if idx == 0 else f"in_{idx + 1}"
+                    self.edges.append(f"{src_node}.{src_port} -> {node_id}.{target_handle}")
+
+            for kw in call.keywords:
+                if kw.arg and kw.value:
+                    src_node, src_port = self._parse_expr(kw.value)
+                    if src_node:
+                        self.edges.append(f"{src_node}.{src_port} -> {node_id}.{kw.arg}")
+
+            return (node_id, "out")
+
         # 1. Calls on self: self.fc(x), self.layer1(x), self.backbone.layer1(x), self.features[0].conv(x)
         chain = self._extract_self_chain(call.func)
         if chain:
@@ -865,10 +1042,15 @@ class PyTorchASTDecompiler:
             node_entry: Dict[str, Any] = {"block": block_id}
             if custom_mod_id:
                 node_entry["custom_module_id"] = custom_mod_id
+            linfo = self.layer_instances.get(chain[0], {}) if len(chain) == 1 else {}
+            if linfo.get("class_name"):
+                node_entry["label"] = linfo["class_name"]
             if params:
                 node_entry["params"] = dict(params)
             if target_hint and not target_hint.startswith("x_"):
                 node_entry["var_name"] = target_hint
+            elif len(chain) == 1 and not str(chain[0]).startswith("layer_") and not str(chain[0]).startswith("custom_"):
+                node_entry["var_name"] = str(chain[0])
 
             self.nodes[node_id] = node_entry
 
@@ -952,9 +1134,23 @@ class PyTorchASTDecompiler:
                 node_id = self._next_node_id(target_hint or block_id)
                 params = dict(default_params)
 
-                for idx, arg in enumerate(call.args):
-                    if idx < len(pos_params):
-                        params[pos_params[idx]] = _eval_ast_literal(arg, self.init_var_names)
+                if method in ("reshape", "view"):
+                    if len(call.args) > 1:
+                        params["shape"] = tuple(_eval_ast_literal(a, self.init_var_names) for a in call.args)
+                    elif len(call.args) == 1:
+                        params["shape"] = _eval_ast_literal(call.args[0], self.init_var_names)
+                    for a in call.args:
+                        if isinstance(a, ast.Name) and a.id in self.env:
+                            src_n, src_p = self.env[a.id]
+                            edge_str = f"{src_n}.{src_p} -> {node_id}.{src_p}"
+                            if edge_str not in self.edges:
+                                self.edges.append(edge_str)
+                elif method == "permute":
+                    params["dims"] = tuple(_eval_ast_literal(a, self.init_var_names) for a in call.args)
+                else:
+                    for idx, arg in enumerate(call.args):
+                        if idx < len(pos_params):
+                            params[pos_params[idx]] = _eval_ast_literal(arg, self.init_var_names)
                 for kw in call.keywords:
                     if kw.arg:
                         params[kw.arg] = _eval_ast_literal(kw.value, self.init_var_names)
@@ -1003,7 +1199,10 @@ def decompile_python_to_ir(
         source_path = py_path_or_code
     else:
         code_str = py_path_or_code
-        stem = "model"
+        if output_path:
+            stem = os.path.basename(output_path).replace(".ir.json", "").replace(".json", "")
+        else:
+            stem = "model"
         source_path = None
 
     decompiler = PyTorchASTDecompiler(workspace_dir=workspace_dir)
@@ -1024,8 +1223,53 @@ def decompile_python_to_ir(
         os.makedirs(modules_dir, exist_ok=True)
         for cls_stem, sub_ir in decompiler.all_irs.items():
             if sub_ir is not ir_dict:
-                sub_path = os.path.join(modules_dir, f"{cls_stem}.ir.json")
+                sub_path = os.path.join(modules_dir, f"{os.path.basename(cls_stem)}.ir.json")
                 with open(sub_path, "w", encoding="utf-8") as f:
                     json.dump(sub_ir, f, indent=2)
 
     return ir_dict
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ArchIDE PyTorch AST Decompiler")
+    parser.add_argument("source", help="Path to Python file containing nn.Module definition(s)")
+    parser.add_argument("--output", "-o", help="Output path for root Agentic IR (.ir.json or .json)", default=None)
+    parser.add_argument("--workspace", "-w", help="Workspace directory for modular submodules and graphs", default=None)
+    parser.add_argument("--compile", "-c", action="store_true", help="Also compile IR into ArchIDE visual graph (.arch)")
+
+    args = parser.parse_args()
+
+    print(f"Decompiling {args.source}...")
+    decompiler = PyTorchASTDecompiler(workspace_dir=args.workspace)
+    with open(args.source, "r", encoding="utf-8") as f:
+        code_str = f.read()
+
+    file_stem = os.path.splitext(os.path.basename(args.source))[0]
+    all_irs = decompiler.decompile_all_classes(code_str, file_stem=file_stem, source_path=args.source)
+
+    print(f"Discovered {len(all_irs)} classes: {list(all_irs.keys())}")
+
+    root_ir = decompile_python_to_ir(
+        args.source,
+        output_path=args.output,
+        workspace_dir=args.workspace,
+    )
+
+    if args.output:
+        print(f"Saved root IR to: {args.output}")
+
+    if args.compile:
+        from agent_compiler import AgentGraphCompiler
+
+        for k, ir_data in all_irs.items():
+            comp = AgentGraphCompiler(ir_data, workspace_dir=args.workspace, all_irs=all_irs)
+            arch = comp.compile()
+            if args.workspace:
+                out_arch_dir = os.path.join(args.workspace, "graphs" if k == file_stem.lower() else os.path.join("graphs", "modules"))
+                os.makedirs(out_arch_dir, exist_ok=True)
+                out_arch_path = os.path.join(out_arch_dir, f"{k}.arch")
+                with open(out_arch_path, "w", encoding="utf-8") as af:
+                    json.dump(arch, af, indent=2)
+                print(f"Compiled {k} -> {out_arch_path}")
