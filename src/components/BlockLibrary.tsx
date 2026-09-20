@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useEditorStore, useVFSStore } from '../lib/store';
+import { useEditorStore } from '../lib/store';
 import { Search, Box, Sparkles, ArrowRightLeft, Activity, Brain } from 'lucide-react';
 import { API_BASE, FALLBACK_BLOCKS } from '../lib/constants';
 
@@ -80,8 +80,8 @@ function BlockItem({ blockDef }: { blockDef: any }) {
 export function BlockLibrary() {
   const [registry, setRegistry] = useState<any[]>(FALLBACK_BLOCKS);
   const [search, setSearch] = useState('');
-  const files = useVFSStore((s) => s.files);
-  const activeFileId = useVFSStore((s) => s.activeFileId);
+  const files = useEditorStore((s) => s.files);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
 
   // Fetch the live block registry from the backend; silently fall back on error
   useEffect(() => {
@@ -91,61 +91,13 @@ export function BlockLibrary() {
       .catch(() => {});
   }, []);
 
-  const entryFileId = useVFSStore((s) => s.entryFileId);
-  const folders = useVFSStore((s) => s.folders);
-  const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
-
-  // Walk parentId chain to find the root folder UID
-  const getRootFolderId = (folderId: string | null): string | null => {
-    if (!folderId) return null;
-    let current = folders.find((f) => f.id === folderId);
-    while (current && current.parentId) {
-      current = folders.find((f) => f.id === current!.parentId);
-    }
-    return current?.id ?? null;
-  };
-
-  // DFS: collect the set of file IDs that the given file depends on (transitively)
-  const getTransitiveDeps = (fileId: string, visited = new Set<string>()): Set<string> => {
-    if (visited.has(fileId)) return visited;
-    visited.add(fileId);
-    const file = files.find((f) => f.id === fileId);
-    if (!file) return visited;
-    for (const node of file.nodes) {
-      const depId = (node.data as any)?.custom_module_id;
-      if (depId) getTransitiveDeps(depId, visited);
-    }
-    return visited;
-  };
-
-  // Files that directly or transitively depend on the active file (circular dep ancestors)
-  const circularAncestors = new Set(
-    files
-      .filter((f) => {
-        const deps = getTransitiveDeps(f.id);
-        return deps.has(activeFileId);
-      })
-      .map((f) => f.id)
-  );
-
-  // Derive custom module entries from other files in graphs/ only
+  // Derive custom module entries from other open files (non-active tabs)
   const customBlocks = files
-    .filter((f) => {
-      if (f.id === activeFileId) return false;      // no self-reference
-      if (f.id === entryFileId) return false;       // entry is never a sub-module
-      if (circularAncestors.has(f.id)) return false; // would create circular dep
-      if (f.fileType === 'code' || !f.name.endsWith('.arch') || !Array.isArray(f.nodes)) return false;
-      // Only list files that live inside graphs/ tree (by stable UID)
-      const rootId = getRootFolderId(f.parentId ?? null);
-      return rootId === graphsFolderId;
-    })
+    .filter((f) => f.id !== activeFileId)
     .map((f) => {
-      const inputs  = (Array.isArray(f.nodes) ? f.nodes : []).filter((n) => n?.data?.block_id === 'input').map((n) => ({ id: n.id, name: (n.data?.label as string) || 'Input', type: 'tensor' }));
-      const outputs = (Array.isArray(f.nodes) ? f.nodes : []).filter((n) => n?.data?.block_id === 'output').map((n) => ({ id: n.id, name: (n.data?.label as string) || 'Output', type: 'tensor' }));
-      const params  = (f.variables || [])
-        .filter((v) => v.scope === 'init_param')
-        .map((v) => ({ name: v.name, type: v.type, default: v.default, section: 'basic' }));
-      return { id: 'custom_module', custom_module_id: f.id, name: f.name, category: 'Custom Modules', color: '#eab308', is_functional: false, inputs, outputs, params };
+      const inputs  = f.nodes.filter((n) => n.data.block_id === 'input').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+      const outputs = f.nodes.filter((n) => n.data.block_id === 'output').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+      return { id: 'custom_module', custom_module_id: f.id, name: f.name, category: 'Custom Modules', color: '#eab308', is_functional: false, inputs, outputs, params: [] };
     });
 
   // Group filtered blocks by category

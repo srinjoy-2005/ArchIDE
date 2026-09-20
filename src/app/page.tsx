@@ -19,7 +19,6 @@ import { Header }                        from '../components/Header';
 import { ActivityBar }                   from '../components/ActivityBar';
 import { FileExplorer }                  from '../components/FileExplorer';
 import { BlockLibrary }                  from '../components/BlockLibrary';
-import { VariablesPanel }                from '../components/VariablesPanel';
 import { DnDCanvas }                     from '../components/DnDCanvas';
 import { RightPanel }                    from '../components/RightPanel';
 import { DocContextMenu, DocDetailsPanel } from '../components/DocPanels';
@@ -31,8 +30,9 @@ function LeftSidebar() {
 
   if (!sidebarOpen) return null;
 
-  if (activeSidebarView === 'library')   return <BlockLibrary />;
-  if (activeSidebarView === 'variables') return <VariablesPanel />;
+  if (activeSidebarView === 'library') {
+    return <BlockLibrary />;
+  }
 
   // Default to File/Folder Explorer
   return <FileExplorer />;

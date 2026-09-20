@@ -7,13 +7,11 @@
  * - A tooltip (EdgeLabelRenderer) that shows the exact tensor shape flowing through this edge
  * - Highlight states when hovered or selected
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
-  getSmoothStepPath,
-  Position,
   useReactFlow,
 } from '@xyflow/react';
 import { useEditorStore } from '../lib/store';
@@ -55,29 +53,15 @@ const TensorEdge = ({
 }: TensorEdgeProps) => {
   const [hovered, setHovered] = useState(false);
   const nodeShapes = useEditorStore((s) => s.nodeShapes);
-  const edgeRouting = useEditorStore((s) => s.edgeRouting);
 
-  const srcPos = sourcePosition || Position.Right;
-  const tgtPos = targetPosition || Position.Left;
-
-  const [edgePath, labelX, labelY] = edgeRouting === 'step'
-    ? getSmoothStepPath({
-        sourceX,
-        sourceY,
-        sourcePosition: srcPos,
-        targetX,
-        targetY,
-        targetPosition: tgtPos,
-        borderRadius: 0,
-      })
-    : getBezierPath({
-        sourceX,
-        sourceY,
-        sourcePosition: srcPos,
-        targetX,
-        targetY,
-        targetPosition: tgtPos,
-      });
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
 
   // The shape flowing through this edge = output shape of the source node at the source handle
   const handleId = sourceHandleId || 'out';
