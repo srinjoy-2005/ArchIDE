@@ -9,31 +9,15 @@
  * - ModelSummaryDashboard: shown when no node is selected — displays graph stats,
  *   a canvas usage guide, and a "Load ConvNet Pipeline" quick-start button.
  * - PropertiesPanel: shown when a node is selected — renders its label, output
+ *   variable name, connected input tensors, inferred shapes, and hyperparameters
  *   (split into basic and collapsible advanced sections).
  */
 
-import React from 'react';
 import { useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
-import { Brain, ChevronRight, X, ArrowRightLeft, ArrowUpDown } from 'lucide-react';
-import { PARAM_TYPE_HANDLERS, type ParamTypeName } from '../lib/paramTypes';
-import { useVFSStore } from '../lib/vfsStore';
-import { ExpressionInput } from './ExpressionInput';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const VAR_PREFIX = '@var:';
-const isVarBound = (v: any): boolean => typeof v === 'string' && v.startsWith(VAR_PREFIX);
-const getBoundName = (v: string): string => v.slice(VAR_PREFIX.length);
+import { Brain, ChevronRight } from 'lucide-react';
 
 // ─── ParamInput ───────────────────────────────────────────────────────────────
-
-function sanitizeParamValue(val: any, fallback: any = ''): any {
-  if (val === null || val === undefined) return fallback;
-  if (typeof val === 'number' && (isNaN(val) || !isFinite(val))) return fallback;
-  if (val === 'NaN') return fallback;
-  return val;
-}
 
 function ParamInput({
   param,
@@ -44,76 +28,9 @@ function ParamInput({
   value: any;
   onChange: (name: string, value: any) => void;
 }) {
-  const handler = PARAM_TYPE_HANDLERS[param.type as ParamTypeName] || PARAM_TYPE_HANDLERS.string;
-
-  const rawDefault = param.default;
-  const safeDefault = (typeof rawDefault === 'number' && (isNaN(rawDefault) || !isFinite(rawDefault))) ? '' : (rawDefault ?? '');
-  const safeValue = sanitizeParamValue(value, safeDefault);
-
-  const isAutoInferEnabled = !!param.auto_infer;
-  const isStatic = isAutoInferEnabled && (safeValue === -1 || safeValue === '-1' || safeValue === '?' || safeValue === -1.0);
-  const isLazy = isAutoInferEnabled && (safeValue === 'LAZY' || safeValue === 'lazy');
-  const resolutionMode: 'manual' | 'static' | 'lazy' = isLazy ? 'lazy' : isStatic ? 'static' : 'manual';
-  const isBound = isVarBound(safeValue);
-  const isReadOnly = Boolean(param.read_only || isStatic || isLazy);
-
-  const [isDragOver, setIsDragOver] = React.useState(false);
-
-  const inputClass = isReadOnly
+  const inputClass = param.read_only
     ? 'w-full bg-[#1e1e1e] border border-[#3a3a3a] rounded-[3px] px-2 py-1.5 text-[12px] text-[#555] font-mono cursor-not-allowed'
-    : `w-full bg-[#1e1e1e] border ${isDragOver ? 'border-[#a855f7]' : 'border-[#3a3a3a]'} focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors`;
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (isReadOnly) return;
-    const rawVal = handler.inputType === 'checkbox' ? e.target.checked : e.target.value;
-
-    if (isAutoInferEnabled && String(rawVal) === '-1') { onChange(param.name, -1); return; }
-
-    if (handler.isValid(rawVal as any)) {
-      const coerced = handler.coerce(rawVal as any);
-      const sanitized = (typeof coerced === 'number' && (isNaN(coerced) || !isFinite(coerced))) ? safeDefault : coerced;
-      onChange(param.name, sanitized);
-    } else {
-      onChange(param.name, rawVal);
-    }
-  };
-
-  const handleModeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const mode = e.target.value;
-    if (mode === 'static') {
-      const staticVal = (param.type === 'string' || param.type === 'shape' || param.type === 'tuple' || param.default === '?') ? '?' : -1;
-      onChange(param.name, staticVal);
-    } else if (mode === 'lazy') {
-      onChange(param.name, 'LAZY');
-    } else {
-      const fallback = (param.default !== -1 && param.default !== '-1' && param.default !== '?' && param.default !== 'LAZY' && param.default !== undefined && param.default !== null)
-        ? param.default
-        : (param.type === 'string' || param.type === 'shape' || param.type === 'tuple' ? '' : 1);
-      onChange(param.name, fallback);
-    }
-  };
-
-  // ── Drag-and-drop variable binding ──────────────────────────────────────────
-  const handleDragOver = (e: React.DragEvent) => {
-    if (isReadOnly) return;
-    if (e.dataTransfer.types.includes('application/archide-variable')) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-      setIsDragOver(true);
-    }
-  };
-  const handleDragLeave = () => setIsDragOver(false);
-  const handleDrop = (e: React.DragEvent) => {
-    if (isReadOnly) return;
-    e.preventDefault();
-    setIsDragOver(false);
-    const raw = e.dataTransfer.getData('application/archide-variable');
-    if (!raw) return;
-    try {
-      const variable = JSON.parse(raw);
-      onChange(param.name, `${VAR_PREFIX}${variable.name}`);
-    } catch {}
-  };
+    : 'w-full bg-[#1e1e1e] border border-[#3a3a3a] focus:border-[#2d8cf0] rounded-[3px] px-2 py-1.5 text-[12px] text-[#e2e2e2] font-mono outline-none transition-colors';
 
   return (
     <div className="flex flex-col gap-1">
@@ -121,56 +38,33 @@ function ParamInput({
         <label className="text-[11px] text-[#aaa] capitalize flex items-center gap-1.5">
           {param.name.replace(/_/g, ' ')}
           {param.read_only && (
-            <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">inferred</span>
+            <span className="text-[9px] font-mono text-[#555] bg-[#252525] border border-[#363636] px-1 py-px rounded-sm">
+              inferred
+            </span>
           )}
         </label>
-        <div className="flex items-center gap-2">
-          {isAutoInferEnabled && (
-            <select
-              value={resolutionMode}
-              onChange={handleModeChange}
-              className="bg-[#252525] border border-[#3a3a3a] text-[#ccc] text-[9px] rounded px-1.5 py-0.5 outline-none focus:border-[#2d8cf0] cursor-pointer"
-              title="Resolution Mode"
-            >
-              <option value="manual">Manual</option>
-              <option value="static">Static Bake-In</option>
-              <option value="lazy">Lazy / Dynamic</option>
-            </select>
-          )}
-          <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
-        </div>
+        <span className="text-[9px] font-mono text-[#555]">{param.type}</span>
       </div>
-
-      {handler.inputType === 'checkbox' ? (
-        <label className="flex items-center gap-2 text-[12px] text-[#e2e2e2]"
-          onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-          <input type="checkbox" checked={!!safeValue} onChange={handleChange} disabled={isReadOnly} />
-          {safeValue ? 'True' : 'False'}
-        </label>
-      ) : (
-        <ExpressionInput
-          value={safeValue}
-          onChange={(v) => onChange(param.name, v)}
-          expectedType={param.type}
-          isReadOnly={isReadOnly}
-          inputClass={inputClass}
-          title={param.description || ''}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        />
-      )}
-
-      {isAutoInferEnabled && resolutionMode === 'static' && (
-        <span className="text-[10px] text-[#888] italic leading-tight">
-          Bakes canvas dimension into compiled code.
-        </span>
-      )}
-      {isAutoInferEnabled && resolutionMode === 'lazy' && (
-        <span className="text-[10px] text-[#888] italic leading-tight">
-          Defers dimension inference to runtime using PyTorch Lazy modules.
-        </span>
-      )}
+      <input
+        type={param.type === 'int' || param.type === 'float' ? 'number' : 'text'}
+        className={inputClass}
+        value={value ?? param.default}
+        readOnly={param.read_only}
+        disabled={param.read_only}
+        title={param.description || ''}
+        onChange={(e) => {
+          if (!param.read_only) {
+            onChange(
+              param.name,
+              param.type === 'int'
+                ? parseInt(e.target.value)
+                : param.type === 'float'
+                ? parseFloat(e.target.value)
+                : e.target.value
+            );
+          }
+        }}
+      />
     </div>
   );
 }
@@ -184,136 +78,12 @@ function ModelSummaryDashboard() {
 
   const loadStarter = () => {
     const n: Node[] = [
-      {
-        id: 's1',
-        type: 'custom',
-        position: { x: 60, y: 160 },
-        data: {
-          block_id: 'input',
-          label: 'Input',
-          description: 'The shape of the input tensor, e.g. (batch, channels, H, W)',
-          is_functional: true,
-          varName: '',
-          custom_module_id: '',
-          params: [
-            {
-              name: 'shape',
-              type: 'string',
-              default: '(1, 3, 224, 224)',
-              read_only: false,
-              auto_infer: false,
-              section: 'basic',
-              description: 'The shape of the input tensor, e.g. (batch, channels, H, W)',
-            },
-          ],
-          paramValues: { shape: '(1, 3, 224, 224)' },
-          inputs: [],
-          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: null }],
-        },
-      },
-      {
-        id: 's2',
-        type: 'custom',
-        position: { x: 270, y: 160 },
-        data: {
-          block_id: 'conv2d',
-          label: 'Conv2D',
-          description: 'Applies a 2D convolution over an input signal composed of several input planes',
-          is_functional: false,
-          varName: '',
-          custom_module_id: '',
-          params: [
-            { name: 'in_channels', type: 'int', default: 3, auto_infer: true, read_only: false, section: 'basic', description: 'Number of channels in the input image' },
-            { name: 'out_channels', type: 'int', default: 16, auto_infer: false, read_only: false, section: 'basic', description: 'Number of channels produced by the convolution' },
-            { name: 'kernel_size', type: 'int', default: 3, auto_infer: false, read_only: false, section: 'basic', description: 'Size of the convolving kernel' },
-            { name: 'stride', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Stride of the convolution' },
-            { name: 'padding', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Padding added to both sides of the input' },
-            { name: 'dilation', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Spacing between kernel elements' },
-            { name: 'groups', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'advanced', description: 'Number of blocked connections from input to output' },
-            { name: 'bias', type: 'bool', default: true, auto_infer: false, read_only: false, section: 'advanced', description: 'If True, adds a learnable bias to the output' },
-          ],
-          paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3, stride: 1, padding: 1, dilation: 1, groups: 1, bias: true },
-          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
-          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'conv_feat' }],
-        },
-      },
-      {
-        id: 's3',
-        type: 'custom',
-        position: { x: 480, y: 160 },
-        data: {
-          block_id: 'relu',
-          label: 'ReLU',
-          description: 'Applies rectified linear unit activation',
-          is_functional: false,
-          varName: '',
-          custom_module_id: '',
-          params: [
-            { name: 'inplace', type: 'bool', default: false, auto_infer: false, read_only: false, section: 'advanced', description: 'Modify input in-place' },
-          ],
-          paramValues: { inplace: false },
-          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
-          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'activated' }],
-        },
-      },
-      {
-        id: 's4',
-        type: 'custom',
-        position: { x: 670, y: 160 },
-        data: {
-          block_id: 'flatten',
-          label: 'Flatten',
-          description: 'Flattens a contiguous range of dimensions into a tensor',
-          is_functional: true,
-          varName: '',
-          custom_module_id: '',
-          params: [
-            { name: 'start_dim', type: 'int', default: 1, auto_infer: false, read_only: false, section: 'basic', description: 'First dimension to flatten' },
-            { name: 'end_dim', type: 'int', default: -1, auto_infer: false, read_only: false, section: 'basic', description: 'Last dimension to flatten' },
-          ],
-          paramValues: { start_dim: 1, end_dim: -1 },
-          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
-          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'flat' }],
-        },
-      },
-      {
-        id: 's5',
-        type: 'custom',
-        position: { x: 880, y: 160 },
-        data: {
-          block_id: 'linear',
-          label: 'Linear',
-          description: 'Applies a linear transformation to incoming data',
-          is_functional: false,
-          varName: '',
-          custom_module_id: '',
-          params: [
-            { name: 'in_features', type: 'int', default: 128, auto_infer: true, read_only: false, section: 'basic', description: 'Size of each input sample' },
-            { name: 'out_features', type: 'int', default: 10, auto_infer: false, read_only: false, section: 'basic', description: 'Size of each output sample' },
-            { name: 'bias', type: 'bool', default: true, auto_infer: false, read_only: false, section: 'advanced', description: 'If True, adds a learnable bias to the output' },
-          ],
-          paramValues: { in_features: -1, out_features: 10, bias: true },
-          inputs: [{ id: 'in', name: 'Input', type: 'tensor', is_list: false, var_hint: null }],
-          outputs: [{ id: 'out', name: 'Output', type: 'tensor', is_list: false, var_hint: 'fc_out' }],
-        },
-      },
-      {
-        id: 's6',
-        type: 'custom',
-        position: { x: 1090, y: 160 },
-        data: {
-          block_id: 'output',
-          label: 'Output',
-          description: 'Defines the model output return values',
-          is_functional: true,
-          varName: '',
-          custom_module_id: '',
-          params: [],
-          paramValues: {},
-          inputs: [{ id: 'in', name: 'Return Value', type: 'tensor', is_list: true, var_hint: null }],
-          outputs: [],
-        },
-      },
+      { id: 's1', type: 'custom', position: { x: 60,   y: 160 }, data: { block_id: 'input',   label: 'Input',   is_functional: true,  params: [{ name: 'shape', type: 'string', default: '(1,3,224,224)' }], paramValues: { shape: '(1,3,224,224)' }, inputs: [], outputs: [{ id: 'out', name: 'Output' }] } },
+      { id: 's2', type: 'custom', position: { x: 270,  y: 160 }, data: { block_id: 'conv2d',  label: 'Conv2D',  is_functional: false, params: [{ name: 'in_channels', type: 'int', default: 3 }, { name: 'out_channels', type: 'int', default: 16 }, { name: 'kernel_size', type: 'int', default: 3 }], paramValues: { in_channels: 3, out_channels: 16, kernel_size: 3 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
+      { id: 's3', type: 'custom', position: { x: 480,  y: 160 }, data: { block_id: 'relu',    label: 'ReLU',    is_functional: false, params: [], paramValues: {}, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
+      { id: 's4', type: 'custom', position: { x: 670,  y: 160 }, data: { block_id: 'flatten', label: 'Flatten', is_functional: true,  params: [{ name: 'start_dim', type: 'int', default: 1 }, { name: 'end_dim', type: 'int', default: -1 }], paramValues: { start_dim: 1, end_dim: -1 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
+      { id: 's5', type: 'custom', position: { x: 880,  y: 160 }, data: { block_id: 'linear',  label: 'Linear',  is_functional: false, params: [{ name: 'in_features', type: 'int', default: 128 }, { name: 'out_features', type: 'int', default: 10 }], paramValues: { in_features: -1, out_features: 10 }, inputs: [{ id: 'in', name: 'Input' }], outputs: [{ id: 'out', name: 'Output' }] } },
+      { id: 's6', type: 'custom', position: { x: 1090, y: 160 }, data: { block_id: 'output',  label: 'Output',  is_functional: true,  params: [], paramValues: {}, inputs: [{ id: 'in', name: 'Return Value' }], outputs: [] } },
     ];
     const e: Edge[] = [
       { id: 'e12', source: 's1', sourceHandle: 'out', target: 's2', targetHandle: 'in', type: 'tensor' },
@@ -378,13 +148,12 @@ export function PropertiesPanel() {
   // Handles param changes including dynamic input/output resizing for variadic blocks
   const handleParamChange = (paramName: string, value: any) => {
     if (!selectedNode) return;
-    const safeVal = (typeof value === 'number' && (isNaN(value) || !isFinite(value))) ? '' : value;
     setNodes((nds) =>
       nds.map((n) => {
         if (n.id === selectedNode.id) {
           const newData: any = {
             ...n.data,
-            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: safeVal },
+            paramValues: { ...(n.data.paramValues as any || {}), [paramName]: value },
           };
           if (paramName === 'num_inputs') {
             const num = parseInt(value) || 2;
@@ -455,76 +224,6 @@ export function PropertiesPanel() {
             <span className="text-[9px] text-[#555]">
               Leave blank to auto-generate. Used as the tensor variable in compiled PyTorch code.
             </span>
-          </div>
-
-          {/* Port Layout Configuration */}
-          <div className="flex flex-col gap-1.5 pt-2 border-t border-[#2e2e2e]">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] text-[#888]">Port Layout</label>
-              <span className="text-[9px] font-mono text-[#555]">orientation</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  const currentLayout = (selectedNode.data.portLayout as any) || {};
-                  setNodes((nds) =>
-                    nds.map((n) =>
-                      n.id === selectedNode.id
-                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, orientation: 'horizontal' } } }
-                        : n
-                    )
-                  );
-                }}
-                className={`py-1 px-2 rounded-[3px] text-[11px] font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                  ((selectedNode.data.portLayout as any)?.orientation || 'horizontal') === 'horizontal'
-                    ? 'bg-[#262626] border-[#2d8cf0] text-[#e2e2e2]'
-                    : 'bg-[#1e1e1e] border-[#3a3a3a] text-[#888] hover:text-[#ccc]'
-                }`}
-              >
-                <ArrowRightLeft className="w-3 h-3" />
-                <span>Horizontal</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const currentLayout = (selectedNode.data.portLayout as any) || {};
-                  setNodes((nds) =>
-                    nds.map((n) =>
-                      n.id === selectedNode.id
-                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, orientation: 'vertical' } } }
-                        : n
-                    )
-                  );
-                }}
-                className={`py-1 px-2 rounded-[3px] text-[11px] font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                  (selectedNode.data.portLayout as any)?.orientation === 'vertical'
-                    ? 'bg-[#262626] border-[#2d8cf0] text-[#e2e2e2]'
-                    : 'bg-[#1e1e1e] border-[#3a3a3a] text-[#888] hover:text-[#ccc]'
-                }`}
-              >
-                <ArrowUpDown className="w-3 h-3" />
-                <span>Vertical</span>
-              </button>
-            </div>
-            <label className="flex items-center gap-2 text-[11px] text-[#aaa] cursor-pointer mt-0.5">
-              <input
-                type="checkbox"
-                checked={Boolean((selectedNode.data.portLayout as any)?.flipped)}
-                onChange={(e) => {
-                  const currentLayout = (selectedNode.data.portLayout as any) || {};
-                  setNodes((nds) =>
-                    nds.map((n) =>
-                      n.id === selectedNode.id
-                        ? { ...n, data: { ...n.data, portLayout: { ...currentLayout, flipped: e.target.checked } } }
-                        : n
-                    )
-                  );
-                }}
-                className="accent-[#2d8cf0]"
-              />
-              <span>Invert / Flip Port Sides</span>
-            </label>
           </div>
         </div>
       </div>

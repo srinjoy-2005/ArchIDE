@@ -14,7 +14,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import { useVFSStore, type Folder, type GraphFile } from '../lib/store';
+import { useEditorStore, type Folder, type GraphFile } from '../lib/store';
 import {
   ChevronDown,
   ChevronRight,
@@ -49,6 +49,7 @@ export function FileExplorer() {
     folders,
     files,
     activeFileId,
+    setActiveViewMode,
     createFile,
     createFolder,
     renameFile,
@@ -61,28 +62,9 @@ export function FileExplorer() {
     updateFileState,
     exportProjectJson,
     importProjectJson,
-    entryFileId,
-    graphsFolderId,
-    pythonFolderId,
-  } = useVFSStore();
+  } = useEditorStore();
 
   const { getNodes, getEdges } = useReactFlow();
-
-  // Helper: walk parentId chain to find the root folder UID
-  const getRootFolderId = (folderId: string | null): string | null => {
-    if (!folderId) return null;
-    let current = folders.find((f) => f.id === folderId);
-    while (current && current.parentId) {
-      current = folders.find((f) => f.id === current!.parentId);
-    }
-    return current?.id ?? null;
-  };
-
-  // True if a folder (by id) is inside graphs/ tree
-  const isInGraphsFolder = (folderId: string | null) => getRootFolderId(folderId) === graphsFolderId;
-
-  // True if a folder (by id) is inside python/ tree
-  const isInPythonFolder = (folderId: string | null) => getRootFolderId(folderId) === pythonFolderId;
 
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [newItemName, setNewItemName] = useState('');
@@ -140,22 +122,20 @@ export function FileExplorer() {
   const handleSelectFile = (fileId: string) => {
     updateFileState(activeFileId, getNodes(), getEdges());
     openTab(fileId);
+    const targetFile = files.find(f => f.id === fileId);
+    if (targetFile?.fileType === 'code' || targetFile?.name.endsWith('.py')) {
+      setActiveViewMode('code');
+    }
   };
 
   // Confirm creation of new item
   const handleConfirmCreate = () => {
     if (!creating) return;
-    let name = newItemName.trim();
+    const name = newItemName.trim();
     if (name) {
       updateFileState(activeFileId, getNodes(), getEdges());
       if (creating.type === 'file') {
-        const isPyFile = name.endsWith('.py');
-        // Enforce .arch extension for files inside graphs/
-        if (!isPyFile && isInGraphsFolder(creating.parentId)) {
-          // Strip any extension the user may have typed, then force .arch
-          name = name.replace(/\.[^/.]+$/, '') + '.arch';
-        }
-        const isCode = isPyFile;
+        const isCode = name.endsWith('.py');
         createFile(name, creating.parentId, isCode ? 'code' : 'graph');
       } else {
         createFolder(name, creating.parentId);
@@ -235,62 +215,41 @@ export function FileExplorer() {
                 {/* Hover action toolbar on folder */}
                 {!isRenamingThis && (
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[#777] transition-opacity ml-1">
-                    {/* New File Inside */}
-                    <span title={isInPythonFolder(folder.id) ? 'File creation managed by compiler' : 'New File Inside'}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!folder.isExpanded) toggleFolder(folder.id);
-                          setCreating({ type: 'file', parentId: folder.id });
-                          setNewItemName('');
-                        }}
-                        disabled={isInPythonFolder(folder.id)}
-                        className={`p-0.5 rounded hover:bg-[#333333] ${
-                          isInPythonFolder(folder.id)
-                            ? 'opacity-30 cursor-not-allowed pointer-events-none'
-                            : 'hover:text-[#e2e2e2]'
-                        }`}
-                      >
-                        <FilePlus className="w-3 h-3" />
-                      </button>
-                    </span>
-                    {/* New Subfolder */}
-                    <span title={isInPythonFolder(folder.id) ? 'Subfolder creation managed by compiler' : 'New Subfolder'}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!folder.isExpanded) toggleFolder(folder.id);
-                          setCreating({ type: 'folder', parentId: folder.id });
-                          setNewItemName('');
-                        }}
-                        disabled={isInPythonFolder(folder.id)}
-                        className={`p-0.5 rounded hover:bg-[#333333] ${
-                          isInPythonFolder(folder.id)
-                            ? 'opacity-30 cursor-not-allowed pointer-events-none'
-                            : 'hover:text-[#e2e2e2]'
-                        }`}
-                      >
-                        <FolderPlus className="w-3 h-3" />
-                      </button>
-                    </span>
-                    {/* Rename */}
-                    <span title={isInPythonFolder(folder.id) ? 'Rename managed by compiler' : 'Rename'}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenaming({ id: folder.id, isFolder: true, initialName: folder.name });
-                          setRenameValue(folder.name);
-                        }}
-                        disabled={isInPythonFolder(folder.id)}
-                        className={`p-0.5 rounded hover:bg-[#333333] ${
-                          isInPythonFolder(folder.id)
-                            ? 'opacity-30 cursor-not-allowed pointer-events-none'
-                            : 'hover:text-[#e2e2e2]'
-                        }`}
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!folder.isExpanded) toggleFolder(folder.id);
+                        setCreating({ type: 'file', parentId: folder.id });
+                        setNewItemName('');
+                      }}
+                      title="New File Inside"
+                      className="hover:text-[#e2e2e2] p-0.5 rounded hover:bg-[#333333]"
+                    >
+                      <FilePlus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!folder.isExpanded) toggleFolder(folder.id);
+                        setCreating({ type: 'folder', parentId: folder.id });
+                        setNewItemName('');
+                      }}
+                      title="New Subfolder"
+                      className="hover:text-[#e2e2e2] p-0.5 rounded hover:bg-[#333333]"
+                    >
+                      <FolderPlus className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenaming({ id: folder.id, isFolder: true, initialName: folder.name });
+                        setRenameValue(folder.name);
+                      }}
+                      title="Rename"
+                      className="hover:text-[#e2e2e2] p-0.5 rounded hover:bg-[#333333]"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -347,7 +306,7 @@ export function FileExplorer() {
         {currentFiles.map((file) => {
           const isActive = file.id === activeFileId;
           const isRenamingThis = renaming?.id === file.id && !renaming.isFolder;
-          const isCode = file.fileType === 'code' || !file.name.endsWith('.arch');
+          const isCode = file.fileType === 'code' || file.name.endsWith('.py');
 
           return (
             <div
@@ -380,38 +339,25 @@ export function FileExplorer() {
                     className="bg-[#141414] border border-[#2d8cf0] rounded px-1 text-[11px] text-[#e2e2e2] outline-none w-full"
                   />
                 ) : (
-                  <span className="truncate">
-                    {file.name}
-                    {file.id === entryFileId && (
-                      <span className="ml-2 text-[10px] text-[#eab308] border border-[#eab308]/30 bg-[#eab308]/10 px-1 py-0 rounded">
-                        Main
-                      </span>
-                    )}
-                  </span>
+                  <span className="truncate">{file.name}</span>
                 )}
               </div>
 
               {/* Hover actions on file */}
               {!isRenamingThis && (
                 <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[#777] transition-opacity ml-1">
-                  <span title={isInPythonFolder(file.parentId ?? null) ? 'Rename managed by compiler' : 'Rename File'}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRenaming({ id: file.id, isFolder: false, initialName: file.name });
-                        setRenameValue(file.name);
-                      }}
-                      disabled={isInPythonFolder(file.parentId ?? null)}
-                      className={`p-0.5 rounded hover:bg-[#3a3a3a] ${
-                        isInPythonFolder(file.parentId ?? null)
-                          ? 'opacity-30 cursor-not-allowed pointer-events-none'
-                          : 'hover:text-[#e2e2e2]'
-                      }`}
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </button>
-                  </span>
-                  {files.length > 1 && file.id !== entryFileId && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRenaming({ id: file.id, isFolder: false, initialName: file.name });
+                      setRenameValue(file.name);
+                    }}
+                    title="Rename File"
+                    className="hover:text-[#e2e2e2] p-0.5 rounded hover:bg-[#3a3a3a]"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  {files.length > 1 && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -484,14 +430,14 @@ export function FileExplorer() {
           <div className="w-[1px] h-3 bg-[#333] mx-0.5" />
           <button
             onClick={handleExportProject}
-            title="Export Project (Single Monolith JSON)"
+            title="Export Project (Save)"
             className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            title="Import Project (Single Monolith JSON)"
+            title="Import Project (Open)"
             className="p-1 hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
           >
             <Upload className="w-3.5 h-3.5" />

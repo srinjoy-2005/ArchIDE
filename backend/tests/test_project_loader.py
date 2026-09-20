@@ -2,7 +2,7 @@ import pytest
 import sys
 import os
 from pathlib import Path
-torch = pytest.importorskip("torch")
+import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from project_loader import load_project, compile_project, check_project
@@ -10,7 +10,7 @@ from project_loader import load_project, compile_project, check_project
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
-def test_load_and_run_resnet_project(tmp_path):
+def test_load_and_run_resnet_project():
     """End-to-end test: load multi-submodule ResNet, compile, and execute live PyTorch forward pass."""
     project_path = FIXTURES_DIR / "resnet_project"
     
@@ -26,34 +26,23 @@ def test_load_and_run_resnet_project(tmp_path):
     assert "node_shapes" in check_result
     
     # 3. Compile to PyTorch code
-    files, _, _ = compile_project(project_path)
-    code = "\n".join(files.values())
+    code = compile_project(project_path)
     assert "class ConvBnRelu(nn.Module):" in code
     assert "class ResBlock(nn.Module):" in code
     assert "class Model(nn.Module):" in code
     
-    # 3. Live PyTorch execution
-    import sys, os
-    import importlib.util
-    for filename, filecode in files.items():
-        with open(tmp_path / f"{filename}.py", "w") as f:
-            f.write(filecode)
+    # 4. Live PyTorch execution
+    namespace = {}
+    exec(code, namespace)
+    ModelClass = namespace["Model"]
+    model = ModelClass()
     
-    sys.path.insert(0, str(tmp_path))
-    try:
-        spec = importlib.util.spec_from_file_location("main", tmp_path / "main.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        model = mod.Model()
-        import torch
-        x = torch.randn(1, 3, 224, 224)
-        out = model(x)
-        assert out.shape == (1, 10)
-    finally:
-        sys.path.pop(0)
+    x = torch.randn(1, 3, 224, 224)
+    out = model(x)
+    assert out.shape == (1, 10), f"Expected shape (1, 10), got {out.shape}"
 
 
-def test_load_and_run_transformer_project(tmp_path):
+def test_load_and_run_transformer_project():
     """End-to-end test: load Transformer encoder with MLP submodule, constructor params, and live execution."""
     project_path = FIXTURES_DIR / "transformer_project"
     
@@ -63,31 +52,20 @@ def test_load_and_run_transformer_project(tmp_path):
     assert "mlp_block" in req.graphs
     
     # 2. Compile to PyTorch code
-    files, _, _ = compile_project(project_path)
-    code = "\n".join(files.values())
+    code = compile_project(project_path)
     assert "class MlpBlock(nn.Module):" in code
     assert "def __init__(self, d_model: int = 64, d_ff: int = 128):" in code
-    assert "self.mlp_submodule = MlpBlock(d_model=64, d_ff=128)" in code
+    assert "self.custom_t_mlp = MlpBlock(d_model=64, d_ff=128)" in code
     
     # 3. Live PyTorch execution
-    import sys, os
-    import importlib.util
-    for filename, filecode in files.items():
-        with open(tmp_path / f"{filename}.py", "w") as f:
-            f.write(filecode)
+    namespace = {}
+    exec(code, namespace)
+    ModelClass = namespace["Model"]
+    model = ModelClass()
     
-    sys.path.insert(0, str(tmp_path))
-    try:
-        spec = importlib.util.spec_from_file_location("main", tmp_path / "main.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        model = mod.Model()
-        import torch
-        x = torch.randn(1, 16, 64)
-        out = model(x)
-        assert out.shape == (1, 16, 64)
-    finally:
-        sys.path.pop(0)
+    tokens = torch.randn(1, 16, 64)
+    out = model(tokens)
+    assert out.shape == (1, 16, 64), f"Expected shape (1, 16, 64), got {out.shape}"
 
 
 def test_single_file_project_loader(tmp_path):
@@ -108,8 +86,7 @@ def test_single_file_project_loader(tmp_path):
     
     req = load_project(graph_json)
     assert "simple_model" in req.graphs
-    files, _, _ = compile_project(graph_json)
-    code = "\n".join(files.values())
+    code = compile_project(graph_json)
     
     namespace = {}
     exec(code, namespace)

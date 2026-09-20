@@ -12,12 +12,12 @@
 
 import React, { useState } from 'react';
 import { Copy, Check, Download, FileCode, Play, Sparkles } from 'lucide-react';
-import { useEditorStore, useVFSStore } from '../lib/store';
+import { useEditorStore } from '../lib/store';
 
 export function CentralCodeEditor() {
   const generatedCode = useEditorStore((s) => s.generatedCode);
-  const activeFileId = useVFSStore((s) => s.activeFileId);
-  const files = useVFSStore((s) => s.files);
+  const activeFileId = useEditorStore((s) => s.activeFileId);
+  const files = useEditorStore((s) => s.files);
   const activeFile = files.find((f) => f.id === activeFileId);
 
   const [copied, setCopied] = useState(false);
@@ -32,7 +32,7 @@ export function CentralCodeEditor() {
   };
 
   const handleDownload = () => {
-    const fileName = activeFile?.name || "model.py";
+    const fileName = activeFile?.name ? (activeFile.name.endsWith('.py') ? activeFile.name : activeFile.name.replace(/\.[^/.]+$/, "") + ".py") : "model.py";
     const blob = new Blob([codeToShow], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -41,10 +41,6 @@ export function CentralCodeEditor() {
     a.click();
     URL.revokeObjectURL(url);
   };
-
-  const isJson = activeFile?.name?.endsWith('.json');
-  const isToml = activeFile?.name?.endsWith('.toml');
-  const badgeLabel = isJson ? 'JSON IR' : isToml ? 'TOML Config' : 'PyTorch 2.x';
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#181818] overflow-hidden select-text">
@@ -56,10 +52,10 @@ export function CentralCodeEditor() {
         <div className="flex items-center gap-2">
           <FileCode className="w-4 h-4 text-[#eab308]" />
           <span className="text-[12px] font-mono text-[#d4d4d4] font-medium">
-            {activeFile?.name || "model.py"}
+            {activeFile?.name ? (activeFile.name.endsWith('.py') ? activeFile.name : activeFile.name.replace(/\.[^/.]+$/, "") + ".py") : "model.py"}
           </span>
           <span className="text-[10px] text-[#666666] bg-[#262626] px-1.5 py-0.5 rounded ml-1.5">
-            {badgeLabel}
+            PyTorch 2.x
           </span>
         </div>
 

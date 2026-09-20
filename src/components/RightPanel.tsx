@@ -4,25 +4,23 @@
  * src/components/RightPanel.tsx
  *
  * The collapsible right panel dedicated exclusively to block inspection & configuration.
- * Renders the <PropertiesPanel /> with node parameters, shapes, and layer docs,
- * and the <VariablesPanel /> for managing per-file variables.
+ * Renders the <PropertiesPanel /> with node parameters, shapes, and layer docs.
  */
 
+import { useState } from 'react';
 import { Settings2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { PropertiesPanel } from './PropertiesPanel';
-import { useEditorStore } from '../lib/store';
 
 export function RightPanel() {
-  const inspectorOpen = useEditorStore((s) => s.inspectorOpen);
-  const toggleInspector = useEditorStore((s) => s.toggleInspector);
+  const [rightOpen, setRightOpen] = useState(true);
 
-  if (!inspectorOpen) {
+  if (!rightOpen) {
     return (
       <button
-        onClick={toggleInspector}
+        onClick={() => setRightOpen(true)}
         className="flex-shrink-0 flex items-center justify-center text-[#555] hover:text-[#aaa] transition-colors"
         style={{ width: 24, background: '#191919', borderLeft: '1px solid #282828' }}
-        title="Open Inspector (I)"
+        title="Open Inspector"
       >
         <PanelRightOpen className="w-3.5 h-3.5" />
       </button>
@@ -46,9 +44,9 @@ export function RightPanel() {
           </span>
         </div>
         <button
-          onClick={toggleInspector}
+          onClick={() => setRightOpen(false)}
           className="p-1 text-[#666] hover:text-[#e2e2e2] hover:bg-[#252525] rounded transition-colors"
-          title="Collapse Inspector (I)"
+          title="Collapse Inspector"
         >
           <PanelRightClose className="w-3.5 h-3.5" />
         </button>
