@@ -744,6 +744,7 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
         imports = [
             "import torch",
             "import torch.nn as nn",
+            "import math",
         ]
         
         for dep_id in custom_deps:
@@ -861,7 +862,7 @@ def _generate_single_graph_code(
             
             if clean_lbl:
                 member_cand = clean_lbl
-            elif block_id in ("linear", "conv2d", "layernorm", "batchnorm2d", "maxpool2d", "avgpool2d", "adaptiveavgpool2d", "dropout"):
+            elif block_id in ("linear", "conv1d", "conv2d", "embedding", "layernorm", "batchnorm2d", "maxpool2d", "avgpool2d", "adaptiveavgpool2d", "dropout", "relu", "gelu", "silu", "sigmoid", "tanh", "softmax"):
                 member_cand = f"layer_{_sanitize(raw_lbl or block_id)}"
             else:
                 member_cand = f"custom_{node.id.replace('-', '_')}"
@@ -882,7 +883,7 @@ def _generate_single_graph_code(
         # 2. Fill any remaining -1 parameters from inferred_params
         if inferred_params and node.id in inferred_params:
             for k, v in inferred_params[node.id].items():
-                if params.get(k) == "LAZY" and block_id in ("linear", "conv2d"):
+                if params.get(k) == "LAZY" and block_id in ("linear", "conv1d", "conv2d"):
                     continue
                 if params.get(k) in (-1, "?", "", "LAZY"):
                     params[k] = v

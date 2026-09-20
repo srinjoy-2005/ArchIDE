@@ -153,15 +153,24 @@ class AgentGraphCompiler:
         if self.workspace_dir:
             search_dirs.append(os.path.dirname(self.workspace_dir))
             search_dirs.append(os.path.join(self.workspace_dir, "modules"))
+            search_dirs.append(os.path.join(self.workspace_dir, "ir"))
+            search_dirs.append(os.path.join(self.workspace_dir, "ir", "modules"))
             search_dirs.append(os.path.join(os.path.dirname(self.workspace_dir), "modules"))
+            search_dirs.append(os.path.join(os.path.dirname(self.workspace_dir), "ir"))
+            search_dirs.append(os.path.join(os.path.dirname(self.workspace_dir), "ir", "modules"))
             search_dirs.append(os.path.join(os.path.dirname(self.workspace_dir), "graphs"))
             search_dirs.append(os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules"))
 
         candidates = [
             f"{custom_module_id}.arch",
+            f"{custom_module_id}.ir.json",
             f"{custom_module_id}.json",
             f"{stem}.arch",
+            f"{stem}.ir.json",
+            f"{stem}.json",
             f"modules/{stem}.arch",
+            f"modules/{stem}.ir.json",
+            f"modules/{stem}.json",
         ]
         
         found_path = None
@@ -181,14 +190,26 @@ class AgentGraphCompiler:
                 with open(found_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 inputs, outputs = [], []
-                for n in data.get("nodes", []):
-                    b_id = n.get("data", {}).get("block_id")
-                    if b_id in {"input", "gourav"}:
-                        lbl = n.get("data", {}).get("label") or "Input"
-                        inputs.append({"id": n.get("id", f"in_{len(inputs)+1}"), "name": lbl, "type": "tensor"})
-                    elif b_id == "output":
-                        lbl = n.get("data", {}).get("label") or "Output"
-                        outputs.append({"id": n.get("id", f"out_{len(outputs)+1}"), "name": lbl, "type": "tensor"})
+                raw_nodes = data.get("nodes", [])
+                if isinstance(raw_nodes, dict):
+                    # .ir.json format: {"in": {"block": "input", ...}, "out": {"block": "output", ...}}
+                    for node_id, n_info in raw_nodes.items():
+                        b_id = n_info.get("block") or n_info.get("block_id")
+                        if b_id in {"input", "gourav"}:
+                            lbl = n_info.get("var_name") or node_id or "Input"
+                            inputs.append({"id": node_id, "name": lbl, "type": "tensor"})
+                        elif b_id == "output":
+                            lbl = n_info.get("var_name") or node_id or "Output"
+                            outputs.append({"id": node_id, "name": lbl, "type": "tensor"})
+                elif isinstance(raw_nodes, list):
+                    for n in raw_nodes:
+                        b_id = n.get("data", {}).get("block_id") or n.get("block")
+                        if b_id in {"input", "gourav"}:
+                            lbl = n.get("data", {}).get("label") or "Input"
+                            inputs.append({"id": n.get("id", f"in_{len(inputs)+1}"), "name": lbl, "type": "tensor"})
+                        elif b_id == "output":
+                            lbl = n.get("data", {}).get("label") or "Output"
+                            outputs.append({"id": n.get("id", f"out_{len(outputs)+1}"), "name": lbl, "type": "tensor"})
                 if inputs or outputs:
                     return (
                         inputs or [{"id": "in", "name": "Input", "type": "tensor"}],
@@ -442,13 +463,18 @@ class AgentGraphCompiler:
             dep_stem = curr_dep.split("/")[-1]
             candidates = [
                 os.path.join(self.workspace_dir, f"{curr_dep}.arch"),
+                os.path.join(self.workspace_dir, f"{curr_dep}.ir.json"),
                 os.path.join(self.workspace_dir, f"{curr_dep}.json"),
                 os.path.join(self.workspace_dir, curr_dep),
                 os.path.join(self.workspace_dir, "modules", f"{dep_stem}.arch"),
+                os.path.join(self.workspace_dir, "modules", f"{dep_stem}.ir.json"),
                 os.path.join(self.workspace_dir, "modules", f"{dep_stem}.json"),
+                os.path.join(self.workspace_dir, "ir", "modules", f"{dep_stem}.ir.json"),
+                os.path.join(self.workspace_dir, "ir", f"{dep_stem}.ir.json"),
                 os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.arch"),
                 os.path.join(os.path.dirname(self.workspace_dir), "graphs", "modules", f"{dep_stem}.json"),
                 os.path.join(os.path.dirname(self.workspace_dir), "graphs", f"{dep_stem}.arch"),
+                os.path.join(os.path.dirname(self.workspace_dir), "ir", "modules", f"{dep_stem}.ir.json"),
             ]
             loaded_path = None
             for p in candidates:
@@ -460,6 +486,8 @@ class AgentGraphCompiler:
                 try:
                     with open(loaded_path, "r", encoding="utf-8") as g_file:
                         g_json = json.load(g_file)
+                    if isinstance(g_json.get("nodes"), dict):
+                        g_json = AgentGraphCompiler(g_json, workspace_dir=self.workspace_dir).compile()
                     g_nodes = [
                         Node(
                             id=gn["id"],

@@ -71,6 +71,74 @@
       }
     ]
   },
+  "conv1d": {
+    "name": "Conv1D",
+    "category": "Core Layers",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "in_channels",
+        "type": "int",
+        "default": 3,
+        "description": "Number of channels in the input"
+      },
+      {
+        "name": "out_channels",
+        "type": "int",
+        "default": 16,
+        "description": "Number of channels produced by the convolution"
+      },
+      {
+        "name": "kernel_size",
+        "type": "int",
+        "default": 3,
+        "description": "Size of the convolving kernel"
+      },
+      {
+        "name": "stride",
+        "type": "int",
+        "default": 1,
+        "description": "Stride of the convolution"
+      },
+      {
+        "name": "padding",
+        "type": "int",
+        "default": 0,
+        "description": "Padding added to both sides of the input"
+      },
+      {
+        "name": "dilation",
+        "type": "int",
+        "default": 1,
+        "description": "Spacing between kernel elements"
+      },
+      {
+        "name": "groups",
+        "type": "int",
+        "default": 1,
+        "description": "Number of blocked connections from input to output"
+      },
+      {
+        "name": "bias",
+        "type": "bool",
+        "default": true,
+        "description": "If True, adds a learnable bias to the output"
+      }
+    ]
+  },
   "conv2d": {
     "name": "Conv2D",
     "category": "Core Layers",
@@ -139,6 +207,68 @@
       }
     ]
   },
+  "embedding": {
+    "name": "Embedding",
+    "category": "Core Layers",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Indices",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "num_embeddings",
+        "type": "int",
+        "default": 1000,
+        "description": "Size of the dictionary of embeddings"
+      },
+      {
+        "name": "embedding_dim",
+        "type": "int",
+        "default": 128,
+        "description": "The size of each embedding vector"
+      },
+      {
+        "name": "padding_idx",
+        "type": "int",
+        "default": null,
+        "description": "If specified, padding entries do not contribute to gradient"
+      },
+      {
+        "name": "max_norm",
+        "type": "float",
+        "default": null,
+        "description": "If given, each embedding vector with norm larger than max_norm is renormalized"
+      },
+      {
+        "name": "norm_type",
+        "type": "float",
+        "default": 2.0,
+        "description": "The p of the p-norm to compute for the max_norm option"
+      },
+      {
+        "name": "scale_grad_by_freq",
+        "type": "bool",
+        "default": false,
+        "description": "Scale gradients by inverse of word frequency"
+      },
+      {
+        "name": "sparse",
+        "type": "bool",
+        "default": false,
+        "description": "If True, gradient w.r.t. weight matrix will be a sparse tensor"
+      }
+    ]
+  },
   "shape_extractor": {
     "name": "Shape Extractor",
     "category": "Core Layers",
@@ -176,6 +306,58 @@
   },
   "relu": {
     "name": "ReLU",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "inplace",
+        "type": "bool",
+        "default": false,
+        "description": "Modify input in-place"
+      }
+    ]
+  },
+  "gelu": {
+    "name": "GELU",
+    "category": "Activations",
+    "is_functional": false,
+    "inputs": [
+      {
+        "id": "in",
+        "name": "Input",
+        "is_list": false
+      }
+    ],
+    "outputs": [
+      {
+        "id": "out",
+        "name": "Output"
+      }
+    ],
+    "params": [
+      {
+        "name": "approximate",
+        "type": "string",
+        "default": "none",
+        "description": "GELU approximation algorithm: 'none' or 'tanh'"
+      }
+    ]
+  },
+  "silu": {
+    "name": "SiLU",
     "category": "Activations",
     "is_functional": false,
     "inputs": [
@@ -549,7 +731,20 @@
         "name": "Out"
       }
     ],
-    "params": []
+    "params": [
+      {
+        "name": "scalar_a",
+        "type": "string",
+        "default": null,
+        "description": "Scalar left operand"
+      },
+      {
+        "name": "scalar_b",
+        "type": "string",
+        "default": null,
+        "description": "Scalar right operand"
+      }
+    ]
   },
   "split": {
     "name": "Split (Chunk)",
@@ -609,7 +804,20 @@
         "name": "Out"
       }
     ],
-    "params": []
+    "params": [
+      {
+        "name": "scalar_a",
+        "type": "string",
+        "default": null,
+        "description": "Scalar left operand"
+      },
+      {
+        "name": "scalar_b",
+        "type": "string",
+        "default": null,
+        "description": "Scalar right operand"
+      }
+    ]
   },
   "mul": {
     "name": "Multiply",
@@ -628,7 +836,20 @@
         "name": "Out"
       }
     ],
-    "params": []
+    "params": [
+      {
+        "name": "scalar_a",
+        "type": "string",
+        "default": null,
+        "description": "Scalar left operand"
+      },
+      {
+        "name": "scalar_b",
+        "type": "string",
+        "default": null,
+        "description": "Scalar right operand"
+      }
+    ]
   },
   "div": {
     "name": "Divide",
@@ -652,7 +873,20 @@
         "name": "Out"
       }
     ],
-    "params": []
+    "params": [
+      {
+        "name": "scalar_a",
+        "type": "string",
+        "default": null,
+        "description": "Scalar left operand"
+      },
+      {
+        "name": "scalar_b",
+        "type": "string",
+        "default": null,
+        "description": "Scalar right operand"
+      }
+    ]
   },
   "pow": {
     "name": "Power",

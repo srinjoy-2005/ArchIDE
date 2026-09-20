@@ -3,7 +3,7 @@ import json
 import os
 import re
 import sys
-from typing import Dict, Any, List, Optional, Tuple, Set
+from typing import Dict, Any, List, Optional, Tuple, Set, Union
 
 
 # ─── Standard Layer Mapping ──────────────────────────────────────────────────
@@ -16,9 +16,12 @@ LAYER_MAP: Dict[str, Tuple[str, List[str], Dict[str, Any]]] = {
     "Conv1d": ("conv1d", ["in_channels", "out_channels", "kernel_size", "stride", "padding", "dilation", "groups", "bias"], {
         "stride": 1, "padding": 0, "dilation": 1, "groups": 1, "bias": True
     }),
+    "Embedding": ("embedding", ["num_embeddings", "embedding_dim", "padding_idx", "max_norm", "norm_type", "scale_grad_by_freq", "sparse"], {
+        "padding_idx": None, "max_norm": None, "norm_type": 2.0, "scale_grad_by_freq": False, "sparse": False
+    }),
     "ReLU": ("relu", ["inplace"], {"inplace": False}),
     "GELU": ("gelu", ["approximate"], {"approximate": "none"}),
-    "SiLU": ("gelu", [], {}),
+    "SiLU": ("silu", ["inplace"], {"inplace": False}),
     "Sigmoid": ("sigmoid", [], {}),
     "Tanh": ("tanh", [], {}),
     "Softmax": ("softmax", ["dim"], {"dim": -1}),
@@ -53,7 +56,7 @@ FUNCTIONAL_MAP: Dict[str, Tuple[str, List[str], Dict[str, Any]]] = {
     "pow": ("pow", ["exponent"], {"exponent": 2.0}),
     "relu": ("relu", ["inplace"], {"inplace": False}),
     "gelu": ("gelu", ["approximate"], {"approximate": "none"}),
-    "silu": ("gelu", [], {}),
+    "silu": ("silu", ["inplace"], {"inplace": False}),
     "sigmoid": ("sigmoid", [], {}),
     "tanh": ("tanh", [], {}),
     "softmax": ("softmax", ["dim"], {"dim": -1}),
@@ -125,8 +128,13 @@ class PyTorchASTDecompiler:
     Decompiles a PyTorch nn.Module Python file into ArchIDE Agentic IR (.ir.json).
     """
 
-    def __init__(self, workspace_dir: Optional[str] = None):
+    def __init__(
+        self,
+        workspace_dir: Optional[str] = None,
+        visited_paths: Optional[Set[str]] = None,
+    ):
         self.workspace_dir = workspace_dir
+        self.visited_paths: Set[str] = visited_paths if visited_paths is not None else set()
         self.imports: Dict[str, str] = {}  # ClassName -> module/path
         self.init_variables: List[Dict[str, Any]] = []
         self.init_var_names: Set[str] = set()
@@ -135,6 +143,8 @@ class PyTorchASTDecompiler:
         self.edges: List[str] = []
         self.env: Dict[str, Tuple[str, str]] = {}  # var_name -> (node_id, port_id)
         self.node_counters: Dict[str, int] = {}
+        self.all_irs: Dict[str, Dict[str, Any]] = {}
+        self.known_class_inits: Dict[str, List[str]] = {}
 
     def _next_node_id(self, base_name: str) -> str:
         clean = re.sub(r'[^a-zA-Z0-9_]', '_', base_name).strip('_').lower() or "node"
@@ -144,41 +154,349 @@ class PyTorchASTDecompiler:
             return clean
         return f"{clean}_{count}" if count > 1 else clean
 
-    def decompile_source(self, code_str: str, file_stem: str = "main") -> Dict[str, Any]:
-        tree = ast.parse(code_str)
+    def _find_module_classes(self, tree: ast.AST) -> Dict[str, ast.ClassDef]:
+        """Find all ast.ClassDef in tree that inherit from Module or define forward()."""
+        module_classes: Dict[str, ast.ClassDef] = {}
+        known_module_names: Set[str] = {"Module", "nn.Module", "torch.nn.Module"}
 
-        # 1. Collect Imports
-        for stmt in tree.body:
-            if isinstance(stmt, ast.ImportFrom):
-                mod = stmt.module or ""
-                mod_path = mod.strip(".").replace(".", "/")
-                for alias in stmt.names:
-                    self.imports[alias.name] = f"{mod_path}" if mod_path else alias.name
-            elif isinstance(stmt, ast.Import):
-                for alias in stmt.names:
-                    self.imports[alias.name] = alias.name.strip(".").replace(".", "/")
-
-        # 2. Find nn.Module Class
-        module_class: Optional[ast.ClassDef] = None
+        # First pass: classes that explicitly inherit from Module or define forward
         for stmt in tree.body:
             if isinstance(stmt, ast.ClassDef):
                 base_names = [ast.unparse(b) for b in stmt.bases]
-                if any("Module" in b for b in base_names) or not module_class:
-                    module_class = stmt
+                has_forward = any(isinstance(m, ast.FunctionDef) and m.name == "forward" for m in stmt.body)
+                inherits_module = any(any(m in b for m in known_module_names) for b in base_names)
+                if inherits_module or has_forward:
+                    module_classes[stmt.name] = stmt
+                    known_module_names.add(stmt.name)
 
-        if not module_class:
+        # Second pass: classes inheriting from known discovered classes
+        changed = True
+        while changed:
+            changed = False
+            for stmt in tree.body:
+                if isinstance(stmt, ast.ClassDef) and stmt.name not in module_classes:
+                    base_names = [ast.unparse(b) for b in stmt.bases]
+                    if any(any(b_name == k or k in b_name for k in known_module_names) for b_name in base_names):
+                        module_classes[stmt.name] = stmt
+                        known_module_names.add(stmt.name)
+                        changed = True
+
+        # Fallback: if no classes matched, take any ClassDef
+        if not module_classes:
+            for stmt in tree.body:
+                if isinstance(stmt, ast.ClassDef):
+                    module_classes[stmt.name] = stmt
+
+        return module_classes
+
+    def _get_class_deps(self, cls_node: ast.ClassDef, module_classes: Dict[str, ast.ClassDef]) -> Set[str]:
+        deps: Set[str] = set()
+        for node in ast.walk(cls_node):
+            if isinstance(node, ast.Call):
+                func_id = ast.unparse(node.func).split(".")[-1]
+                if func_id in module_classes and func_id != cls_node.name:
+                    deps.add(func_id)
+        for b in cls_node.bases:
+            b_name = ast.unparse(b).split(".")[-1]
+            if b_name in module_classes and b_name != cls_node.name:
+                deps.add(b_name)
+        return deps
+
+    def _topological_sort_classes(self, module_classes: Dict[str, ast.ClassDef]) -> List[str]:
+        deps: Dict[str, Set[str]] = {
+            name: self._get_class_deps(cls_node, module_classes)
+            for name, cls_node in module_classes.items()
+        }
+
+        visited: Set[str] = set()
+        temp_mark: Set[str] = set()
+        order: List[str] = []
+
+        def visit(n: str):
+            if n in temp_mark:
+                return  # Cycle detected; break gracefully
+            if n not in visited:
+                temp_mark.add(n)
+                for dep in sorted(deps.get(n, set())):
+                    visit(dep)
+                temp_mark.remove(n)
+                visited.add(n)
+                order.append(n)
+
+        for name in module_classes:
+            if name not in visited:
+                visit(name)
+
+        return order
+
+    def _resolve_import_file(
+        self,
+        module_name: str,
+        imported_name: str,
+        level: int,
+        source_dir: Optional[str],
+    ) -> Optional[str]:
+        candidates: List[str] = []
+
+        # Relative import
+        if level > 0 and source_dir:
+            base_dir = source_dir
+            for _ in range(level - 1):
+                base_dir = os.path.dirname(base_dir)
+            if module_name:
+                parts = module_name.split(".")
+                candidates.append(os.path.join(base_dir, *parts, f"{imported_name}.py"))
+                candidates.append(os.path.join(base_dir, *parts, f"{imported_name.lower()}.py"))
+                candidates.append(os.path.join(base_dir, *parts, "__init__.py"))
+                candidates.append(os.path.join(base_dir, *parts) + ".py")
+            else:
+                candidates.append(os.path.join(base_dir, f"{imported_name}.py"))
+                candidates.append(os.path.join(base_dir, f"{imported_name.lower()}.py"))
+                candidates.append(os.path.join(base_dir, imported_name, "__init__.py"))
+
+        # Absolute or workspace import
+        search_roots = []
+        if source_dir:
+            search_roots.append(source_dir)
+        if self.workspace_dir:
+            search_roots.append(self.workspace_dir)
+            search_roots.append(os.path.join(self.workspace_dir, "python"))
+            search_roots.append(os.path.join(self.workspace_dir, "modules"))
+            search_roots.append(os.path.join(self.workspace_dir, "python", "modules"))
+            search_roots.append(os.path.join(self.workspace_dir, "models"))
+            search_roots.append(os.path.join(self.workspace_dir, "python", "models"))
+
+        parts = module_name.split(".") if module_name else []
+        for r in search_roots:
+            if parts:
+                candidates.append(os.path.join(r, *parts, f"{imported_name}.py"))
+                candidates.append(os.path.join(r, *parts, f"{imported_name.lower()}.py"))
+                candidates.append(os.path.join(r, *parts, "__init__.py"))
+                candidates.append(os.path.join(r, *parts) + ".py")
+            candidates.append(os.path.join(r, f"{imported_name}.py"))
+            candidates.append(os.path.join(r, f"{imported_name.lower()}.py"))
+            candidates.append(os.path.join(r, "modules", f"{imported_name}.py"))
+            candidates.append(os.path.join(r, "modules", f"{imported_name.lower()}.py"))
+
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+        return None
+
+    def _recursively_decompile_file(self, abs_file: str) -> None:
+        try:
+            with open(abs_file, "r", encoding="utf-8") as f:
+                sub_code = f.read()
+            sub_stem = os.path.splitext(os.path.basename(abs_file))[0]
+            sub_decompiler = PyTorchASTDecompiler(
+                workspace_dir=self.workspace_dir,
+                visited_paths=self.visited_paths,
+            )
+            sub_irs = sub_decompiler.decompile_all_classes(
+                sub_code, file_stem=sub_stem, source_path=abs_file
+            )
+            for k, v in sub_irs.items():
+                if k not in self.all_irs:
+                    self.all_irs[k] = v
+            if self.workspace_dir:
+                modules_dir = os.path.join(self.workspace_dir, "ir", "modules")
+                os.makedirs(modules_dir, exist_ok=True)
+                for k, v in sub_irs.items():
+                    out_path = os.path.join(modules_dir, f"{k}.ir.json")
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        json.dump(v, f, indent=2)
+        except Exception:
+            pass
+
+    def _parse_imports(self, tree: ast.AST, source_path: Optional[str] = None) -> None:
+        source_dir = os.path.dirname(os.path.abspath(source_path)) if source_path else None
+
+        for stmt in tree.body:
+            if isinstance(stmt, ast.ImportFrom):
+                mod = stmt.module or ""
+                level = stmt.level
+                for alias in stmt.names:
+                    local_name = alias.asname if alias.asname else alias.name
+                    imported_name = alias.name
+                    found_file = self._resolve_import_file(mod, imported_name, level, source_dir)
+                    canonical_id = f"modules/{imported_name.lower()}"
+
+                    if found_file:
+                        abs_file = os.path.abspath(found_file)
+                        if abs_file not in self.visited_paths:
+                            self.visited_paths.add(abs_file)
+                            self._recursively_decompile_file(abs_file)
+                        self.imports[local_name] = canonical_id
+                        self.imports[imported_name] = canonical_id
+                    else:
+                        mod_path = mod.strip(".").replace(".", "/")
+                        val = f"{mod_path}" if mod_path else alias.name
+                        self.imports[local_name] = val
+                        self.imports[imported_name] = val
+
+            elif isinstance(stmt, ast.Import):
+                for alias in stmt.names:
+                    local_name = alias.asname if alias.asname else alias.name
+                    imported_name = alias.name
+                    found_file = self._resolve_import_file("", imported_name, 0, source_dir)
+                    canonical_id = f"modules/{imported_name.lower()}"
+                    if found_file:
+                        abs_file = os.path.abspath(found_file)
+                        if abs_file not in self.visited_paths:
+                            self.visited_paths.add(abs_file)
+                            self._recursively_decompile_file(abs_file)
+                        self.imports[local_name] = canonical_id
+                        self.imports[imported_name] = canonical_id
+                    else:
+                        clean_name = alias.name.strip(".").replace(".", "/")
+                        self.imports[local_name] = clean_name
+                        self.imports[imported_name] = clean_name
+
+    def _extract_self_chain(self, node: ast.AST) -> Optional[List[Union[str, int]]]:
+        """
+        Unpacks nested ast.Attribute and ast.Subscript chains originating at self.
+        Examples:
+          self.backbone.layer1 -> ["backbone", "layer1"]
+          self.features[0].conv -> ["features", 0, "conv"]
+          self.blocks[0] -> ["blocks", 0]
+          self.fc -> ["fc"]
+        """
+        tokens: List[Union[str, int]] = []
+        curr = node
+        while True:
+            if isinstance(curr, ast.Attribute):
+                tokens.append(curr.attr)
+                curr = curr.value
+            elif isinstance(curr, ast.Subscript):
+                slice_val = _eval_ast_literal(curr.slice, self.init_var_names)
+                tokens.append(slice_val)
+                curr = curr.value
+            elif isinstance(curr, ast.Name):
+                if curr.id == "self":
+                    tokens.reverse()
+                    return tokens if tokens else None
+                return None
+            else:
+                return None
+
+    def _resolve_chain_layer(self, chain: List[Union[str, int]]) -> Tuple[str, Optional[str], Dict[str, Any]]:
+        """
+        Resolves a chain of attributes/subscripts into (block_id, custom_module_id, params).
+        """
+        # 1. Exact match in layer_instances (e.g. "layer1" or "features.0.conv")
+        dot_name = ".".join(str(t) for t in chain)
+        if dot_name in self.layer_instances:
+            linfo = self.layer_instances[dot_name]
+            return linfo["block"], linfo.get("custom_module_id"), dict(linfo.get("params", {}))
+
+        # 2. Single attribute
+        if len(chain) == 1:
+            attr = str(chain[0])
+            if attr in self.layer_instances:
+                linfo = self.layer_instances[attr]
+                return linfo["block"], linfo.get("custom_module_id"), dict(linfo.get("params", {}))
+            custom_id = self.imports.get(attr, f"modules/{attr.lower()}")
+            return "custom_module", custom_id, {}
+
+        # 3. Container traversal (e.g. self.features[0], self.layers[0].conv)
+        root = str(chain[0])
+        if root in self.layer_instances:
+            curr_info = self.layer_instances[root]
+            if isinstance(chain[1], int) and curr_info.get("layers"):
+                idx = chain[1]
+                layers = curr_info.get("layers", [])
+                if 0 <= idx < len(layers):
+                    sub = layers[idx]
+                    if len(chain) == 2:
+                        return sub.get("block", "custom_module"), sub.get("custom_module_id"), dict(sub.get("params", {}))
+                    else:
+                        sub_id = sub.get("custom_module_id") or f"modules/{root}_{idx}"
+                        sub_attr = "_".join(str(t) for t in chain[2:])
+                        return "custom_module", f"{sub_id}_{sub_attr}", {}
+
+            parent_id = curr_info.get("custom_module_id", f"modules/{root}")
+            sub_name = "_".join(str(t) for t in chain[1:])
+            custom_id = f"{parent_id}_{sub_name}" if not parent_id.endswith(sub_name) else parent_id
+            return "custom_module", custom_id, {}
+
+        # 4. General fallback
+        chain_str = "_".join(str(t) for t in chain)
+        return "custom_module", f"modules/{chain_str}", {}
+
+    def decompile_source(self, code_str: str, file_stem: str = "main", source_path: Optional[str] = None) -> Dict[str, Any]:
+        tree = ast.parse(code_str)
+
+        # 1. Collect Imports & recursively decompile local files
+        self._parse_imports(tree, source_path=source_path)
+
+        # 2. Find all nn.Module classes
+        module_classes = self._find_module_classes(tree)
+        if not module_classes:
             raise ValueError("No nn.Module class found in Python source code.")
 
-        model_name = file_stem if file_stem != "main" else (module_class.name.lower() or "main")
-        if model_name.startswith("modules/"):
-            model_name = model_name[8:]
+        # Register local classes and extract their __init__ parameter signatures
+        for cls_name, cls_node in module_classes.items():
+            lowered = cls_name.lower()
+            self.imports[cls_name] = f"modules/{lowered}"
+            self.imports[lowered] = f"modules/{lowered}"
+            init_method = next((m for m in cls_node.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
+            if init_method:
+                self.known_class_inits[cls_name] = [a.arg for a in init_method.args.args[1:]]
 
-        # 3. Analyze __init__
+        # 3. Topologically sort classes
+        sorted_classes = self._topological_sort_classes(module_classes)
+
+        # Determine root class
+        deps_dict = {name: self._get_class_deps(module_classes[name], module_classes) for name in sorted_classes}
+        all_deps = {dep for d_set in deps_dict.values() for dep in d_set}
+        candidate_roots = [c for c in sorted_classes if c not in all_deps]
+        root_class_name = candidate_roots[-1] if candidate_roots else sorted_classes[-1]
+
+        # 4. Decompile each class with isolated state
+        for cls_name in sorted_classes:
+            cls_node = module_classes[cls_name]
+            is_root = (cls_name == root_class_name)
+            model_name = file_stem if (is_root and file_stem != "main") else cls_name.lower()
+            if model_name.startswith("modules/"):
+                model_name = model_name[8:]
+
+            ir = self._decompile_single_class(cls_node, model_name=model_name, module_classes=module_classes)
+            self.all_irs[cls_name.lower()] = ir
+
+        # Set decompiler instance state to match the root class for backward compatibility
+        root_ir = self.all_irs[root_class_name.lower()]
+        self.init_variables = list(root_ir["variables"])
+        self.init_var_names = {v["name"] for v in self.init_variables}
+        self.nodes = dict(root_ir["nodes"])
+        self.edges = list(root_ir["edges"])
+
+        return root_ir
+
+    def decompile_all_classes(self, code_str: str, file_stem: str = "main", source_path: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        self.decompile_source(code_str, file_stem=file_stem, source_path=source_path)
+        return self.all_irs
+
+    def _decompile_single_class(
+        self,
+        module_class: ast.ClassDef,
+        model_name: str,
+        module_classes: Optional[Dict[str, ast.ClassDef]] = None,
+    ) -> Dict[str, Any]:
+        # Reset per-class state
+        self.init_variables = []
+        self.init_var_names = set()
+        self.layer_instances = {}
+        self.nodes = {}
+        self.edges = []
+        self.env = {}
+        self.node_counters = {}
+
+        # Parse __init__
         init_method = next((m for m in module_class.body if isinstance(m, ast.FunctionDef) and m.name == "__init__"), None)
         if init_method:
             self._parse_init(init_method)
 
-        # 4. Analyze forward
+        # Parse forward
         forward_method = next((m for m in module_class.body if isinstance(m, ast.FunctionDef) and m.name == "forward"), None)
         if forward_method:
             self._parse_forward(forward_method)
@@ -187,9 +505,9 @@ class PyTorchASTDecompiler:
 
         return {
             "name": model_name,
-            "variables": self.init_variables,
-            "nodes": self.nodes,
-            "edges": self.edges,
+            "variables": list(self.init_variables),
+            "nodes": dict(self.nodes),
+            "edges": list(self.edges),
         }
 
     def _parse_init(self, func: ast.FunctionDef) -> None:
@@ -276,10 +594,35 @@ class PyTorchASTDecompiler:
                 if kw.arg:
                     params[kw.arg] = _eval_ast_literal(kw.value, self.init_var_names)
 
+            seq_layers = []
+            for arg in call.args:
+                if isinstance(arg, ast.Call):
+                    sub_func = ast.unparse(arg.func).split(".")[-1]
+                    if sub_func in LAYER_MAP:
+                        s_block, s_pos_params, s_default_params = LAYER_MAP[sub_func]
+                        s_params = dict(s_default_params)
+                        for p_idx, p_arg in enumerate(arg.args):
+                            if p_idx < len(s_pos_params):
+                                s_params[s_pos_params[p_idx]] = _eval_ast_literal(p_arg, self.init_var_names)
+                        for p_kw in arg.keywords:
+                            if p_kw.arg:
+                                s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                        seq_layers.append({"block": s_block, "params": s_params, "class_name": sub_func, "is_custom": False})
+                    else:
+                        sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
+                        s_params = {}
+                        for p_kw in arg.keywords:
+                            if p_kw.arg:
+                                s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                        for p_idx, p_arg in enumerate(arg.args):
+                            s_params[f"param_{p_idx}"] = _eval_ast_literal(p_arg, self.init_var_names)
+                        seq_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "params": s_params, "class_name": sub_func, "is_custom": True})
+
             self.layer_instances[attr_name] = {
                 "block": "custom_module",
                 "custom_module_id": "sequential",
                 "params": params,
+                "layers": seq_layers,
                 "is_custom": True,
                 "class_name": "Sequential",
             }
@@ -293,8 +636,26 @@ class PyTorchASTDecompiler:
                 for elt in call.args[0].elts:
                     if isinstance(elt, ast.Call):
                         sub_func = ast.unparse(elt.func).split(".")[-1]
-                        sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
-                        list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id})
+                        if sub_func in LAYER_MAP:
+                            s_block, s_pos_params, s_default_params = LAYER_MAP[sub_func]
+                            s_params = dict(s_default_params)
+                            for p_idx, p_arg in enumerate(elt.args):
+                                if p_idx < len(s_pos_params):
+                                    s_params[s_pos_params[p_idx]] = _eval_ast_literal(p_arg, self.init_var_names)
+                            for p_kw in elt.keywords:
+                                if p_kw.arg:
+                                    s_params[p_kw.arg] = _eval_ast_literal(p_kw.value, self.init_var_names)
+                            list_layers.append({"block": s_block, "params": s_params, "class_name": sub_func, "is_custom": False})
+                        else:
+                            sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
+                            list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "class_name": sub_func, "is_custom": True})
+            elif call.args and isinstance(call.args[0], ast.ListComp):
+                elt = call.args[0].elt
+                if isinstance(elt, ast.Call):
+                    sub_func = ast.unparse(elt.func).split(".")[-1]
+                    sub_mod_id = self.imports.get(sub_func, f"modules/{sub_func.lower()}")
+                    list_layers.append({"block": "custom_module", "custom_module_id": sub_mod_id, "class_name": sub_func, "is_custom": True})
+
             self.layer_instances[attr_name] = {
                 "block": "module_list",
                 "layers": list_layers,
@@ -318,16 +679,20 @@ class PyTorchASTDecompiler:
                 if any(os.path.exists(p) for p in cand_paths):
                     custom_mod_id = f"modules/{lowered}"
                 else:
-                    custom_mod_id = lowered
+                    custom_mod_id = f"modules/{lowered}"
             else:
-                custom_mod_id = lowered
+                custom_mod_id = f"modules/{lowered}"
 
+        # Parameter binding: map positional args to constructor argument names if known
+        pos_param_names = self.known_class_inits.get(raw_class_name, [])
         params = {}
         for kw in call.keywords:
             if kw.arg:
                 params[kw.arg] = _eval_ast_literal(kw.value, self.init_var_names)
         for idx, arg in enumerate(call.args):
-            params[f"param_{idx}"] = _eval_ast_literal(arg, self.init_var_names)
+            p_name = pos_param_names[idx] if idx < len(pos_param_names) else f"param_{idx}"
+            if p_name not in params:
+                params[p_name] = _eval_ast_literal(arg, self.init_var_names)
 
         self.layer_instances[attr_name] = {
             "block": "custom_module",
@@ -348,23 +713,30 @@ class PyTorchASTDecompiler:
             for stmt in func.body:
                 if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call):
                     if any(isinstance(a, ast.Name) and a.id == arg_name for a in stmt.value.args):
-                        if isinstance(stmt.value.func, ast.Attribute) and stmt.value.func.attr in self.layer_instances:
-                            linfo = self.layer_instances[stmt.value.func.attr]
-                            if linfo["block"] == "linear":
-                                in_feat = linfo["params"].get("in_features", 128)
+                        chain = self._extract_self_chain(stmt.value.func)
+                        if chain:
+                            b_id, _, b_params = self._resolve_chain_layer(chain)
+                            if b_id == "linear":
+                                in_feat = b_params.get("in_features", 128)
                                 inferred_shape = f"(1, {in_feat})"
                                 break
-                            elif linfo["block"] == "conv2d":
-                                in_ch = linfo["params"].get("in_channels", 3)
+                            elif b_id == "conv2d":
+                                in_ch = b_params.get("in_channels", 3)
                                 inferred_shape = f"(1, {in_ch}, 224, 224)"
                                 break
-                            elif linfo["block"] == "layernorm":
-                                n_shape = linfo["params"].get("normalized_shape", 512)
+                            elif b_id == "conv1d":
+                                in_ch = b_params.get("in_channels", 3)
+                                inferred_shape = f"(1, {in_ch}, 128)"
+                                break
+                            elif b_id == "embedding":
+                                inferred_shape = "(1, 64)"
+                                break
+                            elif b_id == "layernorm":
+                                n_shape = b_params.get("normalized_shape", 512)
                                 inferred_shape = f"(1, 64, {n_shape})"
                                 break
-                            elif linfo.get("is_custom"):
-                                c_params = linfo.get("params", {})
-                                d_m = c_params.get("d_model", 512)
+                            elif b_id == "custom_module":
+                                d_m = b_params.get("d_model", 512)
                                 inferred_shape = f"(1, 64, {d_m})"
                                 break
 
@@ -470,75 +842,53 @@ class PyTorchASTDecompiler:
         return (None, "out")
 
     def _parse_call(self, call: ast.Call, target_hint: str = "") -> Tuple[Optional[str], str]:
-        # 1A. Check if calling indexed module list on self: self.layers[i](x)
-        if (
-            isinstance(call.func, ast.Subscript)
-            and isinstance(call.func.value, ast.Attribute)
-            and isinstance(call.func.value.value, ast.Name)
-            and call.func.value.value.id == "self"
-        ):
-            attr = call.func.value.attr
-            layer_info = self.layer_instances.get(attr)
-            slice_val = _eval_ast_literal(call.func.slice, self.init_var_names)
-            base_name = f"{attr}_{slice_val}" if slice_val is not None else attr
-            node_id = self._next_node_id(base_name)
-            node_entry: Dict[str, Any] = {"block": "custom_module"}
-            if layer_info and layer_info.get("block") == "module_list":
-                layers = layer_info.get("layers", [])
-                if isinstance(slice_val, int) and 0 <= slice_val < len(layers):
-                    node_entry["custom_module_id"] = layers[slice_val].get("custom_module_id", f"modules/{attr}")
+        # 1. Calls on self: self.fc(x), self.layer1(x), self.backbone.layer1(x), self.features[0].conv(x)
+        chain = self._extract_self_chain(call.func)
+        if chain:
+            block_id, custom_mod_id, params = self._resolve_chain_layer(chain)
+
+            # Determine node naming
+            if len(chain) == 1:
+                raw_name = str(chain[0])
+                if raw_name.startswith("layer_"):
+                    clean_name = raw_name[6:]
+                elif raw_name.startswith("custom_"):
+                    clean_name = raw_name[7:]
                 else:
-                    node_entry["custom_module_id"] = f"modules/{attr}"
+                    clean_name = raw_name
+                base_name = clean_name or target_hint or block_id
             else:
-                node_entry["custom_module_id"] = f"modules/{attr}"
+                base_name = "_".join(str(t) for t in chain)
+
+            node_id = self._next_node_id(base_name)
+
+            node_entry: Dict[str, Any] = {"block": block_id}
+            if custom_mod_id:
+                node_entry["custom_module_id"] = custom_mod_id
+            if params:
+                node_entry["params"] = dict(params)
             if target_hint and not target_hint.startswith("x_"):
                 node_entry["var_name"] = target_hint
+
             self.nodes[node_id] = node_entry
 
+            # Positional arguments
             for idx, arg in enumerate(call.args):
+                if isinstance(arg, ast.Constant) and arg.value is None:
+                    continue
                 src_node, src_port = self._parse_expr(arg)
                 if src_node:
                     target_handle = "in" if idx == 0 else f"in_{idx + 1}"
                     self.edges.append(f"{src_node}.{src_port} -> {node_id}.{target_handle}")
-            return (node_id, "out")
 
-        # 1B. Check if calling self.layer_xxx or self.custom_xxx
-        if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name) and call.func.value.id == "self":
-            attr = call.func.attr
-            layer_info = self.layer_instances.get(attr)
-            if layer_info:
-                block_id = layer_info["block"]
-                clean_attr = attr.replace("layer_", "").replace("custom_", "")
-                base_name = clean_attr or target_hint or block_id
-                node_id = self._next_node_id(base_name)
-
-                node_entry: Dict[str, Any] = {"block": block_id}
-                if layer_info.get("is_custom"):
-                    node_entry["custom_module_id"] = layer_info["custom_module_id"]
-                if layer_info.get("params"):
-                    node_entry["params"] = dict(layer_info["params"])
-                if target_hint and not target_hint.startswith("x_"):
-                    node_entry["var_name"] = target_hint
-
-                self.nodes[node_id] = node_entry
-
-                # Positional arguments
-                for idx, arg in enumerate(call.args):
-                    if isinstance(arg, ast.Constant) and arg.value is None:
-                        continue
-                    src_node, src_port = self._parse_expr(arg)
+            # Keyword arguments
+            for kw in call.keywords:
+                if kw.arg and kw.value:
+                    src_node, src_port = self._parse_expr(kw.value)
                     if src_node:
-                        target_handle = "in" if idx == 0 else f"in_{idx + 1}"
-                        self.edges.append(f"{src_node}.{src_port} -> {node_id}.{target_handle}")
+                        self.edges.append(f"{src_node}.{src_port} -> {node_id}.{kw.arg}")
 
-                # Keyword arguments
-                for kw in call.keywords:
-                    if kw.arg and kw.value:
-                        src_node, src_port = self._parse_expr(kw.value)
-                        if src_node:
-                            self.edges.append(f"{src_node}.{src_port} -> {node_id}.{kw.arg}")
-
-                return (node_id, "out")
+            return (node_id, "out")
 
         # 2. Check functional calls: torch.<func>, F.<func>, nn.functional.<func>
         if isinstance(call.func, ast.Attribute):
@@ -650,16 +1000,32 @@ def decompile_python_to_ir(
         with open(py_path_or_code, "r", encoding="utf-8") as f:
             code_str = f.read()
         stem = os.path.splitext(os.path.basename(py_path_or_code))[0]
+        source_path = py_path_or_code
     else:
         code_str = py_path_or_code
         stem = "model"
+        source_path = None
 
     decompiler = PyTorchASTDecompiler(workspace_dir=workspace_dir)
-    ir_dict = decompiler.decompile_source(code_str, file_stem=stem)
+    ir_dict = decompiler.decompile_source(code_str, file_stem=stem, source_path=source_path)
 
     if output_path:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(ir_dict, f, indent=2)
+
+    # If multiple classes decompiled, save submodule IRs
+    base_dir = ir_dir or (os.path.dirname(os.path.abspath(output_path)) if output_path else None)
+    if not base_dir and workspace_dir:
+        base_dir = os.path.join(workspace_dir, "ir")
+
+    if base_dir and len(decompiler.all_irs) > 1:
+        modules_dir = os.path.join(base_dir, "modules")
+        os.makedirs(modules_dir, exist_ok=True)
+        for cls_stem, sub_ir in decompiler.all_irs.items():
+            if sub_ir is not ir_dict:
+                sub_path = os.path.join(modules_dir, f"{cls_stem}.ir.json")
+                with open(sub_path, "w", encoding="utf-8") as f:
+                    json.dump(sub_ir, f, indent=2)
 
     return ir_dict

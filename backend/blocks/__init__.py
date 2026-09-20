@@ -1,6 +1,6 @@
 from .base import BaseBlock
-from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock, ShapeExtractorBlock
-from .activations import ReLUBlock, SoftmaxBlock, SigmoidBlock, TanhBlock
+from .core import InputBlock, OutputBlock, LinearBlock, Conv1DBlock, Conv2DBlock, EmbeddingBlock, ShapeExtractorBlock
+from .activations import ReLUBlock, SoftmaxBlock, SigmoidBlock, TanhBlock, GELUBlock, SiLUBlock
 from .tensor_ops import (
     AddBlock, SubBlock, MulBlock, DivBlock, PowBlock, 
     MatMulBlock, UnsqueezeBlock, CatBlock, SplitBlock, TransposeBlock
@@ -18,9 +18,13 @@ _BLOCK_INSTANCES = [
     InputBlock(),
     OutputBlock(),
     LinearBlock(),
+    Conv1DBlock(),
     Conv2DBlock(),
+    EmbeddingBlock(),
     ShapeExtractorBlock(),
     ReLUBlock(),
+    GELUBlock(),
+    SiLUBlock(),
     SoftmaxBlock(),
     SigmoidBlock(),
     TanhBlock(),

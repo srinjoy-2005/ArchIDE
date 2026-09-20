@@ -26,6 +26,13 @@ def broadcast_shapes(shape_a: Any, shape_b: Any) -> Tuple:
             raise ValueError(f"Shapes {shape_a} and {shape_b} are not broadcastable")
     return tuple(out_shape)
 
+def _is_valid_scalar(val: Any) -> bool:
+    if val is None:
+        return False
+    s = str(val).strip()
+    return s != "" and s.lower() != "none"
+
+
 class AddBlock(BaseBlock):
     @property
     def definition(self) -> BlockDef:
@@ -39,7 +46,10 @@ class AddBlock(BaseBlock):
                 PortDef(id="in", name="Inputs", is_list=True)
             ],
             outputs=[PortDef(id="out", name="Out", var_hint="sum_out")],
-            params=[]
+            params=[
+                ParamDef(name="scalar_a", type="string", default=None, section="advanced", description="Scalar left operand"),
+                ParamDef(name="scalar_b", type="string", default=None, section="advanced", description="Scalar right operand"),
+            ]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
@@ -66,9 +76,13 @@ class AddBlock(BaseBlock):
         src_vars = []
         for v in input_vars.values():
             if isinstance(v, list):
-                src_vars.extend([x for x in v if x and x != "None"])
-            elif v and v != "None":
-                src_vars.append(v)
+                src_vars.extend([str(x) for x in v if x and str(x) != "None"])
+            elif v and str(v) != "None":
+                src_vars.append(str(v))
+        if _is_valid_scalar(params.get("scalar_a")):
+            src_vars.insert(0, str(params["scalar_a"]))
+        if _is_valid_scalar(params.get("scalar_b")):
+            src_vars.append(str(params["scalar_b"]))
         if src_vars:
             add_expr = " + ".join(src_vars)
             return f"{out_var} = {add_expr}"
@@ -84,9 +98,12 @@ class SubBlock(BaseBlock):
             category="Tensor Ops",
             color="#8b5cf6",
             is_functional=True,
-            inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out", var_hint="diff")],
-            params=[]
+            inputs=[PortDef(id="in_a", name="A"), PortDef(id="in_b", name="B")],
+            outputs=[PortDef(id="out", name="Out", var_hint="diff")],
+            params=[
+                ParamDef(name="scalar_a", type="string", default=None, section="advanced", description="Scalar left operand"),
+                ParamDef(name="scalar_b", type="string", default=None, section="advanced", description="Scalar right operand"),
+            ]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
@@ -101,6 +118,10 @@ class SubBlock(BaseBlock):
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         a = input_vars.get("in_a", "None")
         b = input_vars.get("in_b", "None")
+        if (a == "None" or not a) and _is_valid_scalar(params.get("scalar_a")):
+            a = str(params["scalar_a"])
+        if (b == "None" or not b) and _is_valid_scalar(params.get("scalar_b")):
+            b = str(params["scalar_b"])
         return f"{out_var} = {a} - {b}"
 
 
@@ -115,7 +136,10 @@ class MulBlock(BaseBlock):
             is_functional=True,
             inputs=[PortDef(id="in", name="Inputs", is_list=True)],
             outputs=[PortDef(id="out", name="Out", var_hint="product")],
-            params=[]
+            params=[
+                ParamDef(name="scalar_a", type="string", default=None, section="advanced", description="Scalar left operand"),
+                ParamDef(name="scalar_b", type="string", default=None, section="advanced", description="Scalar right operand"),
+            ]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
@@ -142,9 +166,13 @@ class MulBlock(BaseBlock):
         src_vars = []
         for v in input_vars.values():
             if isinstance(v, list):
-                src_vars.extend([x for x in v if x and x != "None"])
-            elif v and v != "None":
-                src_vars.append(v)
+                src_vars.extend([str(x) for x in v if x and str(x) != "None"])
+            elif v and str(v) != "None":
+                src_vars.append(str(v))
+        if _is_valid_scalar(params.get("scalar_a")):
+            src_vars.insert(0, str(params["scalar_a"]))
+        if _is_valid_scalar(params.get("scalar_b")):
+            src_vars.append(str(params["scalar_b"]))
         if src_vars:
             mul_expr = " * ".join(src_vars)
             return f"{out_var} = {mul_expr}"
@@ -160,9 +188,12 @@ class DivBlock(BaseBlock):
             category="Tensor Ops",
             color="#8b5cf6",
             is_functional=True,
-            inputs=[PortDef(id="in_a",name="A"), PortDef(id="in_b",name="B")],
-            outputs=[PortDef(id="out",name="Out", var_hint="quotient")],
-            params=[]
+            inputs=[PortDef(id="in_a", name="A"), PortDef(id="in_b", name="B")],
+            outputs=[PortDef(id="out", name="Out", var_hint="quotient")],
+            params=[
+                ParamDef(name="scalar_a", type="string", default=None, section="advanced", description="Scalar left operand"),
+                ParamDef(name="scalar_b", type="string", default=None, section="advanced", description="Scalar right operand"),
+            ]
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
@@ -177,6 +208,10 @@ class DivBlock(BaseBlock):
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         a = input_vars.get("in_a", "None")
         b = input_vars.get("in_b", "None")
+        if (a == "None" or not a) and _is_valid_scalar(params.get("scalar_a")):
+            a = str(params["scalar_a"])
+        if (b == "None" or not b) and _is_valid_scalar(params.get("scalar_b")):
+            b = str(params["scalar_b"])
         return f"{out_var} = {a} / {b}"
 
 
