@@ -134,14 +134,14 @@ export function BlockLibrary() {
       if (f.id === activeFileId) return false;      // no self-reference
       if (f.id === entryFileId) return false;       // entry is never a sub-module
       if (circularAncestors.has(f.id)) return false; // would create circular dep
-      if (f.fileType === 'code') return false;       // .py files excluded
+      if (f.fileType === 'code' || !f.name.endsWith('.arch') || !Array.isArray(f.nodes)) return false;
       // Only list files that live inside graphs/ tree (by stable UID)
       const rootId = getRootFolderId(f.parentId ?? null);
       return rootId === graphsFolderId;
     })
     .map((f) => {
-      const inputs  = f.nodes.filter((n) => n.data.block_id === 'input').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
-      const outputs = f.nodes.filter((n) => n.data.block_id === 'output').map((n) => ({ id: n.id, name: n.data.label as string, type: 'tensor' }));
+      const inputs  = (Array.isArray(f.nodes) ? f.nodes : []).filter((n) => n?.data?.block_id === 'input').map((n) => ({ id: n.id, name: (n.data?.label as string) || 'Input', type: 'tensor' }));
+      const outputs = (Array.isArray(f.nodes) ? f.nodes : []).filter((n) => n?.data?.block_id === 'output').map((n) => ({ id: n.id, name: (n.data?.label as string) || 'Output', type: 'tensor' }));
       const params  = (f.variables || [])
         .filter((v) => v.scope === 'init_param')
         .map((v) => ({ name: v.name, type: v.type, default: v.default, section: 'basic' }));

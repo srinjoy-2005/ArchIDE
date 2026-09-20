@@ -46,21 +46,38 @@ def get_block_docs(block_id: str):
 @app.post("/api/compile")
 def compile_graph(request: CompileRequest):
     try:
+        # Load any missing submodules from workspace/graphs if not provided in payload
+        graphs = dict(request.graphs)
+        file_paths = dict(request.file_paths)
+        graphs_dir = os.path.join(os.path.dirname(__file__), '../workspace/graphs')
+        if os.path.exists(graphs_dir):
+            for root, _, g_files in os.walk(graphs_dir):
+                for f in g_files:
+                    if f.endswith(".arch"):
+                        full_path = os.path.join(root, f)
+                        rel = os.path.relpath(full_path, graphs_dir)
+                        key = rel[:-5]
+                        if key not in graphs:
+                            try:
+                                with open(full_path, "r", encoding="utf-8") as fp:
+                                    d = json.load(fp)
+                                nodes = [Node(id=n["id"], data=NodeData(**n["data"]), position=n.get("position")) for n in d.get("nodes", [])]
+                                edges = [Edge(**e) for e in d.get("edges", [])]
+                                vars = [ArchVariableModel(**v) for v in (d.get("variables") or d.get("parameters") or []) if isinstance(v, dict)]
+                                graphs[key] = GraphData(name=d.get("name", key), nodes=nodes, edges=edges, variables=vars)
+                                file_paths[key] = key
+                            except Exception:
+                                pass
+
         files, node_shapes, node_params = generate_pytorch_code(
-            request.graphs, request.main_graph_id, request.file_paths
+            graphs, request.main_graph_id, file_paths
         )
         
         # Dump files to workspace/python
         python_dir = os.path.join(os.path.dirname(__file__), '../workspace/python')
-        
-        # Clean stale files from previous compilations
-        if os.path.exists(python_dir):
-            import shutil
-            shutil.rmtree(python_dir)
         os.makedirs(python_dir, exist_ok=True)
         
         for path_key, code_content in files.items():
-            # ensure directory for nested paths
             out_file = os.path.join(python_dir, f"{path_key}.py")
             os.makedirs(os.path.dirname(out_file), exist_ok=True)
             with open(out_file, "w", encoding="utf-8") as f:

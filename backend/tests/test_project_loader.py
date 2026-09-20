@@ -67,7 +67,7 @@ def test_load_and_run_transformer_project(tmp_path):
     code = "\n".join(files.values())
     assert "class MlpBlock(nn.Module):" in code
     assert "def __init__(self, d_model: int = 64, d_ff: int = 128):" in code
-    assert "self.custom_t_mlp = MlpBlock(d_model=64, d_ff=128)" in code
+    assert "self.mlp_submodule = MlpBlock(d_model=64, d_ff=128)" in code
     
     # 3. Live PyTorch execution
     import sys, os

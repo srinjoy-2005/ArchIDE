@@ -91,6 +91,25 @@ def topological_sort(nodes: List[Node], edges: List[Edge]) -> List[Node]:
     return sorted_nodes
 
 
+def _resolve_custom_dep(node: Node, graphs: Dict[str, Any]) -> Optional[str]:
+    """Resolves a custom module node to its canonical key in graphs dict."""
+    dep_id = getattr(node.data, "custom_module_id", "")
+    if dep_id and dep_id in graphs:
+        return dep_id
+    label = getattr(node.data, "label", "").replace(".arch", "").strip()
+    clean_dep = dep_id.replace(".arch", "").split("/")[-1].strip() if dep_id else ""
+    for g_path, g_data in graphs.items():
+        g_name = getattr(g_data, "name", "")
+        g_stem = g_path.replace(".arch", "").split("/")[-1]
+        if (
+            (dep_id and (dep_id == g_path or dep_id == g_name or dep_id in g_path))
+            or (clean_dep and (clean_dep == g_stem or clean_dep == g_name))
+            or (label and (label == g_path or label == g_name or label == g_stem or label in g_path or g_stem in label))
+        ):
+            return g_path
+    return None
+
+
 def topological_sort_graphs(graphs: Dict[str, Any]) -> List[str]:
     adj = {gid: [] for gid in graphs}
     in_degree = {gid: 0 for gid in graphs}
@@ -98,8 +117,8 @@ def topological_sort_graphs(graphs: Dict[str, Any]) -> List[str]:
         for node in data.nodes:
             block_id = _resolve_block_id(node)
             if block_id == "custom":
-                dep_id = getattr(node.data, "custom_module_id", "")
-                if dep_id in graphs:
+                dep_id = _resolve_custom_dep(node, graphs)
+                if dep_id and dep_id in graphs and dep_id != gid:
                     adj[dep_id].append(gid)
                     in_degree[gid] += 1
     
@@ -115,7 +134,8 @@ def topological_sort_graphs(graphs: Dict[str, Any]) -> List[str]:
                 queue.append(neighbor)
     
     if len(sorted_gids) != len(graphs):
-        raise ValueError("Cycle detected in custom module dependencies!")
+        # Fallback to key order if circular or unresolvable
+        return list(graphs.keys())
     return sorted_gids
 
 
@@ -164,66 +184,72 @@ class CustomModuleBlock(BaseBlock):
     def definition(self) -> BlockDef:
         return self._definition
         
-    def emit_init(self, node_id: str, params: dict) -> str:
-        var_name = f"self.custom_{node_id.replace('-', '_')}"
+    def emit_init(self, node_id: str, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
         kwargs = []
+
+        def format_val(v: Any) -> str:
+            if isinstance(v, str):
+                if v.startswith("self."):
+                    return v
+                if v.isdigit():
+                    return v
+                try:
+                    float(v)
+                    return v
+                except ValueError:
+                    pass
+                if v.isidentifier():
+                    return v
+                return repr(v)
+            return str(v)
+
         if self.definition.params:
             for p in self.definition.params:
                 val = params.get(p.name, p.default)
-                if isinstance(val, str) and val.isdigit():
-                    val = int(val)
-                elif isinstance(val, str):
-                    try:
-                        val = float(val)
-                    except ValueError:
-                        pass
-                if isinstance(val, str) and not val.isidentifier():
-                    kwargs.append(f"{p.name}={repr(val)}")
-                else:
-                    kwargs.append(f"{p.name}={val}")
+                kwargs.append(f"{p.name}={format_val(val)}")
         elif params:
             for k, v in params.items():
                 if k.startswith("_"):
                     continue
-                if isinstance(v, str) and v.isdigit():
-                    v = int(v)
-                elif isinstance(v, str):
-                    try:
-                        v = float(v)
-                    except ValueError:
-                        pass
-                if isinstance(v, str) and not v.isidentifier():
-                    kwargs.append(f"{k}={repr(v)}")
-                else:
-                    kwargs.append(f"{k}={v}")
+                kwargs.append(f"{k}={format_val(v)}")
                     
         args_str = ", ".join(kwargs)
         return f"{var_name} = {self.class_name}({args_str})"
         
-    def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict) -> str:
-        var_name = f"self.custom_{node_id.replace('-', '_')}"
+    def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
         
         in_args = []
-        for port in self.definition.inputs:
-            # Flatten lists if multiple incoming edges to custom port
-            v = input_vars.get(port.id, "None")
+        for port_idx, port in enumerate(self.definition.inputs):
+            v = input_vars.get(port.id)
+            if v is None or v == "None":
+                v = input_vars.get(f"in_{port_idx+1}")
+            if (v is None or v == "None") and port_idx == 0:
+                v = input_vars.get("in")
+            if v is None or v == "None":
+                vals = [val for val in input_vars.values() if val != "None"]
+                v = vals[port_idx] if port_idx < len(vals) else "None"
+
             if isinstance(v, list):
                 in_args.append(f"[{', '.join(v)}]")
-            else:
+            elif v != "None":
                 in_args.append(v)
             
         out_args = []
         for port in self.definition.outputs:
             out_args.append(output_vars.get(port.id, "None"))
             
-        in_str = ", ".join(in_args)
+        valid_in = [a for a in in_args if a != "None"]
+        in_str = ", ".join(valid_in) if valid_in else "x_input"
+        valid_out = [a for a in out_args if a != "None"]
         
-        if not out_args:
+        if not valid_out:
             return f"{var_name}({in_str})"
-        elif len(out_args) == 1:
-            return f"{out_args[0]} = {var_name}({in_str})"
+        elif len(valid_out) == 1:
+            return f"{valid_out[0]} = {var_name}({in_str})"
         else:
-            return f"{', '.join(out_args)} = {var_name}({in_str})"
+            return f"{', '.join(valid_out)} = {var_name}({in_str})"
             
     def infer_shapes(self, incoming: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
         if not self.dep_graph:
@@ -247,11 +273,27 @@ class CustomModuleBlock(BaseBlock):
                 for n in self.dep_graph.nodes
             ]
             sorted_nodes = topological_sort(sub_nodes, self.dep_graph.edges)
+
+            # Map incoming port shapes to sub-graph input node IDs
+            sub_input_nodes = [n for n in sub_nodes if _resolve_block_id(n) in {"input", "gourav"}]
+            mapped_initial_shapes = {}
+            for idx, in_node in enumerate(sub_input_nodes):
+                if in_node.id in incoming and incoming[in_node.id] != ("ANY",):
+                    mapped_initial_shapes[in_node.id] = incoming[in_node.id]
+                elif f"in_{idx+1}" in incoming and incoming[f"in_{idx+1}"] != ("ANY",):
+                    mapped_initial_shapes[in_node.id] = incoming[f"in_{idx+1}"]
+                elif idx == 0 and "in" in incoming and incoming["in"] != ("ANY",):
+                    mapped_initial_shapes[in_node.id] = incoming["in"]
+                else:
+                    in_vals = [v for v in incoming.values() if v != ("ANY",)]
+                    if idx < len(in_vals):
+                        mapped_initial_shapes[in_node.id] = in_vals[idx]
+
             sub_shapes, _ = shape_inference_pass(
                 sorted_nodes,
                 self.dep_graph.edges,
                 self.graphs,
-                initial_input_shapes=incoming,
+                initial_input_shapes=mapped_initial_shapes,
                 variables=getattr(self.dep_graph, "variables", []) or []
             )
             
@@ -272,6 +314,178 @@ class CustomModuleBlock(BaseBlock):
             ) from se
         except Exception:
             return {port.id: ("ANY",) for port in self.definition.outputs}
+
+
+class SequentialModuleBlock(BaseBlock):
+    def __init__(self, raw_id: str, label: str = "Sequential"):
+        self._raw_id = raw_id
+        self._label = label
+        self._definition = BlockDef(
+            id=f"sequential_{raw_id}",
+            name=label,
+            category="Custom Modules",
+            color="#eab308",
+            is_functional=False,
+            inputs=[PortDef(id="in", name="Input")],
+            outputs=[PortDef(id="out", name="Output")],
+            params=[]
+        )
+
+    @property
+    def definition(self) -> BlockDef:
+        return self._definition
+
+    def emit_init(self, node_id: str, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
+        indexed_items = []
+        param_items = []
+        for k, v in params.items():
+            if k.startswith("param_") and k[6:].isdigit():
+                indexed_items.append((int(k[6:]), str(v)))
+            elif not k.startswith("_"):
+                param_items.append(str(v))
+        if indexed_items:
+            indexed_items.sort(key=lambda x: x[0])
+            layers = [item[1] for item in indexed_items]
+        else:
+            layers = param_items
+
+        if not layers:
+            return f"{var_name} = nn.Sequential()"
+
+        layers_str = ",\n            ".join(layers)
+        return f"{var_name} = nn.Sequential(\n            {layers_str}\n        )"
+
+    def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
+        in_var = input_vars.get("in", "x_input")
+        if isinstance(in_var, list):
+            in_var = in_var[0] if in_var else "x_input"
+        out_var = output_vars.get("out", "x")
+        return f"{out_var} = {var_name}({in_var})"
+
+    def infer_shapes(self, incoming: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        return {"out": ("ANY",)}
+
+
+class GenericCustomModuleBlock(BaseBlock):
+    def __init__(self, class_name: str, input_ports: Optional[List[PortDef]] = None, output_ports: Optional[List[PortDef]] = None):
+        self.class_name = class_name
+        inputs = input_ports or [PortDef(id="in", name="Input")]
+        outputs = output_ports or [PortDef(id="out", name="Output")]
+        self._definition = BlockDef(
+            id=f"generic_{class_name.lower()}",
+            name=class_name,
+            category="Custom Modules",
+            color="#eab308",
+            is_functional=False,
+            inputs=inputs,
+            outputs=outputs,
+            params=[]
+        )
+
+    @property
+    def definition(self) -> BlockDef:
+        return self._definition
+
+    def emit_init(self, node_id: str, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
+        args = []
+        indexed_items = []
+        for k, v in params.items():
+            if k.startswith("param_") and k[6:].isdigit():
+                indexed_items.append((int(k[6:]), str(v)))
+            elif not k.startswith("_"):
+                val_str = str(v)
+                if isinstance(v, str) and not v.startswith("self.") and not v.isdigit():
+                    try:
+                        float(v)
+                    except ValueError:
+                        if not v.isidentifier():
+                            val_str = repr(v)
+                args.append(f"{k}={val_str}")
+        if indexed_items:
+            indexed_items.sort(key=lambda x: x[0])
+            for _, val in indexed_items:
+                args.append(val)
+
+        args_str = ", ".join(args)
+        return f"{var_name} = {self.class_name}({args_str})"
+
+    def emit_forward(self, node_id: str, input_vars: dict, output_vars: dict, params: dict, member_name: Optional[str] = None) -> str:
+        var_name = member_name or f"self.custom_{node_id.replace('-', '_')}"
+        in_args = []
+        for p in self._definition.inputs:
+            v = input_vars.get(p.id, "None")
+            if isinstance(v, list):
+                in_args.append(f"[{', '.join(v)}]")
+            else:
+                in_args.append(v)
+        valid_in = [a for a in in_args if a != "None"]
+        in_str = ", ".join(valid_in) if valid_in else "x_input"
+        out_args = [output_vars.get(p.id, "x") for p in self._definition.outputs]
+        if not out_args:
+            return f"{var_name}({in_str})"
+        elif len(out_args) == 1:
+            return f"{out_args[0]} = {var_name}({in_str})"
+        else:
+            return f"{', '.join(out_args)} = {var_name}({in_str})"
+
+    def infer_shapes(self, incoming: Dict[str, Any], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        return {p.id: ("ANY",) for p in self._definition.outputs}
+
+
+def _resolve_node_block(node: Node, graphs: Dict[str, Any], edges: Optional[List[Edge]] = None) -> Optional[BaseBlock]:
+    block_id = _resolve_block_id(node)
+    if block_id == "custom":
+        dep_id = _resolve_custom_dep(node, graphs)
+        if dep_id and dep_id in graphs:
+            dep_graph = graphs[dep_id]
+            custom_class_name = _to_pascal_case(dep_graph.name)
+            block_def = _get_custom_block_def(dep_id, graphs)
+            return CustomModuleBlock(block_def, custom_class_name, dep_graph=dep_graph, graphs=graphs)
+
+        raw_dep = getattr(node.data, "custom_module_id", "") or getattr(node.data, "label", "") or "Custom"
+        raw_dep_lower = raw_dep.lower()
+        if raw_dep_lower in ("sequential", "nn.sequential", "torch.nn.sequential") or "sequential" in getattr(node.data, "label", "").lower():
+            return SequentialModuleBlock(node.id, label=getattr(node.data, "label", "Sequential"))
+
+        class_name = _to_pascal_case(raw_dep) if not raw_dep.isupper() else raw_dep
+        if getattr(node.data, "label", "") and getattr(node.data, "label") not in ("Custom", "custom_module"):
+            class_name = _to_pascal_case(node.data.label)
+
+        input_ports: List[PortDef] = []
+        raw_inputs = getattr(node.data, "inputs", []) or []
+        for p in raw_inputs:
+            if isinstance(p, dict) and "id" in p:
+                input_ports.append(PortDef(id=p["id"], name=p.get("name", "Input")))
+            elif hasattr(p, "id"):
+                input_ports.append(PortDef(id=p.id, name=getattr(p, "name", "Input")))
+
+        if edges:
+            node_target_edges = [e for e in edges if e.target == node.id]
+            existing_port_ids = {p.id for p in input_ports}
+            for idx, e in enumerate(node_target_edges):
+                target_handle = e.targetHandle or ("in" if idx == 0 else f"in_{idx + 1}")
+                if target_handle not in existing_port_ids:
+                    input_ports.append(PortDef(id=target_handle, name=f"Input {idx + 1}"))
+                    existing_port_ids.add(target_handle)
+
+        output_ports: List[PortDef] = []
+        raw_outputs = getattr(node.data, "outputs", []) or []
+        for p in raw_outputs:
+            if isinstance(p, dict) and "id" in p:
+                output_ports.append(PortDef(id=p["id"], name=p.get("name", "Output")))
+            elif hasattr(p, "id"):
+                output_ports.append(PortDef(id=p.id, name=getattr(p, "name", "Output")))
+
+        return GenericCustomModuleBlock(
+            class_name,
+            input_ports=input_ports or [PortDef(id="in", name="Input")],
+            output_ports=output_ports or [PortDef(id="out", name="Output")]
+        )
+
+    return get_block_by_id(block_id)
 
 
 # ---------------------------------------------------------------------------
@@ -334,52 +548,41 @@ def shape_inference_pass(
     updated_node_params: Dict[str, Dict[str, Any]] = {}
 
     for node in sorted_nodes:
-        block_id = _resolve_block_id(node)
-        
-        if block_id == "custom":
-            dep_id = getattr(node.data, "custom_module_id", "")
-            if dep_id in graphs:
-                dep_graph = graphs[dep_id]
-                class_name = _to_pascal_case(dep_graph.name)
-            else:
-                fallback_found = False
-                for g_path, g_data in graphs.items():
-                    label = getattr(node.data, "label", "").replace(".arch", "")
-                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
-                        dep_id = g_path
-                        dep_graph = g_data
-                        class_name = _to_pascal_case(dep_graph.name)
-                        fallback_found = True
-                        break
-                
-                if not fallback_found:
-                    continue
-            block_def = _get_custom_block_def(dep_id, graphs)
-            block = CustomModuleBlock(block_def, class_name, dep_graph=dep_graph, graphs=graphs)
-        else:
-            block = get_block_by_id(block_id)
-            
+        block_id = node.data.block_id
+        block = _resolve_node_block(node, graphs, valid_edges)
         if not block:
             continue
 
         incoming: Dict[str, Any] = {}
         incoming_edge_ids: List[str] = []
-        for port in block.definition.inputs:
+        for port_idx, port in enumerate(block.definition.inputs):
             matching_edges = [
                 e for e in valid_edges if e.target == node.id and e.targetHandle == port.id
             ]
+            if not matching_edges:
+                candidate_handles = [port.id, f"in_{port_idx+1}", "in" if port_idx == 0 else f"in_{port_idx+1}"]
+                matching_edges = [
+                    e for e in valid_edges if e.target == node.id and (e.targetHandle in candidate_handles or (len(block.definition.inputs) == 1 and e.targetHandle in ("in", "input", "")))
+                ]
+                if not matching_edges and block_id == "custom":
+                    all_target_edges = [e for e in valid_edges if e.target == node.id]
+                    if port_idx < len(all_target_edges):
+                        matching_edges = [all_target_edges[port_idx]]
+
             if port.is_list:
                 shapes_list = []
                 for e in matching_edges:
                     src_key = f"{e.source}_{e.sourceHandle}"
-                    shapes_list.append(tensor_shapes.get(src_key, ("ANY",)))
+                    shape = tensor_shapes.get(src_key) or tensor_shapes.get(f"{e.source}_out") or ("ANY",)
+                    shapes_list.append(shape)
                     incoming_edge_ids.append(e.id)
                 incoming[port.id] = shapes_list if shapes_list else [("ANY",)]
             else:
                 if matching_edges:
                     e = matching_edges[0]
                     src_key = f"{e.source}_{e.sourceHandle}"
-                    incoming[port.id] = tensor_shapes.get(src_key, ("ANY",))
+                    shape = tensor_shapes.get(src_key) or tensor_shapes.get(f"{e.source}_out") or ("ANY",)
+                    incoming[port.id] = shape
                     incoming_edge_ids.append(e.id)
                 else:
                     incoming[port.id] = ("ANY",)
@@ -534,15 +737,9 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
         custom_deps = set()
         for node in sorted_nodes:
             if _resolve_block_id(node) == "custom":
-                dep_id = getattr(node.data, "custom_module_id", "")
+                dep_id = _resolve_custom_dep(node, graphs)
                 if dep_id and dep_id in graphs:
                     custom_deps.add(dep_id)
-                else:
-                    for g_path, g_data in graphs.items():
-                        label = getattr(node.data, "label", "").replace(".arch", "")
-                        if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
-                            custom_deps.add(g_path)
-                            break
                     
         imports = [
             "import torch",
@@ -550,20 +747,11 @@ def generate_pytorch_code(graphs: Dict[str, Any], main_graph_id: str, file_paths
         ]
         
         for dep_id in custom_deps:
-            dep_path = file_paths.get(dep_id, "")
+            dep_path = file_paths.get(dep_id, dep_id)
             dep_graph = graphs[dep_id]
             dep_class = _to_pascal_case(dep_graph.name)
-            if dep_path:
-                # e.g. "conv/res_block" -> "from python.conv.res_block import ResBlock"
-                # Wait, if we're in the python/ directory already, absolute import from the root of python/ might just be the path dot separated.
-                # Assuming `python` folder is in PYTHONPATH, or we just use relative imports or absolute imports from root.
-                # Let's use `from {dep_path.replace('/', '.')} import {dep_class}`
-                # Need to handle no folder, e.g., dep_path is "res_block"
-                mod_path = dep_path.replace('/', '.')
-                imports.append(f"from {mod_path} import {dep_class}")
-            else:
-                # Fallback if no path is given
-                imports.append(f"from {dep_id} import {dep_class}")
+            clean_mod = dep_path.replace(".arch", "").replace(".json", "").strip("/").replace("/", ".")
+            imports.append(f"from {clean_mod} import {dep_class}")
 
         imports.append("")
 
@@ -651,39 +839,37 @@ def _generate_single_graph_code(
     hint_counts: Dict[str, int] = {}
     return_vars: List[str] = []
 
+    used_member_names: Set[str] = set()
+    node_member_map: Dict[str, str] = {}
+
     for node in sorted_nodes:
         block_id = _resolve_block_id(node)
         
         if block_id in INPUT_IDS:
             continue
 
-        if block_id == "custom":
-            dep_id = getattr(node.data, "custom_module_id", "")
-            if dep_id in graphs:
-                dep_graph = graphs[dep_id]
-                custom_class_name = _to_pascal_case(dep_graph.name)
-            else:
-                fallback_found = False
-                for g_path, g_data in graphs.items():
-                    label = getattr(node.data, "label", "").replace(".arch", "")
-                    if dep_id in g_path or getattr(g_data, "name", "") == dep_id or (label and (label == getattr(g_data, "name", "") or label in g_path)):
-                        dep_id = g_path
-                        dep_graph = g_data
-                        custom_class_name = _to_pascal_case(dep_graph.name)
-                        fallback_found = True
-                        break
-                
-                if not fallback_found:
-                    forward_lines.append(f"        # WARNING: unknown custom module '{dep_id}' — skipped")
-                    continue
-            block_def = _get_custom_block_def(dep_id, graphs)
-            block = CustomModuleBlock(block_def, custom_class_name, dep_graph=dep_graph, graphs=graphs)
-        else:
-            block = get_block_by_id(block_id)
-            
+        block = _resolve_node_block(node, graphs, valid_edges)
         if not block:
             forward_lines.append(f"        # WARNING: unknown block '{block_id}' — skipped")
             continue
+
+        if not block.definition.is_functional:
+            raw_lbl = getattr(node.data, "label", "") or ""
+            clean_lbl = _sanitize(raw_lbl) if raw_lbl and raw_lbl.lower() not in ("custom", "custom_module", "sequential", "input", "output") else ""
+            if not clean_lbl and getattr(node.data, "custom_module_id", ""):
+                clean_lbl = _sanitize(node.data.custom_module_id.split("/")[-1])
+            
+            if clean_lbl:
+                member_cand = clean_lbl
+            elif block_id in ("linear", "conv2d", "layernorm", "batchnorm2d", "maxpool2d", "avgpool2d", "adaptiveavgpool2d", "dropout"):
+                member_cand = f"layer_{_sanitize(raw_lbl or block_id)}"
+            else:
+                member_cand = f"custom_{node.id.replace('-', '_')}"
+            
+            if member_cand in used_member_names:
+                member_cand = f"{member_cand}_{node.id[:4]}"
+            used_member_names.add(member_cand)
+            node_member_map[node.id] = f"self.{member_cand}"
 
         params = dict(node.data.paramValues)
 
@@ -724,22 +910,33 @@ def _generate_single_graph_code(
                     
         # 3. Handle inputs
         input_vars: Dict[str, Any] = {}
-        for port in block.definition.inputs:
+        for port_idx, port in enumerate(block.definition.inputs):
             matching_edges = [
                 e for e in valid_edges if e.target == node.id and e.targetHandle == port.id
             ]
+            # Fallback for custom modules or positional handles if exact port.id wasn't matched
+            if not matching_edges:
+                candidate_handles = [port.id, f"in_{port_idx+1}", "in" if port_idx == 0 else f"in_{port_idx+1}"]
+                matching_edges = [
+                    e for e in valid_edges if e.target == node.id and (e.targetHandle in candidate_handles or (len(block.definition.inputs) == 1 and e.targetHandle in ("in", "input", "")))
+                ]
+                if not matching_edges and block_id == "custom":
+                    all_target_edges = [e for e in valid_edges if e.target == node.id]
+                    if port_idx < len(all_target_edges):
+                        matching_edges = [all_target_edges[port_idx]]
+
             if port.is_list:
                 v_list = []
                 for e in matching_edges:
                     src_key = f"{e.source}_{e.sourceHandle}"
-                    v = var_map.get(src_key, "None")
+                    v = var_map.get(src_key) or var_map.get(f"{e.source}_out") or "None"
                     if v != "None":
                         v_list.append(v)
                 input_vars[port.id] = v_list
             else:
                 if matching_edges:
                     src_key = f"{matching_edges[0].source}_{matching_edges[0].sourceHandle}"
-                    input_vars[port.id] = var_map.get(src_key, "None")
+                    input_vars[port.id] = var_map.get(src_key) or var_map.get(f"{matching_edges[0].source}_out") or "None"
                 else:
                     input_vars[port.id] = "None"
 
@@ -765,23 +962,34 @@ def _generate_single_graph_code(
 
             output_vars[port.id] = out_var
             var_map[f"{node.id}_{port.id}"] = out_var
+            # Provide generic out handle fallback
+            var_map[f"{node.id}_out"] = out_var
 
         if not block.definition.is_functional:
-            init_code = block.emit_init(node.id, params)
+            try:
+                init_code = block.emit_init(node.id, params, member_name=node_member_map.get(node.id))
+            except TypeError:
+                init_code = block.emit_init(node.id, params)
             if init_code:
                 init_lines.append(f"        {init_code}")
 
-        forward_code = block.emit_forward(node.id, input_vars, output_vars, params)
+        try:
+            forward_code = block.emit_forward(node.id, input_vars, output_vars, params, member_name=node_member_map.get(node.id))
+        except TypeError:
+            forward_code = block.emit_forward(node.id, input_vars, output_vars, params)
         if forward_code:
             forward_lines.append(f"        {forward_code}")
 
     if return_vars:
         forward_lines.append(f"        return {', '.join(return_vars)}")
     else:
-        if len(forward_lines) == 1:
-            forward_lines.append("        pass")
+        if len(forward_lines) <= 3:
+            if forward_arg_names:
+                forward_lines.append(f"        return {forward_arg_names[0]}")
+            else:
+                forward_lines.append("        pass")
 
-    if not init_lines:
+    if not init_lines and len(init_params) == 0:
         init_lines.append("        pass")
 
     code.extend(init_lines)

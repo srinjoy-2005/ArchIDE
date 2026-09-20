@@ -76,15 +76,16 @@ export function Header() {
 
       for (const f of currentFiles) {
         const vfsRelPath = getVFSFilePath(f, currentFolders);
-        if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) {
+        const isGraph = f.fileType !== 'code' && f.name.endsWith('.arch') && Array.isArray(f.nodes);
+        if (!isGraph) {
           filesMap[vfsRelPath] = f.compiledCode || '';
         } else {
           const isCurrentActive = f.id === activeFileId;
           const name = f.name.replace(/\.[^/.]+$/, '');
           filesMap[vfsRelPath] = {
             name,
-            nodes: isCurrentActive ? nodes : f.nodes,
-            edges: isCurrentActive ? edges : f.edges,
+            nodes: isCurrentActive ? (Array.isArray(nodes) ? nodes : []) : (Array.isArray(f.nodes) ? f.nodes : []),
+            edges: isCurrentActive ? (Array.isArray(edges) ? edges : []) : (Array.isArray(f.edges) ? f.edges : []),
             variables: f.variables || [],
           };
         }
@@ -156,20 +157,20 @@ export function Header() {
     // Pass 1: Build ID to Path mapping
     const idToPath: Record<string, string> = {};
     for (const f of files) {
-      if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
+      if (f.fileType === 'code' || !f.name.endsWith('.arch') || !Array.isArray(f.nodes)) continue;
       idToPath[f.id] = resolveFilePath(f, folders, graphsFolderId);
     }
 
     // Pass 2: Build Graphs payload
     for (const f of files) {
-      if (f.fileType === 'code' || f.name.endsWith('.py') || f.name.endsWith('.toml')) continue;
+      if (f.fileType === 'code' || !f.name.endsWith('.arch') || !Array.isArray(f.nodes)) continue;
 
       const fullPath = idToPath[f.id];
       file_paths[fullPath] = fullPath;
 
       const isCurrent = f.id === activeFileId;
-      const nList = isCurrent ? currentNodes : f.nodes;
-      const eList = isCurrent ? currentEdges : f.edges;
+      const nList = isCurrent ? (Array.isArray(currentNodes) ? currentNodes : []) : (Array.isArray(f.nodes) ? f.nodes : []);
+      const eList = isCurrent ? (Array.isArray(currentEdges) ? currentEdges : []) : (Array.isArray(f.edges) ? f.edges : []);
 
       const variables = f.variables || [];
 
