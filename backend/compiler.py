@@ -134,8 +134,11 @@ def topological_sort_graphs(graphs: Dict[str, Any]) -> List[str]:
                 queue.append(neighbor)
     
     if len(sorted_gids) != len(graphs):
-        # Fallback to key order if circular or unresolvable
-        return list(graphs.keys())
+        cyclic = [g for g in graphs if g not in sorted_gids]
+        raise ValueError(
+            f"Circular dependency detected between graph files: {cyclic}. "
+            "A module cannot directly or indirectly depend on itself."
+        )
     return sorted_gids
 
 
