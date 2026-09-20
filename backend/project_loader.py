@@ -9,7 +9,7 @@ enabling automated testing, CLI workflows, and headless model compilation.
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, Tuple
 from models import (
     CompileRequest,
     CheckRequest,
@@ -150,14 +150,16 @@ def _load_from_manifest_dict(manifest: Dict[str, Any], base_dir: Path) -> Compil
         else:
             graphs[file_id] = _parse_graph_from_dict(item, default_name=item.get("name", file_id))
 
-    if entry_point not in graphs and graphs:
+    if (not entry_point or entry_point not in graphs) and graphs:
         # Fallback to first available graph
         entry_point = list(graphs.keys())[0]
 
-    return CompileRequest(main_graph_id=entry_point, graphs=graphs)
+    return CompileRequest(main_graph_id=str(entry_point or "main"), graphs=graphs)
 
 
-def compile_project(project_path: Union[str, Path]) -> str:
+def compile_project(
+    project_path: Union[str, Path]
+) -> Tuple[Dict[str, str], Dict[str, Any], Dict[str, Any]]:
     """Loads a project from path and compiles it to PyTorch source code."""
     req = load_project(project_path)
     return generate_pytorch_code(req.graphs, req.main_graph_id)

@@ -1,0 +1,52 @@
+name: "✨ Feature Request"
+description: "Suggest an idea or new architectural block / capability for ArchIDE"
+title: "[FEAT]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please provide clear motivation and requirements.
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem Statement / Motivation"
+      description: "Is your feature request related to a problem or limitation? Please describe."
+      placeholder: "e.g., Currently it's difficult to see tensor dimensions without hovering..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed Solution"
+      description: "Describe the solution you'd like to see implemented."
+      placeholder: "e.g., Render dimension tags directly inside the block card..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "Any alternative approaches or workarounds you've considered."
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: "Component Area"
+      options:
+        - "area:frontend"
+        - "area:backend"
+        - "area:compiler"
+    validations:
+      required: false
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      options:
+        - "priority:high"
+        - "priority:medium"
+        - "priority:low"
+    validations:
+      required: false

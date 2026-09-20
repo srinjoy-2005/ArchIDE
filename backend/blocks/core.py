@@ -1,6 +1,6 @@
 import math
 from typing import Dict, Tuple, Any
-from .base import BaseBlock
+from .base import BaseBlock, parse_int_or_tuple2d
 from models import BlockDef, PortDef, ParamDef
 
 
@@ -18,7 +18,7 @@ class InputBlock(BaseBlock):
             params=[
                 ParamDef(
                     name="shape",
-                    type="string",
+                    type="shape",
                     default="(1, 3, 224, 224)",
                     section="basic",
                     description="The shape of the input tensor, e.g. (batch, channels, H, W)"
@@ -27,14 +27,25 @@ class InputBlock(BaseBlock):
         )
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
-        shape_str = params.get("shape", "(1, 3, 224, 224)")
-        try:
-            # Very robust parsing: strip everything that's not a digit or comma
-            clean = "".join(c for c in str(shape_str) if c.isdigit() or c == ',')
-            shape = tuple(int(s) for s in clean.split(",") if s)
-            return {"out": shape if shape else (1, 3, 224, 224)}
-        except Exception:
-            return {"out": (1, 3, 224, 224)}
+        shape_val = params.get("shape", "(1, 3, 224, 224)")
+        if isinstance(shape_val, (int, float)):
+            shape = (int(shape_val),)
+        elif isinstance(shape_val, (list, tuple)):
+            shape = tuple(int(s) for s in shape_val)
+        else:
+            try:
+                clean = "".join(c for c in str(shape_val) if c.isdigit() or c in (',', '-'))
+                shape = tuple(int(s) for s in clean.split(",") if s)
+            except Exception:
+                shape = (1, 3, 224, 224)
+
+        if not shape:
+            shape = (1, 3, 224, 224)
+
+        if any(d <= 0 for d in shape):
+            raise ValueError(f"Input: tensor dimensions must be greater than 0, got {shape}")
+
+        return {"out": shape}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         return ""
@@ -81,7 +92,7 @@ class LinearBlock(BaseBlock):
             outputs=[PortDef(id="out", name="Output", var_hint="fc_out")],
             params=[
                 # Basic section
-                ParamDef(name="in_features",  type="int", default=128, section="basic", description="Size of each input sample"),
+                ParamDef(name="in_features",  type="int", default=128, auto_infer=True, section="basic", description="Size of each input sample"),
                 ParamDef(name="out_features", type="int", default=64,  section="basic", description="Size of each output sample"),
                 # Advanced section
                 ParamDef(name="bias",         type="bool", default=True, section="advanced", description="If True, adds a learnable bias to the output"),
@@ -97,14 +108,19 @@ class LinearBlock(BaseBlock):
         # It natively supports any number of leading dimensions, so no shape guard is needed.
         in_features = params.get("in_features", 128)
 
+        if in_features != -1 and in_features != "LAZY" and isinstance(in_features, int) and in_features <= 0:
+            raise ValueError(f"Linear: in_features must be greater than 0, got {in_features}")
+
         # Auto-infer in_features if set to -1
         if in_features == -1 and len(in_shape) > 0 and in_shape[-1] != "ANY":
             in_features = in_shape[-1]
             params["in_features"] = in_features
 
         out_features = params.get("out_features", 64)
+        if isinstance(out_features, int) and out_features <= 0:
+            raise ValueError(f"Linear: out_features must be greater than 0, got {out_features}")
 
-        if len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
+        if in_features != "LAZY" and len(in_shape) > 0 and in_shape[-1] != "ANY" and in_shape[-1] != in_features:
             raise ValueError(
                 f"Linear: expected in_features={in_features}, "
                 f"but input last dim is {in_shape[-1]}."
@@ -122,6 +138,8 @@ class LinearBlock(BaseBlock):
         in_feat  = params.get("in_features",  128)
         out_feat = params.get("out_features", 64)
         bias     = params.get("bias", True)
+        if in_feat == "LAZY":
+            return f"{layer_name} = nn.LazyLinear({out_feat}, bias={bias})"
         return f"{layer_name} = nn.Linear({in_feat}, {out_feat}, bias={bias})"
 
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
@@ -150,7 +168,7 @@ class Conv2DBlock(BaseBlock):
             outputs=[PortDef(id="out", name="Output", var_hint="conv_feat")],
             params=[
                 # Basic section
-                ParamDef(name="in_channels",  type="int", default=3,  section="basic", description="Number of channels in the input image"),
+                ParamDef(name="in_channels",  type="int", default=3,  auto_infer=True, section="basic", description="Number of channels in the input image"),
                 ParamDef(name="out_channels", type="int", default=16, section="basic", description="Number of channels produced by the convolution"),
                 ParamDef(name="kernel_size",  type="int", default=3,  section="basic", description="Size of the convolving kernel"),
                 # Advanced section
@@ -164,8 +182,14 @@ class Conv2DBlock(BaseBlock):
 
     def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
         in_shape = input_shapes.get("in")
-        if not in_shape or len(in_shape) != 4:
+        if not in_shape or in_shape == ("ANY",):
             return {"out": ("ANY",)}
+
+        if len(in_shape) != 4:
+            raise ValueError(
+                f"Conv2D expects a 4D tensor (Batch, Channels, Height, Width), "
+                f"but received {len(in_shape)}D tensor with shape {in_shape}."
+            )
 
         B, C, H, W = in_shape
         in_channels = params.get("in_channels", 3)
@@ -175,28 +199,82 @@ class Conv2DBlock(BaseBlock):
             in_channels = C
             params["in_channels"] = in_channels
 
-        if C != "ANY" and C != in_channels:
+        if in_channels != "LAZY" and C != "ANY" and C != in_channels:
             raise ValueError(
                 f"Conv2D: expected in_channels={in_channels}, "
                 f"but input has {C} channels."
             )
 
-        kernel  = params.get("kernel_size", 3)
-        padding = params.get("padding", 0)
-        stride  = params.get("stride", 1)
-        dilation = params.get("dilation", 1)
+        kernel = parse_int_or_tuple2d(params.get("kernel_size"), default=(3, 3))
+        stride = parse_int_or_tuple2d(params.get("stride"), default=(1, 1))
+        padding = parse_int_or_tuple2d(params.get("padding"), default=(0, 0))
+        dilation = parse_int_or_tuple2d(params.get("dilation"), default=(1, 1))
 
+        kh, kw = kernel
+        sh, sw = stride
+        ph, pw = padding
+        dh, dw = dilation
+
+        if sh <= 0 or sw <= 0:
+            raise ValueError(f"Conv2D: stride must be greater than 0, got {params.get('stride')}")
+        if kh <= 0 or kw <= 0:
+            raise ValueError(f"Conv2D: kernel_size must be greater than 0, got {params.get('kernel_size')}")
+        if dh <= 0 or dw <= 0:
+            raise ValueError(f"Conv2D: dilation must be greater than 0, got {params.get('dilation')}")
+        if ph < 0 or pw < 0:
+            raise ValueError(f"Conv2D: padding must be non-negative, got {params.get('padding')}")
+
+        groups = params.get("groups", 1)
         try:
-            out_h = math.floor((H + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
-            out_w = math.floor((W + 2*padding - dilation*(kernel-1) - 1) / stride + 1)
-            if out_h <= 0 or out_w <= 0:
-                raise ValueError("Conv2D: Negative spatial dimensions")
-        except ValueError as e:
-            raise e
+            groups = int(groups)
         except Exception:
-            out_h, out_w = "ANY", "ANY"
+            groups = 1
+        if groups <= 0:
+            raise ValueError(f"Conv2D: groups must be greater than 0, got {params.get('groups')}")
 
-        return {"out": (B, params.get("out_channels", 16), out_h, out_w)}
+        if in_channels != "ANY" and in_channels != -1 and in_channels != "LAZY":
+            if in_channels <= 0:
+                raise ValueError(f"Conv2D: in_channels must be greater than 0, got {in_channels}")
+            if in_channels % groups != 0:
+                raise ValueError(f"Conv2D: in_channels ({in_channels}) must be divisible by groups ({groups})")
+
+        out_channels = params.get("out_channels", 16)
+        try:
+            out_channels = int(out_channels)
+        except Exception:
+            pass
+        if isinstance(out_channels, int) and out_channels <= 0:
+            raise ValueError(f"Conv2D: out_channels must be greater than 0, got {out_channels}")
+        if isinstance(out_channels, int) and out_channels % groups != 0:
+            raise ValueError(f"Conv2D: out_channels ({out_channels}) must be divisible by groups ({groups})")
+
+        if H != "ANY":
+            try:
+                h_val = int(H)
+                out_h = math.floor((h_val + 2 * ph - dh * (kh - 1) - 1) / sh + 1)
+                if out_h <= 0:
+                    raise ValueError(f"Conv2D: Negative spatial dimension height={out_h} with input H={H}, kernel={kh}, stride={sh}, padding={ph}, dilation={dh}")
+            except ValueError as e:
+                raise e
+            except Exception:
+                out_h = "ANY"
+        else:
+            out_h = "ANY"
+
+        if W != "ANY":
+            try:
+                w_val = int(W)
+                out_w = math.floor((w_val + 2 * pw - dw * (kw - 1) - 1) / sw + 1)
+                if out_w <= 0:
+                    raise ValueError(f"Conv2D: Negative spatial dimension width={out_w} with input W={W}, kernel={kw}, stride={sw}, padding={pw}, dilation={dw}")
+            except ValueError as e:
+                raise e
+            except Exception:
+                out_w = "ANY"
+        else:
+            out_w = "ANY"
+
+        return {"out": (B, out_channels, out_h, out_w)}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         layer_name  = f"self.layer_{node_id.replace('-', '_')}"
@@ -208,6 +286,8 @@ class Conv2DBlock(BaseBlock):
         dilation = params.get("dilation", 1)
         groups   = params.get("groups",   1)
         bias     = params.get("bias",     True)
+        if in_ch == "LAZY":
+            return f"{layer_name} = nn.LazyConv2d({out_ch}, {k_size}, stride={stride}, padding={padding}, dilation={dilation}, groups={groups}, bias={bias})"
         return (
             f"{layer_name} = nn.Conv2d("
             f"{in_ch}, {out_ch}, {k_size}, "
@@ -220,3 +300,54 @@ class Conv2DBlock(BaseBlock):
         in_var  = input_vars.get("in", "None")
         out_var = output_vars.get("out", f"x_{node_id.replace('-', '_')}")
         return f"{out_var} = {layer_name}({in_var})"
+
+
+class ShapeExtractorBlock(BaseBlock):
+    @property
+    def definition(self) -> BlockDef:
+        return BlockDef(
+            id="shape_extractor",
+            name="Shape Extractor",
+            category="Core Layers",
+            color="#a855f7",
+            is_functional=True,
+            inputs=[PortDef(id="in", name="Input")],
+            outputs=[
+                PortDef(id="shape", name="Shape", var_hint="shape"),
+                PortDef(id="dim_0", name="Dim 0 (B)", var_hint="b"),
+                PortDef(id="dim_1", name="Dim 1 (C)", var_hint="c"),
+                PortDef(id="dim_2", name="Dim 2 (H)", var_hint="h"),
+                PortDef(id="dim_3", name="Dim 3 (W)", var_hint="w"),
+            ],
+            params=[]
+        )
+
+    def infer_shapes(self, input_shapes: Dict[str, Tuple], params: Dict[str, Any]) -> Dict[str, Tuple]:
+        in_shape = input_shapes.get("in")
+        shape_dim = (len(in_shape),) if in_shape and in_shape != ("ANY",) else ("ANY",)
+        return {
+            "shape": shape_dim,
+            "dim_0": (1,),
+            "dim_1": (1,),
+            "dim_2": (1,),
+            "dim_3": (1,),
+        }
+
+    def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
+        return ""
+
+    def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
+        in_var = input_vars.get("in", "None")
+        lines = []
+        if "shape" in output_vars:
+            lines.append(f"{output_vars['shape']} = {in_var}.shape")
+        for i in range(4):
+            if f"dim_{i}" in output_vars:
+                lines.append(f"{output_vars[f'dim_{i}']} = {in_var}.shape[{i}] if len({in_var}.shape) > {i} else None")
+        return "\n        ".join(lines)
+
+    def docs(self) -> Dict[str, str]:
+        return {
+            "intro": "Extracts tensor shape and individual dimension sizes.",
+            "details": "### Shape Extractor\nExtracts tensor `.shape` tuple and individual dimension sizes (`dim_0` to `dim_3`) for dynamic dimension routing."
+        }

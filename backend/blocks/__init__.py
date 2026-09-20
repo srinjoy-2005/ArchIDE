@@ -1,9 +1,9 @@
 from .base import BaseBlock
-from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock
+from .core import InputBlock, OutputBlock, LinearBlock, Conv2DBlock, ShapeExtractorBlock
 from .activations import ReLUBlock, SoftmaxBlock, SigmoidBlock, TanhBlock
 from .tensor_ops import (
     AddBlock, SubBlock, MulBlock, DivBlock, PowBlock, 
-    MatMulBlock, UnsqueezeBlock, CatBlock, SplitBlock
+    MatMulBlock, UnsqueezeBlock, CatBlock, SplitBlock, TransposeBlock
 )
 from .pooling import MaxPool2DBlock, AvgPool2DBlock, AdaptiveAvgPool2DBlock
 from .normalization import BatchNorm2DBlock, LayerNormBlock, DropoutBlock
@@ -19,6 +19,7 @@ _BLOCK_INSTANCES = [
     OutputBlock(),
     LinearBlock(),
     Conv2DBlock(),
+    ShapeExtractorBlock(),
     ReLUBlock(),
     SoftmaxBlock(),
     SigmoidBlock(),
@@ -42,7 +43,8 @@ _BLOCK_INSTANCES = [
     MatMulBlock(),
     UnsqueezeBlock(),
     CatBlock(),
-    ArangeBlock()
+    ArangeBlock(),
+    TransposeBlock()
 ]
 
 # Create a mapping for O(1) lookups

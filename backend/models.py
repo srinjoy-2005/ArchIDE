@@ -10,27 +10,47 @@ class Edge(BaseModel):
 
 class NodeData(BaseModel):
     block_id: str = ""
-    label: str
+    label: str = ""
     is_functional: bool = False
     paramValues: dict = {}
     varName: str = ""  # optional user-defined output variable name
     custom_module_id: str = ""
+    inputs: List[Any] = []
+    outputs: List[Any] = []
+    inferredShapes: Dict[str, Any] = {}
+    inferredParams: Dict[str, Any] = {}
+
+    model_config = {"extra": "allow"}
 
 class Node(BaseModel):
     id: str
     data: NodeData
     position: Optional[Dict[str, float]] = None
 
+    model_config = {"extra": "allow"}
+
 class ParamDef(BaseModel):
     name: str
-    type: str                   # "int", "float", "string", "bool"
+    type: str                   # "int", "float", "string", "bool", "shape", "tuple"
     default: Any
     read_only: bool = False     # If True, shown greyed-out in UI (e.g. inferred shapes)
+    auto_infer: bool = False    # If True, shown greyed-out in UI (e.g. inferred shapes)
     section: str = "basic"      # "shape" | "basic" | "advanced"
     description: str = ""       # Tooltip text shown in the UI
 
+class ArchVariableModel(BaseModel):
+    """Mirrors the frontend ArchVariable type."""
+    id: str = ""
+    name: str
+    type: str = "int"           # "int" | "float" | "bool" | "string"
+    default: Any = None
+    description: str = ""
+    scope: str = "init_param"   # "init_param" | "local_const"
+
 class GraphData(BaseModel):
     name: str = "Model"
+    variables: List[ArchVariableModel] = []
+    # Legacy alias — still accepted in old payloads, migrated on load
     parameters: List[ParamDef] = []
     nodes: List[Node]
     edges: List[Edge]
@@ -38,10 +58,12 @@ class GraphData(BaseModel):
 class CompileRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
+    file_paths: Dict[str, str] = {}
 
 class CheckRequest(BaseModel):
     main_graph_id: str
     graphs: Dict[str, GraphData]
+    file_paths: Dict[str, str] = {}
 
 class FolderData(BaseModel):
     id: str

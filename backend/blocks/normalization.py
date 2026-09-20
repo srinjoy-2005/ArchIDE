@@ -14,7 +14,7 @@ class BatchNorm2DBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="norm_out")],
             params=[
-                ParamDef(name="num_features", type="int", default=-1, section="basic", description="Number of features/channels in the input. Auto-inferred if -1."),
+                ParamDef(name="num_features", type="int", default=1, auto_infer=True, section="basic", description="Number of features/channels in the input. Auto-inferred if checked."),
                 ParamDef(name="eps", type="float", default=1e-05, section="advanced", description="Value added to the denominator for numerical stability"),
                 ParamDef(name="momentum", type="float", default=0.1, section="advanced", description="Value used for the running_mean and running_var computation")
             ]
@@ -63,7 +63,7 @@ class LayerNormBlock(BaseBlock):
             inputs=[PortDef(id="in", name="Input")],
             outputs=[PortDef(id="out", name="Output", var_hint="norm_out")],
             params=[
-                ParamDef(name="normalized_shape", type="string", default="?", section="basic", description="Input shape from an expected size, auto-inferred from input."),
+                ParamDef(name="normalized_shape", type="string", default="?", auto_infer=True, section="basic", description="Input shape from an expected size, auto-inferred from input."),
                 ParamDef(name="eps", type="float", default=1e-05, section="advanced", description="Value added to the denominator for numerical stability")
             ]
         )
@@ -74,21 +74,23 @@ class LayerNormBlock(BaseBlock):
             return {"out": ("ANY",)}
 
         # Auto-infer normalized_shape as the last dimension by default if not set
-        norm_shape_str = params.get("normalized_shape", "?")
-        if norm_shape_str == "?" and len(in_shape) > 0 and in_shape[-1] != "ANY":
-            params["normalized_shape"] = str(in_shape[-1:])
+        norm_shape_str = str(params.get("normalized_shape", "?"))
+        if norm_shape_str in ("?", "LAZY", "", "None") and len(in_shape) > 0 and in_shape[-1] != "ANY":
+            params["normalized_shape"] = in_shape[-1]
 
         return {"out": in_shape}
 
     def emit_init(self, node_id: str, params: Dict[str, Any]) -> str:
         layer_name = f"self.layer_{node_id.replace('-', '_')}"
-        norm_shape = params.get("normalized_shape", "(1,)")
-        if norm_shape == "?":
-            norm_shape = "(1,)"
-        # Clean it up to be a valid tuple string
-        clean = "".join(c for c in str(norm_shape) if c.isdigit() or c == ',')
+        norm_shape = params.get("normalized_shape", 512)
+        if str(norm_shape) in ("?", "LAZY", "", "None"):
+            norm_shape = 512
+        clean = "".join(c for c in str(norm_shape) if c.isdigit() or c == ',').rstrip(',')
+        if not clean:
+            clean = "512"
         eps = params.get("eps", 1e-05)
-        return f"{layer_name} = nn.LayerNorm([{clean}], eps={eps})"
+        shape_repr = f"[{clean}]" if ',' in clean else clean
+        return f"{layer_name} = nn.LayerNorm({shape_repr}, eps={eps})"
 
     def emit_forward(self, node_id: str, input_vars: Dict[str, str], output_vars: Dict[str, str], params: Dict[str, Any]) -> str:
         layer_name = f"self.layer_{node_id.replace('-', '_')}"

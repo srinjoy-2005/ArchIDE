@@ -8,6 +8,10 @@
     "start": "next start",
     "lint": "next lint",
     "sync": "python scripts/sync.py",
+    "decompile:ir": "bash scripts/decompile_all_to_ir.sh",
+    "decompile:py": "bash scripts/decompile_python_to_ir.sh",
+    "compile:arch": "bash scripts/compile_all_to_arch.sh",
+    "compile:py": "bash scripts/compile_all_to_python.sh",
     "test:backend": "pytest backend/tests",
     "prepare": "git config core.hooksPath .githooks"
   },

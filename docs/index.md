@@ -1,31 +1,26 @@
 # ArchiDE - Documentation Index
 
-Welcome to the ArchiDE documentation. This directory contains detailed technical specifications, architectural overviews, roadmaps, and historical changelogs.
+Welcome to the ArchiDE documentation.
 
-## 🏗 Architecture & Overview
-*   **[Architecture Overview](architecture_overview.md)**: High-level overview of the Next.js frontend and Python FastAPI backend architecture.
-*   **[Custom Modules Architecture](backend/custom_modules_architecture.md)**: Technical specification for custom module resolution, project structure, dual-target codegen, and incremental compilation.
-*   **[Frontend Architecture](frontend/architecture.md)**: Technical guidelines for React Flow uncontrolled canvas, custom node/edge components, and Zustand store.
-*   **[Compiler Design](backend/compiler_design.md)**: Details on Kahn's topological sort algorithm, static shape inference pass, and PyTorch AST code generation.
+## 🏗 Architecture & Specifications
+*   **[Architecture Overview](architecture.md)**: Unified high-level overview of the Next.js frontend, Python FastAPI backend architecture, state rules, and compiler flow.
+*   **[Decompilation & Agentic IR](decompilation.md)**: PyTorch AST decompiler, IR JSON schemas, and bidirectional roundtrip pipelines.
+*   **[API & Registry Contracts](contracts.md)**: Stable boundaries, PyTorch block definitions, and JSON schema expectations.
 *   **[Backend Testing](backend/testing.md)**: Specifications for automated backend unit and integration test suites.
-*   **[Rigorous Testing Strategy Plan](testing_plan.md)**: High-level roadmap and strategy for backend and frontend testing.
+*   **[Testing Strategy Plan](testing_plan.md)**: Roadmap for backend and frontend testing.
 
-## 📖 Specifications
-*   **[Block Registry Specification](backend/block_registry_spec.md)**: Formal specification for block schemas, port definitions, and OOP block interfaces.
-*   **[Block Implementation Catalog & Status](backend/blocks_status.md)**: Catalog of 28 implemented blocks with exact file links and pending block roadmap.
-*   **[Graph IR Spec (Legacy)](frontend/graph_ir_spec.md)**: The original TypeScript-based JSON schema specification (retained for design reference).
+## 📖 Architecture Decision Records (ADRs)
+*   **[ADR 001: VFS & Headless Compilation](decisions/001-vfs-and-headless-compile.md)**
+*   **[ADR 002: Variable Bindings](decisions/002-variable-bindings.md)**
 
 ## 🚀 Roadmaps & Future
-*   **[TODO / Roadmap](TODO.md)**: Short-term and long-term goals (Shape Inference, Model Export, Advanced Blocks).
+*   **[Roadmap](ROADMAP.md)**: Short-term and long-term goals (Shape Inference, Model Export, Advanced Blocks).
 *   **[MLForge Comparison](ml_forge_comparison.md)**: How ArchiDE compares and contrasts with the open-source MLForge desktop app.
 
-## 📝 Changelog
-*   **[August 26, 2026](changelog/2026_08_26.md)**: Transformed ArchiDE into a developer IDE with OneCompiler-style VFS & Activity Bar, submodule constructor parameter forwarding & exact shape propagation in compiler, headless testing harness (`project_loader.py`), central workspace Python code viewer (`CentralCodeEditor`), dedicated Inspector panel, and unified schema persistence with node coordinates.
-*   **[August 25, 2026](changelog/2026_08_25.md)**: Refactored monolithic `page.tsx` (1255 lines) into 8 modular component files (`DnDCanvas`, `Header`, `BlockLibrary`, `PropertiesPanel`, `RightPanel`, `CodePanel`, `DocPanels`) plus `src/lib/constants.ts`. Updated `docs/frontend/architecture.md` to reflect new structure.
-*   **[August 22, 2026](changelog/2026_08_22.md)**: Added source file comments across frontend modules, fixed `LinearBlock` silent 4D→Linear shape pass-through bug, and corrected the `loadStarter` demo pipeline by inserting a required Flatten node.
-*   **[August 20, 2026](changelog/2026_08_20.md)**: Implemented multi-file custom modules with double-pass Kahn's topological sort for deep nesting support, integrated dynamic sidebar UI, and upgraded compiler payloads.
-*   **[August 14, 2026](changelog/2026_08_14.md)**: Overhauled docs with relative links, sync workflow (`scripts/sync.py`, CI), variadic ports, orphan edge resilience, and master roadmap overhaul.
-*   **[August 11, 2026](changelog/2026_08_11.md)**: Implemented backend testing suite (block inference, cycle detection, AST compilation checks), testing plan, and TypeScript configs.
-*   **[July 28, 2026](changelog/2026_07_28.md)**: Compiler OO architecture refactor, shape inference pass & ShapeError 422 responses, three-section Properties Panel, and 10 new blocks.
-*   **[July 26, 2026](changelog/2026_07_26.md)**: Major architecture shift to Python (FastAPI) backend, Kahn's algorithm PyTorch compiler, and React Flow state synchronization fixes.
-*   **[July 25, 2026](changelog/2026_07_25.md)**: Initial project scaffolding, dark mode IDE UI layout, and base React Flow drag-and-drop canvas setup.
+## 📝 Historical Changelog
+*(See `docs/changelog/` for the day-to-day session wrap-ups)*
+*   **[September 18, 2026](changelog/2026_09_18.md)**: PyTorch AST decompiler enhancements, multi-input submodule handles, dynamic port synthesis, and full bidirectional roundtrip fidelity.
+*   **[September 14, 2026](changelog/2026_09_14.md)**: Canvas UX: stepped wire edges, configurable port orientation & flipping, clarified variable badges, and tool shortcuts.
+*   **[September 13, 2026](changelog/2026_09_13.md)**: Variable binding fixes, frontend type mismatch validation, and permissive tensor rank guards.
+*   **[September 11, 2026](changelog/2026_09_11.md)**: True 1:1 VFS state mirroring, redundancy pruning, exact file paths, and decoupled Save/Load State actions.
+

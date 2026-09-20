@@ -15,11 +15,12 @@
  *   node/edge change propagation, and orphan edge pruning on node delete.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import {
   ReactFlow,
   MiniMap,
   Controls,
+  ControlButton,
   Background,
   BackgroundVariant,
   addEdge,
@@ -30,20 +31,32 @@ import {
   type Node,
   type NodeChange,
   type EdgeChange,
+  SelectionMode,
   useReactFlow,
+  useNodes,
+  useEdges,
+  ConnectionLineType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import CustomNode from './CustomNode';
 import TensorEdge from './TensorEdge';
 import { CentralCodeEditor } from './CentralCodeEditor';
-import { useEditorStore } from '../lib/store';
-import { Plus, X, FileCode, Network, Code2 } from 'lucide-react';
-import { getId, initialNodes, initialEdges } from '../lib/constants';
+import { QuickInsertModal } from './QuickInsertModal';
+import { useEditorStore, useVFSStore } from '../lib/store';
+import { X, FileCode, Network, Code2, Hand, MousePointer2, GitFork } from 'lucide-react';
+import { getId, initialNodes, initialEdges, API_BASE } from '../lib/constants';
+import { resolveFilePath } from '../lib/utils';
 
 // Defined at module level to avoid re-creating objects on every render,
 // which would cause React Flow to unmount and remount all nodes.
 const nodeTypes = { custom: CustomNode };
-const edgeTypes = { tensor: TensorEdge };
+const edgeTypes = {
+  tensor: TensorEdge,
+  default: TensorEdge,
+  bezier: TensorEdge,
+  step: TensorEdge,
+  smoothstep: TensorEdge,
+};
 
 // ─── FileTabBar ───────────────────────────────────────────────────────────────
 
@@ -53,13 +66,10 @@ function FileTabBar() {
     folders,
     openTabIds,
     activeFileId,
-    activeViewMode,
-    setActiveViewMode,
     switchFile,
-    createFile,
     closeTab,
     updateFileState
-  } = useEditorStore();
+  } = useVFSStore();
   const { getNodes, getEdges } = useReactFlow();
 
   const handleSwitch = (id: string) => {
@@ -67,12 +77,6 @@ function FileTabBar() {
     // Snapshot live canvas state before switching so edits aren't lost
     updateFileState(activeFileId, getNodes(), getEdges());
     switchFile(id);
-  };
-
-  const handleCreate = () => {
-    updateFileState(activeFileId, getNodes(), getEdges());
-    const name = prompt('Enter new file name (e.g. attention.json or layer.py):');
-    if (name) createFile(name);
   };
 
   const handleClose = (e: React.MouseEvent, id: string) => {
@@ -128,41 +132,6 @@ function FileTabBar() {
             </div>
           );
         })}
-        <button
-          onClick={handleCreate}
-          title="New File"
-          className="ml-1 p-1 rounded hover:bg-[#252525] text-[#666] hover:text-[#d4d4d4] transition-colors flex items-center justify-center"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Dual View Mode Switcher: Graph vs Python Code */}
-      <div className="flex items-center bg-[#181818] p-0.5 rounded border border-[#2a2a2a] mx-2 flex-shrink-0">
-        <button
-          onClick={() => setActiveViewMode('graph')}
-          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
-            activeViewMode === 'graph'
-              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
-              : 'text-[#777] hover:text-[#bbb]'
-          }`}
-          title="Visual Node Graph Canvas"
-        >
-          <Network className="w-3 h-3 text-[#38bdf8]" />
-          <span>Graph</span>
-        </button>
-        <button
-          onClick={() => setActiveViewMode('code')}
-          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded transition-colors ${
-            activeViewMode === 'code'
-              ? 'bg-[#2a2a2a] text-[#ffffff] font-medium shadow-sm'
-              : 'text-[#777] hover:text-[#bbb]'
-          }`}
-          title="Python Code Editor"
-        >
-          <Code2 className="w-3 h-3 text-[#eab308]" />
-          <span>Python Code</span>
-        </button>
       </div>
     </div>
   );
@@ -172,14 +141,225 @@ function FileTabBar() {
 
 export function DnDCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, setNodes, setEdges, getNode, getEdges } = useReactFlow();
-  const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
-  const activeFileId = useEditorStore((s) => s.activeFileId);
-  const activeViewMode = useEditorStore((s) => s.activeViewMode);
-  const files = useEditorStore((s) => s.files);
-  const activeFile = files.find((f) => f.id === activeFileId);
+  const isCanvasHoveredRef = useRef(false);
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
 
-  const isCodeMode = activeViewMode === 'code' || activeFile?.fileType === 'code' || activeFile?.name.endsWith('.py');
+  const { screenToFlowPosition, setNodes, setEdges, getNode, getNodes, getEdges } = useReactFlow();
+  const nodes = useNodes();
+  const edges = useEdges();
+  const setShapeErrorNodeId = useEditorStore((s) => s.setShapeErrorNodeId);
+  const clipboard = useEditorStore((s) => s.clipboard);
+  const setClipboard = useEditorStore((s) => s.setClipboard);
+  const canvasMode = useEditorStore((s) => s.canvasMode);
+  const setCanvasMode = useEditorStore((s) => s.setCanvasMode);
+  const edgeRouting = useEditorStore((s) => s.edgeRouting);
+  const toggleEdgeRouting = useEditorStore((s) => s.toggleEdgeRouting);
+  const sidebarOpen = useEditorStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useEditorStore((s) => s.setSidebarOpen);
+  const activeSidebarView = useEditorStore((s) => s.activeSidebarView);
+  const setActiveSidebarView = useEditorStore((s) => s.setActiveSidebarView);
+  const toggleInspector = useEditorStore((s) => s.toggleInspector);
+  const setQuickInsert = useEditorStore((s) => s.setQuickInsert);
+
+  const handleToggleEdgeRouting = useCallback(() => {
+    toggleEdgeRouting();
+    setEdges((eds) => eds.map((e) => ({ ...e, type: 'tensor' })));
+  }, [toggleEdgeRouting, setEdges]);
+
+  const activeFileId = useVFSStore((s) => s.activeFileId);
+  const files = useVFSStore((s) => s.files);
+  const folders = useVFSStore((s) => s.folders);
+  const isSaving = useVFSStore((s) => s.isSaving);
+  const graphsFolderId = useVFSStore((s) => s.graphsFolderId);
+
+  const activeFile = files.find((f) => f.id === activeFileId);
+  const isCodeMode = activeFile?.fileType === 'code' || !activeFile?.name.endsWith('.arch') || !Array.isArray(activeFile?.nodes);
+
+  const initialCanvasEdges = React.useMemo(() => {
+    return (activeFile?.edges || initialEdges).map((e) => ({
+      ...e,
+      type: 'tensor',
+    }));
+  }, [activeFile?.id, activeFile?.edges]);
+
+  // Ref to track the last saved structural state to prevent infinite ping-pongs
+  const lastSavedState = useRef<string>("");
+
+  // Reset the saved state tracker when switching files so the next render triggers a save check
+  useEffect(() => {
+    lastSavedState.current = "";
+  }, [activeFileId]);
+
+  // Helper to strip transient React Flow state
+  const getStrippedGraph = useCallback((nodesToStrip: Node[], edgesToStrip: Edge[]) => {
+    return {
+      nodes: nodesToStrip.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+      edges: edgesToStrip.map(e => ({ id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, type: e.type, animated: e.animated })),
+    };
+  }, []);
+
+  // ─── Debounced Auto-Save (Live VFS Sync) ────────────────────────────────────
+  useEffect(() => {
+    if (!isSaving || !activeFile || isCodeMode) return;
+
+    // 1. Prevent saves while actively dragging nodes
+    if (nodes.some(n => n.dragging)) return;
+
+    // Ensure we don't save an empty graph if it hasn't hydrated properly
+    if (nodes.length === 0 && edges.length === 0 && Array.isArray(activeFile.nodes) && activeFile.nodes.length > 0) return;
+
+    // 2. Strip transient UI state to isolate structural/semantic data
+    const strippedGraph = getStrippedGraph(nodes, edges);
+    const currentStateStr = JSON.stringify({ ...strippedGraph, variables: activeFile.variables || [] });
+
+    // 3. Deep equality check against the last saved state
+    if (currentStateStr === lastSavedState.current) return;
+
+    // Use a timeout to debounce saves after canvas interactions
+    const handler = setTimeout(() => {
+      // Use resolveFilePath to get the canonical file_id (handles folder renames correctly)
+      const fullFileId = resolveFilePath(activeFile, folders, graphsFolderId);
+      const fileNameWithoutExt = activeFile.name.replace(/\.[^/.]+$/, '');
+
+      const payload = {
+        file_id: fullFileId,
+        content: {
+          name: fileNameWithoutExt,
+          nodes: strippedGraph.nodes,
+          edges: strippedGraph.edges,
+          variables: activeFile.variables || []
+        }
+      };
+
+      // Mark as saved before fetching to immediately block stale re-saves
+      lastSavedState.current = currentStateStr;
+
+      fetch(`${API_BASE}/api/vfs/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => console.error('Auto-save failed:', err));
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [nodes, edges, activeFile, folders, isSaving, isCodeMode, getStrippedGraph, graphsFolderId]);
+
+  // (SSE disk-to-canvas sync removed — no longer needed without Mirror Local)
+
+  // ─── Canvas Shortcuts & Clipboard ──────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ignore if typing in an input, textarea, select, or editable element
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      // 2. Only fire shortcuts when canvas is active/selected (focused or mouse hovered)
+      const isCanvasActive =
+        isCanvasHoveredRef.current ||
+        (canvasRef.current && canvasRef.current.contains(document.activeElement));
+      if (!isCanvasActive) return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+
+      // Tab: Quick search & insert layer at cursor
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const pos = lastMousePosRef.current || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        setQuickInsert({ isOpen: true, clientPos: pos });
+        return;
+      }
+
+      // V: Toggle Variables panel
+      if (!cmdKey && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        if (sidebarOpen && activeSidebarView === 'variables') {
+          setSidebarOpen(false);
+        } else {
+          setActiveSidebarView('variables');
+        }
+        return;
+      }
+
+      // E: Toggle File Explorer
+      if (!cmdKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        if (sidebarOpen && activeSidebarView === 'explorer') {
+          setSidebarOpen(false);
+        } else {
+          setActiveSidebarView('explorer');
+        }
+        return;
+      }
+
+      // I: Toggle Inspector
+      if (!cmdKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        toggleInspector();
+        return;
+      }
+
+      // Cmd+C / Ctrl+C: Copy selected nodes
+      if (cmdKey && (e.key === 'c' || e.key === 'C')) {
+        const selectedNodes = getNodes().filter((n: Node) => n.selected);
+        if (selectedNodes.length === 0) return;
+        
+        const selectedIds = new Set(selectedNodes.map((n: Node) => n.id));
+        const innerEdges = getEdges().filter((edge: Edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target));
+        
+        setClipboard({ nodes: selectedNodes, edges: innerEdges });
+      }
+
+      // Cmd+V / Ctrl+V: Paste copied nodes
+      if (cmdKey && (e.key === 'v' || e.key === 'V')) {
+        if (!clipboard || clipboard.nodes.length === 0) return;
+
+        // Create ID mapping from old to new
+        const idMap: Record<string, string> = {};
+        clipboard.nodes.forEach((n: Node) => { idMap[n.id] = getId(); });
+
+        const pastedNodes = clipboard.nodes.map((n: Node) => ({
+          ...n,
+          id: idMap[n.id],
+          selected: true,
+          position: { x: n.position.x + 40, y: n.position.y + 40 }
+        }));
+
+        const pastedEdges = clipboard.edges.map((e: Edge) => ({
+          ...e,
+          id: getId(),
+          source: idMap[e.source],
+          target: idMap[e.target]
+        }));
+
+        // Deselect current nodes
+        setNodes((nds: Node[]) => nds.map((n) => ({ ...n, selected: false } as Node)).concat(pastedNodes as Node[]));
+        setEdges((eds: Edge[]) => eds.map((e) => ({ ...e, selected: false } as Edge)).concat(pastedEdges as Edge[]));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    getNodes,
+    getEdges,
+    setNodes,
+    setEdges,
+    clipboard,
+    setClipboard,
+    sidebarOpen,
+    activeSidebarView,
+    setSidebarOpen,
+    setActiveSidebarView,
+    toggleInspector,
+    setQuickInsert
+  ]);
 
   // Prevent connecting a single-input port that already has an incoming edge
   const isValidConnection = useCallback(
@@ -206,10 +386,13 @@ export function DnDCanvas() {
     [setEdges]
   );
 
-  // Clear shape error highlight whenever the graph is edited
+  // Clear shape error highlight whenever the graph is structurally edited
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setShapeErrorNodeId(null);
+      const isStructuralEdit = changes.some(c => c.type === 'remove' || c.type === 'add');
+      if (isStructuralEdit) {
+        setShapeErrorNodeId(null);
+      }
       setNodes((nds) => applyNodeChanges(changes, nds));
     },
     [setNodes, setShapeErrorNodeId]
@@ -217,7 +400,10 @@ export function DnDCanvas() {
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
-      setShapeErrorNodeId(null);
+      const isStructuralEdit = changes.some(c => c.type === 'remove' || c.type === 'add');
+      if (isStructuralEdit) {
+        setShapeErrorNodeId(null);
+      }
       setEdges((eds) => applyEdgeChanges(changes, eds));
     },
     [setEdges, setShapeErrorNodeId]
@@ -278,18 +464,29 @@ export function DnDCanvas() {
   );
 
   return (
-    <div className="flex-1 relative flex flex-col h-full overflow-hidden" ref={canvasRef}>
+    <div
+      className="flex-1 relative flex flex-col h-full overflow-hidden outline-none"
+      ref={canvasRef}
+      tabIndex={0}
+      onMouseEnter={() => { isCanvasHoveredRef.current = true; }}
+      onMouseLeave={() => { isCanvasHoveredRef.current = false; }}
+      onMouseMove={(e) => {
+        lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      }}
+    >
       <FileTabBar />
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden w-full h-full min-h-0">
         {isCodeMode ? (
           <CentralCodeEditor />
         ) : (
           <ReactFlow
             key={activeFileId}
-            defaultNodes={activeFile?.nodes || initialNodes}
-            defaultEdges={activeFile?.edges || initialEdges}
+            defaultNodes={Array.isArray(activeFile?.nodes) ? activeFile.nodes : initialNodes}
+            defaultEdges={initialCanvasEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            defaultEdgeOptions={{ type: 'tensor' }}
+            connectionLineType={edgeRouting === 'step' ? ConnectionLineType.SmoothStep : ConnectionLineType.Bezier}
             onConnect={onConnect}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -298,9 +495,37 @@ export function DnDCanvas() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             deleteKeyCode={['Backspace', 'Delete']}
+            panOnDrag={canvasMode === 'pan'}
+            selectionOnDrag={canvasMode === 'select'}
+            selectionMode={SelectionMode.Partial}
             fitView
           >
-            <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }} />
+            <Controls className="!bg-[#252525] !border-[#3a3a3a] !rounded-[3px]" style={{ bottom: 16, left: 16 }}>
+              <ControlButton
+                onClick={() => setCanvasMode('pan')}
+                title="Pan Tool (Hand)"
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: canvasMode === 'pan' ? '#333' : 'transparent', color: canvasMode === 'pan' ? '#38bdf8' : '#777' }}
+              >
+                <Hand className="w-3.5 h-3.5" />
+              </ControlButton>
+              <ControlButton
+                onClick={() => setCanvasMode('select')}
+                title="Select Tool (Window)"
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: canvasMode === 'select' ? '#333' : 'transparent', color: canvasMode === 'select' ? '#38bdf8' : '#777' }}
+              >
+                <MousePointer2 className="w-3.5 h-3.5" />
+              </ControlButton>
+              <ControlButton
+                onClick={handleToggleEdgeRouting}
+                title={`Edge Routing: ${edgeRouting === 'step' ? 'Stepped / Orthogonal (SimulIDE)' : 'Smooth Bezier'} (Click to switch)`}
+                className="hover:!bg-[#333] transition-colors"
+                style={{ backgroundColor: edgeRouting === 'step' ? '#333' : 'transparent', color: edgeRouting === 'step' ? '#38bdf8' : '#777' }}
+              >
+                <GitFork className="w-3.5 h-3.5" />
+              </ControlButton>
+            </Controls>
             <MiniMap
               nodeColor={() => '#2d8cf0'}
               maskColor="rgba(18,18,18,0.8)"
@@ -311,6 +536,7 @@ export function DnDCanvas() {
           </ReactFlow>
         )}
       </div>
+      <QuickInsertModal />
     </div>
   );
 }

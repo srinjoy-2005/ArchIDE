@@ -173,14 +173,14 @@ export default function DevPayloadsPage() {
 
                 {/* Response */}
                 <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                  <div className="p-2 border-b border-[#363636] bg-[#2a2a2a] text-[11px] font-semibold text-[#aaa] tracking-wider uppercase flex items-center justify-between">
-                    <span>Backend Payload (Response)</span>
-                    <span className={selectedLog.response?.ok || selectedLog.response?.code ? "text-[#4ade80]" : "text-[#e54545]"}>
-                      {selectedLog.response?.ok || selectedLog.response?.code ? "SUCCESS" : "ERROR"}
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-auto p-4">
-                    <pre className={`text-[11px] font-mono ${selectedLog.response?.ok || selectedLog.response?.code ? "text-[#4ade80]" : "text-[#e54545]"}`}>
+                    <div className="p-2 border-b border-[#363636] bg-[#2a2a2a] text-[11px] font-semibold text-[#aaa] tracking-wider uppercase flex items-center justify-between">
+                      <span>Backend Payload (Response)</span>
+                      <span className={selectedLog.response?.ok || selectedLog.response?.code || selectedLog.response?.files ? "text-[#4ade80]" : "text-[#e54545]"}>
+                        {selectedLog.response?.ok || selectedLog.response?.code || selectedLog.response?.files ? "SUCCESS" : "ERROR"}
+                      </span>
+                    </div>
+                    <div className="flex-1 overflow-auto p-4">
+                      <pre className={`text-[11px] font-mono ${selectedLog.response?.ok || selectedLog.response?.code || selectedLog.response?.files ? "text-[#4ade80]" : "text-[#e54545]"}`}>
                       {JSON.stringify(selectedLog.response, null, 2)}
                     </pre>
                   </div>
