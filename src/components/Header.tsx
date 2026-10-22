@@ -228,7 +228,6 @@ export function Header() {
   const handleExport = async () => {
     setCompiling(true);
     setShapeErrorNodeId(null);
-    setCheckStatus('checking');
     setCheckMsg('');
     setGeneratedCode('# Compiling via Python Backend Engine...');
     try {
@@ -239,7 +238,17 @@ export function Header() {
       for (const [graphId, graphData] of Object.entries(payload.graphs as any)) {
         for (const node of (graphData as any).nodes || []) {
           const pv = node.data?.paramValues || {};
-          const hasDangling = Object.values(pv).some((v) => v === null || v === undefined);
+          const params = (node.data?.params as any[]) || [];
+          const hasDangling = Object.entries(pv).some(([k, v]) => {
+            if (v === null || v === undefined) {
+              const pDef = params.find((p: any) => p.name === k);
+              if (pDef) {
+                return pDef.default !== null && pDef.default !== undefined;
+              }
+              return !['scalar_a', 'scalar_b', 'padding_idx', 'max_norm'].includes(k);
+            }
+            return false;
+          });
           if (hasDangling) {
             danglingNodes.push(`${node.data?.label || node.id} (in ${graphId})`);
           }
@@ -252,9 +261,11 @@ export function Header() {
           danglingNodes.map((n) => `#   • ${n}`).join('\n')
         );
         setCompiling(false);
+        setCheckStatus('idle');
         return;
       }
 
+      setCheckStatus('checking');
       const response = await fetch(`${API_BASE}/api/compile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -425,6 +436,8 @@ export function Header() {
       setShapeErrorNodeId(null);
       setNodeShapes({});
       setGeneratedCode('');
+      setCheckStatus('idle');
+      setCheckMsg('');
     }
   };
 

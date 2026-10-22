@@ -3,7 +3,7 @@ import json
 import os
 import re
 import sys
-from typing import Dict, Any, List, Optional, Tuple, Set, Union
+from typing import Dict, Any, List, Optional, Tuple, Set, Union, Sequence
 
 
 # ─── Standard Layer Mapping ──────────────────────────────────────────────────
@@ -97,11 +97,12 @@ def _eval_ast_literal(node: ast.AST, init_vars: Set[str]) -> Any:
         return {
             _eval_ast_literal(k, init_vars): _eval_ast_literal(v, init_vars)
             for k, v in zip(node.keys, node.values)
+            if k is not None
         }
     if isinstance(node, ast.BinOp):
         left = _eval_ast_literal(node.left, init_vars)
         right = _eval_ast_literal(node.right, init_vars)
-        op_map = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.FloorDiv: "//", ast.Mod: "%", ast.Pow: "**"}
+        op_map: Dict[Any, str] = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.FloorDiv: "//", ast.Mod: "%", ast.Pow: "**"}
         op_str = op_map.get(type(node.op), "+")
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             if isinstance(node.op, ast.Add): return left + right
@@ -162,7 +163,7 @@ class PyTorchASTDecompiler:
             return clean
         return f"{clean}_{count}" if count > 1 else clean
 
-    def _find_module_classes(self, tree: ast.AST) -> Dict[str, ast.ClassDef]:
+    def _find_module_classes(self, tree: ast.Module) -> Dict[str, ast.ClassDef]:
         """Find all ast.ClassDef in tree that inherit from Module or define forward()."""
         module_classes: Dict[str, ast.ClassDef] = {}
         known_module_names: Set[str] = {"Module", "nn.Module", "torch.nn.Module"}
@@ -312,7 +313,7 @@ class PyTorchASTDecompiler:
         except Exception:
             pass
 
-    def _parse_imports(self, tree: ast.AST, source_path: Optional[str] = None) -> None:
+    def _parse_imports(self, tree: ast.Module, source_path: Optional[str] = None) -> None:
         source_dir = os.path.dirname(os.path.abspath(source_path)) if source_path else None
 
         for stmt in tree.body:
@@ -856,7 +857,7 @@ class PyTorchASTDecompiler:
             return not sub if sub is not None else None
         return None
 
-    def _parse_statements(self, statements: List[ast.AST]) -> None:
+    def _parse_statements(self, statements: Sequence[ast.stmt]) -> None:
         for stmt in statements:
             if isinstance(stmt, ast.Assign):
                 # Check for tuple unpacking of x.shape or x.size(): B, N, C = x.shape
@@ -869,7 +870,7 @@ class PyTorchASTDecompiler:
                     is_shape_val = True
                     shape_tensor_expr = stmt.value.func.value
 
-                if is_shape_val and any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
+                if is_shape_val and shape_tensor_expr is not None and any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
                     target_tuple = next(t for t in stmt.targets if isinstance(t, (ast.Tuple, ast.List)))
                     src_node, src_port = self._parse_expr(shape_tensor_expr)
                     extractor_id = self._next_node_id("shape_extractor")
@@ -938,7 +939,7 @@ class PyTorchASTDecompiler:
 
         # Binary Op: a + b, a - b, a * b, a / b, a @ b
         if isinstance(expr, ast.BinOp):
-            op_map = {
+            op_map: Dict[Any, str] = {
                 ast.Add: "add",
                 ast.Sub: "sub",
                 ast.Mult: "mul",
@@ -1038,7 +1039,7 @@ class PyTorchASTDecompiler:
             node_entry: Dict[str, Any] = {"block": block_id}
             if custom_mod_id:
                 node_entry["custom_module_id"] = custom_mod_id
-            linfo = self.layer_instances.get(chain[0], {}) if len(chain) == 1 else {}
+            linfo = self.layer_instances.get(str(chain[0]), {}) if len(chain) == 1 else {}
             if linfo.get("class_name"):
                 node_entry["label"] = linfo["class_name"]
             if params:
@@ -1163,7 +1164,9 @@ class PyTorchASTDecompiler:
 
         return (None, "out")
 
-    def _parse_return(self, value: ast.AST) -> None:
+    def _parse_return(self, value: Optional[ast.AST]) -> None:
+        if value is None:
+            return
         out_node_id = "out"
         self.nodes[out_node_id] = {"block": "output"}
 

@@ -53,6 +53,7 @@ interface VFSState {
   closeTab: (id: string) => void;
   switchFile: (id: string) => void;
   updateFileState: (id: string, nodes: Node[], edges: Edge[]) => void;
+  updateFileCode: (id: string, code: string) => void;
 
   createFolder: (name: string, parentId?: string | null) => void;
   renameFolder: (id: string, newName: string) => void;
@@ -338,6 +339,12 @@ export const useVFSStore = create<VFSState>((set, get) => ({
   updateFileState: (id, nodes, edges) => {
     set((state) => ({
       files: state.files.map(f => f.id === id ? { ...f, nodes, edges } : f)
+    }));
+  },
+
+  updateFileCode: (id, code) => {
+    set((state) => ({
+      files: state.files.map(f => f.id === id ? { ...f, compiledCode: code } : f)
     }));
   },
 

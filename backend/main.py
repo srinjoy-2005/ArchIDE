@@ -3,7 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
-from models import BlockDef, CompileRequest, CheckRequest
+from models import (
+    BlockDef,
+    CompileRequest,
+    CheckRequest,
+    DecompileRequest,
+    DecompileResponse,
+    Node,
+    NodeData,
+    Edge,
+    ArchVariableModel,
+    GraphData,
+)
 from blocks import get_all_block_defs
 from compiler import topological_sort, generate_pytorch_code, shape_inference_pass, ShapeError
 from storage import storage
@@ -135,6 +146,78 @@ def check_shapes(request: CheckRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/decompile", response_model=DecompileResponse)
+def decompile_code(request: DecompileRequest):
+    """
+    Decompiles PyTorch Python code into ArchIDE Visual Graphs (.arch) and Agentic IR (.ir.json).
+    Supports multi-class architectures, custom submodules, shape validation, and topological auto-layout.
+    """
+    try:
+        from python_decompiler import PyTorchASTDecompiler
+        from agent_compiler import AgentGraphCompiler
+
+        code_str = request.code.strip()
+        if not code_str:
+            raise ValueError("Python source code cannot be empty.")
+
+        file_stem = request.file_name.replace(".py", "") if request.file_name else "main"
+        workspace_graphs = os.path.abspath(os.path.join(os.path.dirname(__file__), "../workspace/graphs"))
+
+        decompiler = PyTorchASTDecompiler(workspace_dir=workspace_graphs)
+        all_irs = decompiler.decompile_all_classes(code_str, file_stem=file_stem)
+
+        if not all_irs:
+            raise ValueError("No nn.Module classes found in source code.")
+
+        # Determine the root class from the decompiler
+        # If file_stem.lower() is in all_irs, use that; otherwise pick the last topologically sorted class
+        candidate_root = file_stem.lower()
+        if candidate_root not in all_irs:
+            candidate_root = list(all_irs.keys())[-1]
+
+        graphs: Dict[str, Any] = {}
+        for cls_stem, ir_data in all_irs.items():
+            comp = AgentGraphCompiler(ir_data, workspace_dir=workspace_graphs, all_irs=all_irs)
+            arch = comp.compile()
+
+            # Map graph IDs: root class is file_stem (e.g. "main"), submodules are "modules/{cls_stem}"
+            if cls_stem == candidate_root:
+                graph_id = file_stem
+            else:
+                graph_id = f"modules/{cls_stem}"
+
+            graphs[graph_id] = arch
+
+        # Run validation pass if requested
+        node_shapes = None
+        node_params = None
+        if request.validate_graph and file_stem in graphs:
+            try:
+                root_ir = all_irs[candidate_root]
+                root_comp = AgentGraphCompiler(root_ir, workspace_dir=workspace_graphs, all_irs=all_irs)
+                root_arch = graphs[file_stem]
+                v_res = root_comp.validate(root_arch)
+                node_shapes = v_res.get("node_shapes")
+                node_params = v_res.get("node_params")
+            except Exception as ve:
+                print(f"[Decompile] Shape validation warning: {ve}")
+
+        return DecompileResponse(
+            success=True,
+            main_graph_id=file_stem,
+            graphs=graphs,
+            all_irs=all_irs,
+            node_shapes=node_shapes,
+            node_params=node_params,
+        )
+    except Exception as e:
+        return DecompileResponse(
+            success=False,
+            main_graph_id=request.file_name.replace(".py", "") if request.file_name else "main",
+            error=str(e),
+        )
 
 if __name__ == "__main__":
     import uvicorn

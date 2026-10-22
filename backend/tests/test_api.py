@@ -183,3 +183,58 @@ async def test_mirror_vfs_state_and_prune(tmp_path):
         assert "python/sub.py" not in loaded["files"]
 
 
+@pytest.mark.anyio
+async def test_api_decompile_single_class():
+    code = """
+import torch
+import torch.nn as nn
+
+class MyModel(nn.Module):
+    def __init__(self, in_features: int = 64, out_features: int = 10):
+        super().__init__()
+        self.fc = nn.Linear(in_features, out_features)
+
+    def forward(self, x):
+        return self.fc(x)
+"""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/api/decompile", json={"code": code, "file_name": "main.py"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert "main" in data["graphs"]
+        graph = data["graphs"]["main"]
+        assert len(graph["nodes"]) >= 3  # in, fc, out
+        assert len(graph["edges"]) >= 2
+
+
+@pytest.mark.anyio
+async def test_api_decompile_multi_class():
+    code = """
+import torch
+import torch.nn as nn
+
+class Block(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv = nn.Conv2d(3, 16, 3)
+    def forward(self, x):
+        return self.conv(x)
+
+class TopNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.b = Block()
+    def forward(self, x):
+        return self.b(x)
+"""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.post("/api/decompile", json={"code": code, "file_name": "main"})
+        assert res.status_code == 200
+        data = res.json()
+        assert data["success"] is True
+        assert "main" in data["graphs"]
+        assert "modules/block" in data["graphs"]
+
+
+

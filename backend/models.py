@@ -107,3 +107,20 @@ class BlockDef(BaseModel):
     inputs: List[PortDef]
     outputs: List[PortDef]
     params: List[ParamDef]
+
+
+class DecompileRequest(BaseModel):
+    code: str
+    file_name: Optional[str] = "main"
+    validate_graph: bool = True
+
+
+class DecompileResponse(BaseModel):
+    success: bool
+    main_graph_id: str = "main"
+    graphs: Dict[str, Any] = {}
+    all_irs: Dict[str, Any] = {}
+    error: Optional[str] = None
+    node_shapes: Optional[Dict[str, Any]] = None
+    node_params: Optional[Dict[str, Any]] = None
+

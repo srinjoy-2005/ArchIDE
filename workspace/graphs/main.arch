@@ -43,7 +43,7 @@
       "type": "custom",
       "position": {
         "x": 100,
-        "y": 175.0
+        "y": 250.0
       },
       "data": {
         "block_id": "input",
@@ -82,7 +82,7 @@
       "type": "custom",
       "position": {
         "x": 400,
-        "y": 100.0
+        "y": 175.0
       },
       "data": {
         "block_id": "custom_module",
@@ -219,7 +219,7 @@
       "type": "custom",
       "position": {
         "x": 400,
-        "y": 250.0
+        "y": 325.0
       },
       "data": {
         "block_id": "custom_module",
@@ -747,8 +747,8 @@
       "id": "prediction_head",
       "type": "custom",
       "position": {
-        "x": 100,
-        "y": 325.0
+        "x": 3400,
+        "y": 250.0
       },
       "data": {
         "block_id": "custom_module",
@@ -781,8 +781,8 @@
       "id": "out",
       "type": "custom",
       "position": {
-        "x": 400,
-        "y": 400.0
+        "x": 3700,
+        "y": 250.0
       },
       "data": {
         "block_id": "output",
@@ -943,7 +943,15 @@
       "type": "tensor"
     },
     {
-      "id": "e_prediction_head_out_out_in_17",
+      "id": "e_final_norm_out_prediction_head_in_17",
+      "source": "final_norm",
+      "sourceHandle": "out",
+      "target": "prediction_head",
+      "targetHandle": "in",
+      "type": "tensor"
+    },
+    {
+      "id": "e_prediction_head_out_out_in_18",
       "source": "prediction_head",
       "sourceHandle": "out",
       "target": "out",
